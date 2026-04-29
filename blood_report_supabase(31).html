@@ -1,0 +1,2473 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blood Report Manager · Supabase</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#B91C1C;--red2:#991B1B;--red3:#FEE2E2;--red4:#FEF2F2;
+  --dark:#0C1117;--mid:#161D27;--card-bg:#111827;
+  --gold:#D97706;--gold2:#FEF3C7;
+  --green:#059669;--green2:#D1FAE5;
+  --blue:#2563EB;--blue2:#DBEAFE;
+  --bg:#F0F4F8;--white:#FFFFFF;
+  --border:#DDE3EC;--border2:#C8D0DC;
+  --text:#111827;--muted:#6B7280;--light:#9CA3AF;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.05);
+  --shadow-md:0 4px 24px rgba(0,0,0,.10);
+  --shadow-lg:0 12px 48px rgba(0,0,0,.16);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Noto Sans Khmer',sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.6;min-height:100vh}
+
+/* ── SETUP OVERLAY ── */
+#setupOverlay{position:fixed;inset:0;background:var(--dark);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px}
+.setup-box{background:#161D27;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:40px;width:100%;max-width:560px;box-shadow:var(--shadow-lg)}
+.setup-logo{width:56px;height:56px;background:var(--red);border-radius:50% 50% 50% 0;transform:rotate(-45deg);margin:0 auto 28px;display:flex;align-items:center;justify-content:center;animation:pulse 2.5s infinite}
+.setup-logo span{transform:rotate(45deg);font-size:22px}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(185,28,28,.4)}70%{box-shadow:0 0 0 12px rgba(185,28,28,0)}}
+.setup-box h2{font-size:22px;font-weight:800;color:white;text-align:center;margin-bottom:6px}
+.setup-box p{color:rgba(255,255,255,.45);font-size:12px;text-align:center;margin-bottom:28px;line-height:1.7}
+.setup-step{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:16px 20px;margin-bottom:12px}
+.setup-step-num{display:inline-flex;width:22px;height:22px;background:var(--red);border-radius:50%;font-size:11px;font-weight:700;color:white;align-items:center;justify-content:center;margin-right:8px;flex-shrink:0}
+.setup-step p{color:rgba(255,255,255,.7);font-size:12px;margin:0;display:flex;align-items:flex-start;gap:0}
+.setup-step code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#7DD3FC}
+.setup-field{margin-top:20px}
+.setup-field label{display:block;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.4);margin-bottom:8px;font-family:'JetBrains Mono',monospace}
+.setup-field input{width:100%;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;padding:11px 14px;font-size:13px;color:white;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s}
+.setup-field input:focus{border-color:var(--red)}
+.setup-field input::placeholder{color:rgba(255,255,255,.2);font-size:12px}
+.setup-btn{width:100%;margin-top:20px;padding:13px;background:var(--red);color:white;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans Khmer',sans-serif;transition:all .2s;box-shadow:0 4px 16px rgba(185,28,28,.4)}
+.setup-btn:hover{background:var(--red2);transform:translateY(-1px)}
+.setup-err{color:#F87171;font-size:12px;margin-top:10px;text-align:center;display:none}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--dark);position:sticky;top:0;z-index:200;border-bottom:1px solid rgba(255,255,255,.06)}
+.topbar-inner{display:flex;align-items:center;gap:12px;padding:11px 24px;max-width:1600px;margin:0 auto}
+.logo{width:34px;height:34px;background:var(--red);border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:pulse 2.5s infinite}
+.logo span{transform:rotate(45deg);font-size:15px}
+.topbar-title h1{font-size:15px;font-weight:700;color:white}
+.topbar-title p{font-size:10px;color:rgba(255,255,255,.35);font-family:'JetBrains Mono',monospace;letter-spacing:.8px;text-transform:uppercase}
+.nav-tabs{display:flex;gap:3px;margin-left:auto}
+.nav-tab{padding:7px 15px;border-radius:8px;border:none;background:transparent;color:rgba(255,255,255,.45);cursor:pointer;font-size:12px;font-weight:600;transition:all .18s;font-family:'Noto Sans Khmer',sans-serif}
+.nav-tab:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.8)}
+.nav-tab.active{background:var(--red);color:white}
+.db-badge{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.5);cursor:pointer;transition:all .2s}
+.db-badge:hover{border-color:rgba(255,255,255,.2)}
+.db-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.db-dot.off{background:#EF4444;animation:none}
+
+/* ── MAIN ── */
+.main{max-width:1600px;margin:0 auto;padding:20px}
+.page{display:none}.page.active{display:block}
+
+/* ── CARD ── */
+.card{background:var(--white);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:16px}
+.card-body{padding:28px}
+
+/* ── SECTION DIVIDERS ── */
+.sec-div{display:flex;align-items:center;gap:14px;margin:26px 0 16px}
+.sec-lbl{padding:6px 18px;border-radius:20px;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;font-family:'Noto Sans Khmer',sans-serif;color:white;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.sec-line{flex:1;height:1.5px;background:var(--border)}
+
+/* ── FORM ── */
+.fg{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+.g6{grid-template-columns:repeat(6,1fr)}
+@media(max-width:1100px){.g5,.g6{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){.g2,.g3,.g4,.g5,.g6{grid-template-columns:1fr}}
+.cs2{grid-column:span 2}.cs3{grid-column:span 3}
+@media(max-width:1100px){.cs2,.cs3{grid-column:span 1}}
+
+.fld{display:flex;flex-direction:column;gap:5px}
+.fld label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.fld .req{color:var(--red)}
+.fld input,.fld select{border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;background:white;color:var(--text);transition:border-color .18s,box-shadow .18s;outline:none;width:100%}
+.fld input:focus,.fld select:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(185,28,28,.08)}
+.fld input::placeholder{color:var(--light);font-size:12px}
+.fld input[readonly]{background:#F9FAFB;font-weight:700;cursor:default}
+
+.iu{display:flex;border:2px solid var(--border);border-radius:9px;overflow:hidden;transition:border-color .18s,box-shadow .18s}
+.iu:focus-within{border-color:var(--red);box-shadow:0 0 0 3px rgba(185,28,28,.08)}
+.iu input{border:none!important;box-shadow:none!important;border-radius:0!important;flex:1;min-width:0}
+.iu .unit{background:#F1F5F9;border-left:1.5px solid var(--border);padding:11px 12px;font-size:12px;font-weight:700;color:var(--slate);white-space:nowrap;font-family:'JetBrains Mono',monospace;display:flex;align-items:center}
+
+.radio-g{display:flex;gap:8px;flex-wrap:wrap}
+.radio-g label{display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 16px;cursor:pointer;transition:all .15s;font-size:14px;font-weight:700;background:white;color:var(--text)}
+.radio-g label:hover{border-color:var(--red);background:var(--red4)}
+.radio-g input[type=radio]{display:none}
+.radio-g label:has(input:checked){border-color:var(--red);background:var(--red3);color:var(--red)}
+
+.chk-g{display:flex;gap:8px;flex-wrap:wrap}
+.chk-g label{display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:9px 14px;cursor:pointer;transition:all .15s;font-size:14px;font-weight:600;background:white;color:var(--text)}
+.chk-g label:hover{border-color:var(--blue);background:var(--blue2)}
+.chk-g input[type=checkbox]{accent-color:var(--green);width:16px;height:16px}
+.chk-g label:has(input:checked){border-color:var(--green);background:var(--green2);color:var(--green)}
+
+/* ── BUTTONS ── */
+.btn{padding:11px 20px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .18s;font-family:'Noto Sans Khmer',sans-serif;white-space:nowrap}
+.btn-red{background:var(--red);color:white;box-shadow:0 2px 8px rgba(185,28,28,.25)}
+.btn-red:hover{background:var(--red2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(185,28,28,.35)}
+.btn-green{background:var(--green);color:white;box-shadow:0 2px 8px rgba(5,150,105,.25)}
+.btn-green:hover{background:#047857;transform:translateY(-1px)}
+.btn-gold{background:var(--gold);color:white;box-shadow:0 2px 8px rgba(217,119,6,.25)}
+.btn-gold:hover{background:#B45309;transform:translateY(-1px)}
+.btn-ghost{background:white;color:var(--text);border:1.5px solid var(--border)}
+.btn-ghost:hover{background:var(--bg);border-color:var(--border2)}
+.btn-dark{background:var(--dark);color:white}
+.btn-dark:hover{background:var(--mid);transform:translateY(-1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn:active{transform:translateY(0)!important}
+
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:18px}
+.stat-card{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;text-align:center;transition:box-shadow .2s}
+.stat-card:hover{box-shadow:var(--shadow-md)}
+.stat-val{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}
+.stat-lbl{font-size:10px;color:var(--muted);margin-top:4px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+.stat-card.red .stat-val{color:var(--red)}.stat-card.green .stat-val{color:var(--green)}
+.stat-card.gold .stat-val{color:var(--gold)}.stat-card.blue .stat-val{color:var(--blue)}
+
+/* ── SEARCH ── */
+.search-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:14px 20px;border-bottom:1px solid var(--border);background:#FAFBFC}
+.sf{display:flex;flex-direction:column;gap:5px;flex:1;min-width:180px}
+.sf label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.siw{display:flex;border:1.5px solid var(--border);border-radius:9px;overflow:hidden;background:white;transition:border-color .18s}
+.siw:focus-within{border-color:var(--red)}
+.siw input{border:none;outline:none;padding:9px 13px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:1100px}
+thead tr{background:linear-gradient(135deg,var(--dark) 0%,#1F2937 100%)}
+thead th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap;letter-spacing:.4px;border-right:1px solid rgba(255,255,255,.05)}
+thead th:first-child{width:44px;text-align:center}
+tbody tr{border-bottom:1px solid rgba(221,227,236,.6);transition:background .1s}
+tbody tr:hover{background:rgba(185,28,28,.025)}
+tbody td{padding:9px 12px;border-right:1px solid rgba(221,227,236,.4);vertical-align:middle;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tbody td:first-child{text-align:center;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700}
+
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.bA{background:#DCFCE7;color:#166534}.bB{background:#DBEAFE;color:#1E40AF}
+.bO{background:#FEF3C7;color:#92400E}.bAB{background:#F3E8FF;color:#6B21A8}
+.bm{background:#F1F5F9;color:#475569}.bf{background:#FCE7F3;color:#9D174D}
+.bok{background:#D1FAE5;color:#065F46}
+.tbl-act{display:flex;gap:4px}
+.ib{width:28px;height:28px;border:1px solid var(--border);border-radius:7px;background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .15s}
+.ib.edit:hover{border-color:var(--gold);background:var(--gold2)}
+.ib.del:hover{border-color:var(--red);background:var(--red3)}
+
+/* ── DAY CHIPS ── */
+.day-bar{display:flex;gap:6px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--border);background:#FAFBFC}
+.dchip{padding:4px 12px;border-radius:20px;border:1.5px solid var(--border);background:white;color:var(--muted);font-size:11px;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace;font-weight:600}
+.dchip:hover{border-color:var(--red);color:var(--red)}
+.dchip.on{background:var(--red);color:white;border-color:var(--red)}
+
+/* ── MODAL ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:none;align-items:flex-start;justify-content:center;padding:20px;backdrop-filter:blur(4px);overflow-y:auto}
+.overlay.open{display:flex}
+.modal{background:white;border-radius:16px;width:100%;max-width:1100px;box-shadow:var(--shadow-lg);animation:slideUp .25s ease;margin:auto}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.modal-head{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,var(--dark),#1F2937);border-radius:16px 16px 0 0}
+.modal-head h3{font-size:15px;font-weight:700;color:white}
+.modal-head p{font-size:11px;color:rgba(255,255,255,.45);margin-top:2px}
+.modal-body{padding:24px;max-height:72vh;overflow-y:auto}
+.modal-foot{padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;background:#FAFBFC;border-radius:0 0 16px 16px}
+.close-btn{width:32px;height:32px;border:none;background:rgba(255,255,255,.1);border-radius:8px;color:white;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.close-btn:hover{background:rgba(255,255,255,.2)}
+
+/* ── UPLOAD ── */
+.upload-area{border:2px dashed var(--border2);border-radius:12px;padding:32px;text-align:center;cursor:pointer;transition:all .2s;background:#FAFBFC;position:relative}
+.upload-area:hover,.upload-area.drag{border-color:var(--red);background:rgba(185,28,28,.025)}
+.upload-area input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.upload-area h3{font-size:14px;font-weight:600;margin-bottom:4px}
+.upload-area p{font-size:12px;color:var(--muted)}
+.file-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(185,28,28,.07);border:1px solid rgba(185,28,28,.2);border-radius:6px;padding:6px 12px;font-size:12px;color:var(--red);margin-top:10px;font-family:'JetBrains Mono',monospace}
+
+/* ── PROGRESS ── */
+.prog-bar{height:3px;background:var(--border);border-radius:3px;margin:10px 0;display:none;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--red),var(--gold));border-radius:3px;width:0%;transition:width .4s ease}
+
+/* ── LOADING SPINNER ── */
+.spinner{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite}
+.spinner.dark{border-color:rgba(0,0,0,.15);border-top-color:var(--red)}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--dark);color:white;padding:12px 18px;border-radius:11px;font-size:13px;display:flex;align-items:center;gap:8px;opacity:0;transform:translateY(20px);transition:all .3s;z-index:9999;max-width:380px;box-shadow:var(--shadow-lg)}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.ok{border-left:4px solid var(--green)}.toast.err{border-left:4px solid var(--red)}.toast.info{border-left:4px solid var(--gold)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:60px 24px;color:var(--muted)}
+.empty .ei{font-size:48px;margin-bottom:12px;opacity:.4}
+
+/* ── PAGINATION ── */
+.pag{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);background:#FAFBFC}
+.pag-btns{display:flex;gap:4px}
+.pb{width:28px;height:28px;border:1.5px solid var(--border);border-radius:7px;background:white;cursor:pointer;font-size:11px;transition:all .15s;display:flex;align-items:center;justify-content:center;font-weight:600}
+.pb:hover{border-color:var(--red);color:var(--red)}
+.pb.on{background:var(--red);color:white;border-color:var(--red)}
+.pb:disabled{opacity:.35;cursor:not-allowed}
+mark{background:rgba(217,119,6,.25);border-radius:3px;padding:0 2px}
+
+/* ── INFO BOX ── */
+.info-box{background:linear-gradient(135deg,#EFF6FF,#F0FDF4);border:1px solid #BFDBFE;border-radius:12px;padding:16px 18px;font-size:12px;color:#1E40AF;line-height:1.8}
+.info-box code{background:#DBEAFE;padding:1px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px}
+
+/* ── BAG ROW CARDS ── */
+.bag-row{background:#FAFBFC;border-radius:12px;padding:16px 18px;margin-bottom:10px;border:2px solid var(--border);transition:all .2s}
+.bag-row:hover{border-color:var(--border2);box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.bag-row.bag-used-done{background:#F0FDF4;border-color:var(--green)}
+.bag-row-title{font-size:13px;font-weight:800;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.bag-row-title span{background:var(--red);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0}
+
+/* ── TABLE CELL BADGES ── */
+.td-badge{display:inline-flex;align-items:center;justify-content:center;min-width:28px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.td-blue{background:#DBEAFE;color:#1E40AF}
+.td-purple{background:#EDE9FE;color:#6D28D9}
+.td-teal{background:#CCFBF1;color:#0F766E}
+.td-gold{background:#FEF3C7;color:#B45309}
+.td-green{background:#D1FAE5;color:#065F46}
+.td-orange{background:#FFEDD5;color:#C2410C}
+.td-red{background:#FEE2E2;color:#991B1B}
+/* Filter buttons */
+.filter-btn{padding:8px 18px;border-radius:20px;border:2px solid var(--border);background:white;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all .2s;font-family:'Noto Sans Khmer',sans-serif}
+.filter-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.filter-btn.active-gold{background:var(--gold);color:white;border-color:var(--gold);box-shadow:0 4px 12px rgba(217,119,6,.3)}
+.filter-btn.active-red{background:var(--red);color:white;border-color:var(--red);box-shadow:0 4px 12px rgba(185,28,28,.3)}
+.filter-btn.active-orange{background:#EA580C;color:white;border-color:#EA580C;box-shadow:0 4px 12px rgba(234,88,12,.3)}
+
+/* ── NUMBER INPUT BIGGER ── */
+input[type=number] {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: inner-spin-button;
+  width: 28px;
+  height: 100%;
+  opacity: 1;
+  cursor: pointer;
+}
+/* ── ADD BAG BUTTON HOVER ── */
+#btnAddBag:hover {
+  background: rgba(185,28,28,.1) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(185,28,28,.15);
+}
+
+@keyframes slideDown {
+  from { opacity:0; transform:translateY(-8px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SETUP OVERLAY (first time)
+══════════════════════════════════════ -->
+<div id="setupOverlay">
+  <div class="setup-box">
+    <div class="setup-logo"><span>🩸</span></div>
+    <h2>Blood Report Manager</h2>
+    <p>ភ្ជាប់ Supabase Database ដើម្បីផ្ទុក Data<br>ពួម Multi-user · Cloud Backup · Unlimited</p>
+
+    <div class="setup-step">
+      <p><span class="setup-step-num">1</span>ចូល <code>supabase.com</code> → Sign Up Free → Create Project</p>
+    </div>
+    <div class="setup-step">
+      <p><span class="setup-step-num">2</span>ចូល SQL Editor → New Query → Copy SQL ពី file <code>supabase_setup.sql</code> → Run</p>
+    </div>
+    <div class="setup-step">
+      <p><span class="setup-step-num">3</span>ចូល Project Settings → API → Copy <code>Project URL</code> និង <code>anon key</code></p>
+    </div>
+
+    <div class="setup-field">
+      <label>Supabase Project URL</label>
+      <input type="url" id="sb_url" placeholder="https://xxxxxxxxxxxx.supabase.co">
+    </div>
+    <div class="setup-field">
+      <label>Supabase Anon Key</label>
+      <input type="text" id="sb_key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+    </div>
+    <div class="setup-err" id="setupErr">❌ មិនអាចភ្ជាប់ — សូមពិនិត្យ URL និង Key</div>
+    <button class="setup-btn" onclick="connectSupabase()" id="connectBtn">
+      🔌 ភ្ជាប់ Supabase
+    </button>
+    <p style="color:rgba(255,255,255,.25);font-size:11px;text-align:center;margin-top:14px">
+      Key ត្រូវបានរក្សាទុកក្នុង localStorage · អាច Reset បានពេលណាក៏បាន<br>
+      <span style="color:rgba(255,255,255,.15)">Admin: Paste URL+Key ក្នុង file HTML · line SB_CONFIG</span>
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TOPBAR
+══════════════════════════════════════ -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><span>🩸</span></div>
+    <div class="topbar-title">
+      <h1>Blood Report Manager</h1>
+      <p>Supabase Cloud · Multi-user</p>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showPage('pg-entry')">📝 Data Entry</button>
+      <button class="nav-tab" onclick="showPage('pg-main')">📊 Main File</button>
+      <button class="nav-tab" onclick="showPage('pg-import')">📂 Import Excel</button>
+    </div>
+    <div class="db-badge" onclick="resetConnection()" title="Click to reset connection">
+      <div class="db-dot" id="dbDot"></div>
+      <span id="dbLabel">Connected</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ════════════════════════════════
+     PAGE 1 — DATA ENTRY
+════════════════════════════════ -->
+<div id="pg-entry" class="page active">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+    <div>
+      <h2 style="font-size:22px;font-weight:900">បញ្ចូល Data អ្នកជំងឺ</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:3px">Form ដូចទៅ Excel · Day Sheet Structure · Save ទៅ Supabase</p>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="daySelect" style="border:2px solid var(--border);border-radius:9px;padding:10px 16px;font-family:'Noto Sans Khmer',sans-serif;font-size:14px;font-weight:600;cursor:pointer;background:white;color:var(--text)">
+        <option value="Month 1">Month 1 — January (មករា)</option>
+        <option value="Month 2">Month 2 — February (កុម្ភៈ)</option>
+        <option value="Month 3">Month 3 — March (មីនា)</option>
+        <option value="Month 4">Month 4 — April (មេសា)</option>
+        <option value="Month 5">Month 5 — May (ឧសភា)</option>
+        <option value="Month 6">Month 6 — June (មិថុនា)</option>
+        <option value="Month 7">Month 7 — July (កក្កដា)</option>
+        <option value="Month 8">Month 8 — August (សីហា)</option>
+        <option value="Month 9">Month 9 — September (កញ្ញា)</option>
+        <option value="Month 10">Month 10 — October (តុលា)</option>
+        <option value="Month 11">Month 11 — November (វិច្ឆិកា)</option>
+        <option value="Month 12">Month 12 — December (ធ្នូ)</option>
+      </select>
+      <button class="btn btn-ghost" onclick="clearForm()">🗑 Clear</button>
+      <button class="btn btn-gold" id="btnSaveNew" onclick="saveAndNew()">💾+ Save &amp; New</button>
+      <button class="btn btn-red" id="btnSave" onclick="saveRecord()">💾 Save to Supabase</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+
+      <!-- S1: អ្នកជំងឺ -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--dark)">🏥 ព័ត៌មានអ្នកជំងឺ</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="fg g6">
+        <div class="fld">
+          <label>🏷️ SN ប៉ុងឈាម</label>
+          <div class="iu">
+            <input type="text" id="f_sn" placeholder="058770..."
+              oninput="formatSN(this)"
+              style="border:none!important;outline:none;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;letter-spacing:1px">
+            <span class="unit" style="background:#F0F9FF;border-color:#BAE6FD;color:#0369A1;font-weight:700">SN-</span>
+          </div>
+        </div>
+        <div class="fld"><label>ថ្ងៃខែឆ្នាំ <span class="req">*</span></label><input type="date" id="f_date"></div>
+        <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX"></div>
+        <div class="fld cs2"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
+        <div class="fld"><label>អាយុ</label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none"><span class="unit">ឆ្នាំ</span></div></div>
+      </div>
+      <div class="fg g5" style="margin-top:11px">
+        <div class="fld"><label>ភេទ</label><div class="radio-g"><label><input type="radio" name="gender" value="ប" checked><span>👨 ប្រុស</span></label><label><input type="radio" name="gender" value="ស"><span>👩 ស្រី</span></label></div></div>
+        <div class="fld"><label>ផ្នែកស្នើ</label><select id="f_ward_from" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
+        <div class="fld"><label>បញ្ជូន ទៅផ្នែក</label><select id="f_ward_to" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
+        <div class="fld"><label>លេខទូរសព្ទ</label><input type="text" id="f_phone" placeholder="0XX XXX XXX"></div>
+        <div class="fld">
+          <label>👨‍⚕️ គ្រូពេទ្យ ស្នើ</label>
+          <div class="iu" style="border-color:var(--border)">
+            <span class="unit" style="background:#FFF7ED;border-color:#FED7AA;color:#C2410C;font-weight:800;font-size:13px">វេជ្ជ-</span>
+            <input type="text" id="f_doctor_req" placeholder="ឈ្មោះ..."
+              oninput="formatDoctor(this)"
+              style="border:none!important;outline:none;font-family:'Noto Sans Khmer',sans-serif;font-weight:600;font-size:14px">
+          </div>
+        </div>
+      </div>
+      <div class="fg g4" style="margin-top:11px">
+        <div class="fld cs2"><label>រោគវិនិច្ឆ័យ</label><input type="text" id="f_diagnosis" placeholder="Diagnosis / Anemia..."></div>
+        <div class="fld"><label>Hb (g/dL)</label><div class="iu"><input type="number" id="f_hb" placeholder="0.0" step="0.1" style="border:none!important;outline:none"><span class="unit">g/dL</span></div></div>
+        <div class="fld"><label>Ht (%)</label><div class="iu"><input type="number" id="f_ht" placeholder="0" style="border:none!important;outline:none"><span class="unit">%</span></div></div>
+      </div>
+
+      <!-- S2: សាកឈាម -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--red)">🩸 ព័ត៌មានសាកឈាម</span>
+        <div class="sec-line"></div>
+      </div>
+
+      <!-- Bag rows container -->
+      <div id="bagContainer">
+        <!-- Bag 1 (always visible) -->
+        <div class="bag-row" id="bagrow">
+          <div class="bag-row-title">
+            <span>1</span>
+            Bag 1 (ដំបូង)
+          </div>
+          <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+            <div class="fld">
+              <label>📋 លេខកូដ សាក់ឈាម</label>
+              <input type="text" id="f_blood_code" placeholder="e.g. 20261234">
+            </div>
+            <div class="fld">
+              <label style="color:var(--green)">✅ យកប្រើរួច</label>
+              <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+                     id="lbl_used"
+                     onmouseenter="this.style.borderColor='var(--green)'"
+                     onmouseleave="this.style.borderColor=document.getElementById('f_bag_used').checked?'var(--green)':'var(--border)'">
+                <input type="checkbox" id="f_bag_used" style="accent-color:var(--green);width:17px;height:17px" onchange="bagUsedChange(this,'')">
+                <span id="span_used" style="font-size:14px;font-weight:700">យកប្រើ</span>
+              </label>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
+              <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+                     id="lbl_back"
+                     onmouseenter="this.style.borderColor='var(--red)'"
+                     onmouseleave="this.style.borderColor=document.getElementById('f_bag_back').checked?'var(--red)':'var(--border)'">
+                <input type="checkbox" id="f_bag_back" style="accent-color:var(--red);width:17px;height:17px" onchange="bagBackChange(this,'')">
+                <span id="span_back" style="font-size:14px;font-weight:700">វិលស្តុក</span>
+              </label>
+            </div>
+            <div class="fld">
+              <label>🩸 Group / Rh</label>
+              <select id="f_group"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>
+            </div>
+            <div class="fld">
+              <label>💉 ប្រភេទ</label>
+              <select id="f_blood_type"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>
+            </div>
+            <div class="fld">
+              <label>📅 ថ្ងៃផុតកំណត់</label>
+              <input type="date" id="f_blood_exp">
+            </div>
+            <div class="fld">
+              <label>👤 អ្នកយកប្រើ</label>
+              <input type="text" id="f_bag_taker" placeholder="ឈ្មោះ...">
+            </div>
+            <div class="fld">
+              <label>🕐 ថ្ងៃ ម៉ោង យក</label>
+              <input type="datetime-local" id="f_bag_taken_dt">
+            </div>
+            <div class="fld">
+              <label>🧑‍⚕️ បុគ្គលិក-Lab</label>
+              <select id="f_bag_lab_staff" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+            </div>
+          </div>
+        
+
+        <!-- Back fields INSIDE Bag 1 -->
+        <div id="back_fields" style="display:none;margin-top:14px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+            <div class="fld">
+              <label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
+              <input type="text" id="f_back_giver" placeholder="ឈ្មោះ..."
+                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
+              <div style="display:flex;gap:6px">
+                <input type="date" id="f_back_date"
+                  style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
+                <input type="time" id="f_back_time"
+                  style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;background:white">
+              </div>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
+              <select id="f_back_lab" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'JetBrains Mono',monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">📝 មូលហេតុ</label>
+              <input type="text" id="f_back_reason" placeholder="មូលហេតុ..."
+                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+
+      <!-- Add Bag Button -->
+      <div style="display:flex;align-items:center;gap:12px;margin:14px 0">
+        <button type="button" onclick="addBagRow()" id="btnAddBag"
+          style="display:flex;align-items:center;gap:8px;padding:10px 20px;border:2px dashed var(--red);border-radius:10px;background:rgba(185,28,28,.04);color:var(--red);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Noto Sans Khmer',sans-serif">
+          ➕ បន្ថែម Bag
+        </button>
+        <span id="bagCountLabel" style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">Bag 1 / 7</span>
+        <button type="button" onclick="removeBagRow()" id="btnRemoveBag" style="display:none;padding:8px 14px;border:2px solid var(--border);border-radius:9px;background:white;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">
+          ➖ លុប Bag ចុងក្រោយ
+        </button>
+      </div>
+
+      <!-- X-Match + Saline checks row -->
+      <div class="fg g5" style="margin-top:4px">
+        <div class="fld">
+          <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">⚗️ X-MATCH (BAG)</label>
+          <div class="iu" style="border:2.5px solid var(--red);border-radius:10px;background:#FFF5F5">
+            <input type="number" id="f_xmatch" placeholder="0" min="0" oninput="calc()"
+              style="border:none!important;outline:none;font-size:18px;font-weight:900;color:var(--red);font-family:'JetBrains Mono',monospace;background:transparent">
+            <span class="unit" style="background:#FECACA;border-color:var(--red);color:var(--red);font-weight:900;font-size:14px">Bag</span>
+          </div>
+        </div>
+        <div class="fld"><label>🔬 Saline IGM T.25C</label><div class="chk-g"><label><input type="checkbox" id="f_s25"><span>✓ ok</span></label></div></div>
+        <div class="fld"><label>🔬 Saline IGM T.37C</label><div class="chk-g"><label><input type="checkbox" id="f_s37"><span>✓ ok</span></label></div></div>
+        <div class="fld"><label>🔬 Anti. Human IGG</label><div class="chk-g"><label><input type="checkbox" id="f_anti"><span>✓ ok</span></label></div></div>
+        <div class="fld"><label>🔬 Come Check Cell</label><div class="chk-g"><label><input type="checkbox" id="f_come"><span>✓ ok</span></label></div></div>
+      </div>
+
+      <!-- X-Match Staff + DateTime + NBTC row -->
+      <div class="fg g3" style="margin-top:12px;padding:16px;background:#F8FAFC;border-radius:12px;border:1.5px solid var(--border)">
+        <div class="fld">
+          <label>🧑‍⚕️ បុគ្គលិកធ្វើ X-Match</label>
+          <select id="f_xmatch_staff" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+        </div>
+        <div class="fld">
+          <label>🕐 ថ្ងៃ ម៉ោង ធ្វើ X-Match</label>
+          <div style="display:flex;gap:6px">
+            <input type="date" id="f_xmatch_date"
+              style="flex:1.2;border:2px solid var(--border);border-radius:9px;padding:10px 10px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;outline:none;transition:border-color .2s"
+              onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+            <input type="time" id="f_xmatch_time"
+              style="flex:1;border:2px solid var(--border);border-radius:9px;padding:10px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s"
+              onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+          </div>
+        </div>
+        <div class="fld">
+          <label style="color:var(--blue)">🏥 ករណីឈាម NBTC (PL)</label>
+          <label id="lbl_nbtc"
+            style="display:flex;align-items:center;gap:10px;border:2px solid var(--border);border-radius:9px;padding:10px 16px;cursor:pointer;background:white;transition:all .2s;font-size:14px;font-weight:700"
+            onmouseenter="this.style.borderColor='var(--blue)'"
+            onmouseleave="this.style.borderColor=document.getElementById('f_nbtc').checked?'var(--blue)':'var(--border)'">
+            <input type="checkbox" id="f_nbtc"
+              style="accent-color:var(--blue);width:18px;height:18px"
+              onchange="nbtcChange(this)">
+            <span id="span_nbtc" style="font-size:14px;font-weight:700">ឈាមមកពី NBTC (PL)</span>
+          </label>
+        </div>
+      </div>
+      <!-- S3: ការប្រើប្រាស់ -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--gold)">💊 ការប្រើប្រាស់សាកឈាម</span>
+        <div class="sec-line"></div>
+      </div>
+      <!-- Row 1: ថ្មី ខ្ចី សង ស្តុកផ្ញើ យកប្រើ វិលចូលស្តុក -->
+      <div class="fg g6">
+        <div class="fld"><label>ថ្មី</label><div class="iu"><input type="number" id="f_new" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>ខ្ចី</label><div class="iu"><input type="number" id="f_borrow" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>សង</label><div class="iu"><input type="number" id="f_return" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label style="color:var(--gold)">ស្តុកផ្ញើ 🔢 (auto)</label><div class="iu" style="border-color:var(--gold);background:var(--gold2)"><input type="number" id="f_stock_sent" readonly style="border:none!important;outline:none;background:transparent;color:var(--gold);font-weight:700"><span class="unit" style="border-color:var(--gold)">auto</span></div></div>
+        <div class="fld"><label>យកប្រើ</label><div class="iu"><input type="number" id="f_used" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label style="color:#EA580C">⏳ នៅជំពាក់ 🔢 (auto)</label><div class="iu" style="border-color:#EA580C;background:#FFEDD5"><input type="number" id="f_given_count" readonly style="border:none!important;outline:none;background:transparent;color:#EA580C;font-weight:900;font-size:15px"><span class="unit" style="border-color:#EA580C;background:#FED7AA;color:#EA580C;font-weight:900">auto</span></div></div>
+        <div class="fld"><label style="color:var(--red);font-weight:800">🔙 វិលចូលស្តុក</label><div class="iu" style="border-color:var(--red);background:var(--red3)"><input type="number" id="f_back_stock" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none;color:var(--red);font-weight:900;font-size:15px;background:transparent"><span class="unit" style="border-color:var(--red);background:#FECACA;color:var(--red);font-weight:900">Bag</span></div></div>
+      </div>
+      <!-- Row 2: គ្រូពេទ្យ ថ្ងៃកាត់ចូល ចំនួនផ្តល់ Lab WARD ថ្ងៃចេញ -->
+      
+
+      <!-- S4: ត្រលប់ -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--green)">🔄 ព័ត៌មានត្រលប់ / ផ្នែក</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="fg g5">
+        <div class="fld"><label style="color:var(--red)">មិនទាន់ សង 🔢</label><div class="iu" style="border-color:var(--red);background:var(--red3)"><input type="number" id="f_not_returned" readonly style="border:none!important;outline:none;background:transparent;color:var(--red);font-weight:700"><span class="unit" style="border-color:var(--red)">auto</span></div></div>
+        <div class="fld">
+          <label id="f_cannot_label">⛔ ពុំមានលទ្ធភាព</label>
+          <div id="f_cannot_wrap" style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:white;transition:all .2s" onclick="this.querySelector('input').click()">
+            <input type="checkbox" id="f_cannot_return" style="accent-color:var(--red);width:16px;height:16px" onchange="dataEntryCannotChange(this)">
+            <span id="f_cannot_span" style="font-size:14px;font-weight:700">ពុំអាចសង</span>
+          </div>
+        </div>
+        <div class="fld"><label>ចំនួន ផ្តល់ (ត្រ.)</label><div class="iu"><input type="number" id="f_given_back" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>ម៉ោង ផ្តល់ព័ត៌មាន</label><input type="time" id="f_info_time"></div>
+        <div class="fld"><label>អ្នកទទួលព័ត៌មាន</label><input type="text" id="f_info_recv" placeholder="ឈ្មោះ..."></div>
+      </div>
+      <div class="fg g3" style="margin-top:11px">
+        <div class="fld cs2">
+          <label id="f_reason_label">📝 មូលហេតុ</label>
+          <input type="text" id="f_reason" placeholder="មូលហេតុ..."
+            style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;transition:all .2s">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:28px;justify-content:flex-end;padding-top:20px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="clearForm()">🗑 Clear Form</button>
+        <button class="btn btn-gold" id="btn2" onclick="saveAndNew()">💾+ Save &amp; New</button>
+        <button class="btn btn-red" style="padding:9px 28px" id="btn1" onclick="saveRecord()">💾 Save to Supabase</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════
+     PAGE 2 — MAIN FILE
+════════════════════════════════ -->
+<div id="pg-main" class="page">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+    <div>
+      <h2 style="font-size:18px;font-weight:800">Main File — Records ទាំងអស់</h2>
+      <p style="color:var(--muted);font-size:12px;margin-top:2px">Realtime ពី Supabase Cloud · Multi-user</p>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="loadRecords()">🔄 Refresh</button>
+      <button class="btn btn-green" onclick="exportExcel()">⬇️ Export Excel</button>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card red"><div class="stat-val" id="st-total">—</div><div class="stat-lbl">Records ទាំងអស់</div></div>
+    <div class="stat-card blue"><div class="stat-val" id="st-days">—</div><div class="stat-lbl">Day Sheets</div></div>
+    <div class="stat-card green"><div class="stat-val" id="st-show">—</div><div class="stat-lbl">Showing</div></div>
+    <div class="stat-card gold"><div class="stat-val" id="st-filt">—</div><div class="stat-lbl">Filtered</div></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px 16px;border-bottom:1px solid var(--border);background:#FAFBFC">
+      <!-- Search HN -->
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">🔍 HN ជំងឺ</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+          <input type="text" id="s-hn" placeholder="HN..." oninput="applyFilter()"
+            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent">
+        </div>
+      </div>
+      <!-- Search Ward -->
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">🏥 Ward / ផ្នែក</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+          <input type="text" id="s-ward" placeholder="Ward..." oninput="applyFilter()"
+            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent">
+        </div>
+      </div>
+      <!-- Search Date -->
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">📅 ថ្ងៃខែឆ្នាំ</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+          <input type="date" id="s-date" oninput="applyFilter()"
+            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent;cursor:pointer">
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="clearSearch()" style="align-self:flex-end;padding:7px 14px;font-size:12px">✕ Clear</button>
+    </div>
+    <!-- Filter buttons row -->
+    <div style="display:flex;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:.8px;text-transform:uppercase;margin-right:4px">Filter ⚡</span>
+      <button class="filter-btn" id="btn-filter-sent" onclick="filterSpecial('sent')">
+        📦 ឈាមផ្ញើ <span id="cnt-sent" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" id="btn-filter-jamphak" onclick="filterSpecial('jamphak')">
+        ⏳ ឈាមជំពាក់ <span id="cnt-jamphak" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" id="btn-filter-notret" onclick="filterSpecial('notret')">
+        ❗ មិនទាន់សង <span id="cnt-notret" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" style="margin-left:auto" onclick="clearSpecialFilter()">✕ Clear Filter</button>
+    </div>
+    <div class="day-bar" id="dayBar"><span style="color:var(--light);font-size:11px">Loading...</span></div>
+    <div class="tbl-wrap" id="tableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading data...</p></div></div>
+    <div class="pag" id="pag"><span></span></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════
+     PAGE 3 — IMPORT EXCEL
+════════════════════════════════ -->
+<div id="pg-import" class="page">
+  <div style="margin-bottom:16px">
+    <h2 style="font-size:18px;font-weight:800">Import Excel → Supabase</h2>
+    <p style="color:var(--muted);font-size:12px;margin-top:2px">Upload Excel ហើយ import records ទៅ Supabase Cloud</p>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls">
+        <div style="font-size:40px;margin-bottom:10px">📂</div>
+        <h3>Drag &amp; Drop ឬ Click Upload</h3>
+        <p>Excel file (.xlsx, .xlsm) · day(1) ដល់ day(31)</p>
+        <div id="fileTag" style="display:none" class="file-tag">📄 <span id="fileTagName"></span></div>
+      </div>
+      <div class="prog-bar" id="progBar"><div class="prog-fill" id="progFill"></div></div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-red" id="btnImport" disabled onclick="importExcel()">⚙️ Import ទៅ Supabase</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('fileInput').click()">📂 ជ្រើស File</button>
+      </div>
+      <div id="importResult" style="display:none;margin-top:16px;padding:14px 18px;background:var(--green2);border:1px solid var(--green);border-radius:10px;color:#065F46;font-size:13px;font-weight:600"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- EDIT MODAL -->
+<div class="overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><h3>✏️ Edit Record</h3><p id="editSub">—</p></div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="editBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-red" id="btnEditSave" onclick="saveEdit()">💾 Save to Supabase</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════════════
+// ═══════════════════════════════════════════
+// ✅ CONFIG — Admin បំពេញត្រង់នេះ ១ ដងគត់
+// ═══════════════════════════════════════════
+const SB_CONFIG = {
+  url: 'YOUR_SUPABASE_URL',   // ← Paste Project URL ត្រង់នេះ
+  key: 'YOUR_SUPABASE_KEY',   // ← Paste anon/publishable key ត្រង់នេះ
+};
+// ═══════════════════════════════════════════
+
+let SB_URL = SB_CONFIG.url || localStorage.getItem('sb_url') || '';
+let SB_KEY = SB_CONFIG.key || localStorage.getItem('sb_key') || '';
+const TABLE = 'blood_records';
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+let allRecs = [];
+let filtered = [];
+let curPage  = 1;
+const PER    = 50;
+let activeDay = 'all';
+let editId   = null;
+let importWB = null;
+
+// ═══════════════════════════════════════════
+// SUPABASE API
+// ═══════════════════════════════════════════
+async function sbFetch(path, opts = {}) {
+  const res = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    ...opts,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': `Bearer ${SB_KEY}`,
+      'Content-Type': 'application/json',
+      'Prefer': opts.prefer || 'return=representation',
+      ...(opts.headers || {})
+    }
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || err.hint || `HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : [];
+}
+
+async function sbSelect(filter = '') {
+  return sbFetch(`${TABLE}?order=id.asc${filter ? '&' + filter : ''}&limit=10000`);
+}
+
+async function sbInsert(row) {
+  return sbFetch(TABLE, { method: 'POST', body: JSON.stringify(row) });
+}
+
+async function sbUpdate(id, row) {
+  return sbFetch(`${TABLE}?id=eq.${id}`, {
+    method: 'PATCH', body: JSON.stringify(row), prefer: 'return=representation'
+  });
+}
+
+async function sbDelete(id) {
+  return sbFetch(`${TABLE}?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
+}
+
+async function sbCount() {
+  const res = await fetch(`${SB_URL}/rest/v1/${TABLE}?select=count`, {
+    headers: { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Prefer': 'count=exact', 'Range-Unit': 'items', 'Range': '0-0' }
+  });
+  return parseInt(res.headers.get('content-range')?.split('/')[1] || '0');
+}
+
+// ═══════════════════════════════════════════
+// CONNECT
+// ═══════════════════════════════════════════
+async function connectSupabase() {
+  const url = document.getElementById('sb_url').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('sb_key').value.trim();
+  const err  = document.getElementById('setupErr');
+  const btn  = document.getElementById('connectBtn');
+
+  if (!url || !key) { err.textContent = '⚠️ សូមបញ្ចូល URL និង Key'; err.style.display = 'block'; return; }
+
+  btn.innerHTML = '<span class="spinner"></span> Connecting...';
+  btn.disabled = true;
+  err.style.display = 'none';
+
+  SB_URL = url; SB_KEY = key;
+  try {
+    await sbCount();
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    document.getElementById('setupOverlay').style.display = 'none';
+    setDbStatus(true);
+    showToast('✅ Connected to Supabase!', 'ok');
+    loadRecords();
+  } catch(e) {
+    err.textContent = '❌ ' + e.message;
+    err.style.display = 'block';
+    btn.innerHTML = '🔌 ភ្ជាប់ Supabase';
+    btn.disabled = false;
+  }
+}
+
+function setDbStatus(on) {
+  document.getElementById('dbDot').className = 'db-dot' + (on ? '' : ' off');
+  document.getElementById('dbLabel').textContent = on ? 'Connected' : 'Disconnected';
+}
+
+function resetConnection() {
+  if (!confirm('Reset Supabase connection?')) return;
+  localStorage.removeItem('sb_url'); localStorage.removeItem('sb_key');
+  location.reload();
+}
+
+// Auto-connect — hide setup if config hardcoded or saved
+const isHardcoded = SB_CONFIG.url !== 'YOUR_SUPABASE_URL' && SB_CONFIG.key !== 'YOUR_SUPABASE_KEY';
+if (isHardcoded) {
+  localStorage.setItem('sb_url', SB_URL);
+  localStorage.setItem('sb_key', SB_KEY);
+}
+if (SB_URL && SB_URL !== 'YOUR_SUPABASE_URL' && SB_KEY) {
+  document.getElementById('setupOverlay').style.display = 'none';
+  setDbStatus(true);
+}
+
+// ═══════════════════════════════════════════
+// NAV
+// ═══════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const tabs = document.querySelectorAll('.nav-tab');
+  if (id === 'pg-entry')  tabs[0].classList.add('active');
+  if (id === 'pg-main')   { tabs[1].classList.add('active'); loadRecords(); }
+  if (id === 'pg-import') tabs[2].classList.add('active');
+}
+
+// ═══════════════════════════════════════════
+// FORMULA
+// ═══════════════════════════════════════════
+// ── DYNAMIC BAG ROWS ──
+let currentBagCount = 1;
+const MAX_BAGS = 7;
+const BAG_SFXS = ['','_2','_3','_4','_5','_6','_7'];
+
+function grpOptsHtml() {
+  return '<option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option>';
+}
+function typeOptsHtml() {
+  return '<option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option>';
+}
+
+function addBagRow() {
+  if (currentBagCount >= MAX_BAGS) return;
+  currentBagCount++;
+  const n   = currentBagCount;
+  const sfx = '_' + n;
+  const ph  = 'e.g. 2026' + (1233 + n);
+
+  const div = document.createElement('div');
+  div.className = 'bag-row';
+  div.id = 'bagrow' + sfx;
+  div.style.marginTop = '10px';
+  div.innerHTML = `
+    <div class="bag-row-title">
+      <span>${n}</span>
+      Bag ${n}
+      <button type="button" onclick="removeSingleBag('${sfx}')"
+        style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer">✕</button>
+    </div>
+    <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+      <div class="fld"><label>📋 លេខកូដ</label><input type="text" id="f_blood_code${sfx}" placeholder="${ph}"></div>
+      <div class="fld">
+        <label style="color:var(--green)">✅ យកប្រើរួច</label>
+        <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+               id="lbl_used${sfx}"
+               onmouseenter="this.style.borderColor='var(--green)'"
+               onmouseleave="this.style.borderColor=document.getElementById('f_bag_used${sfx}').checked?'var(--green)':'var(--border)'">
+          <input type="checkbox" id="f_bag_used${sfx}" style="accent-color:var(--green);width:17px;height:17px" onchange="bagUsedChange(this,'${sfx}')">
+          <span id="span_used${sfx}" style="font-size:14px;font-weight:700">យកប្រើ</span>
+        </label>
+      </div>
+      <div class="fld">
+        <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
+        <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+               id="lbl_back${sfx}"
+               onmouseenter="this.style.borderColor='var(--red)'"
+               onmouseleave="this.style.borderColor=document.getElementById('f_bag_back${sfx}').checked?'var(--red)':'var(--border)'">
+          <input type="checkbox" id="f_bag_back${sfx}" style="accent-color:var(--red);width:17px;height:17px" onchange="bagBackChange(this,'${sfx}')">
+          <span id="span_back${sfx}" style="font-size:14px;font-weight:700">វិលស្តុក</span>
+        </label>
+      </div>
+      <div class="fld"><label>🩸 Group / Rh</label><select id="f_group${sfx}">${grpOptsHtml()}</select></div>
+      <div class="fld"><label>💉 ប្រភេទ</label><select id="f_blood_type${sfx}">${typeOptsHtml()}</select></div>
+      <div class="fld"><label>📅 ថ្ងៃផុត</label><input type="date" id="f_blood_exp${sfx}"></div>
+      <div class="fld"><label>👤 អ្នកយកប្រើ</label><input type="text" id="f_bag_taker${sfx}" placeholder="ឈ្មោះ..."></div>
+      <div class="fld"><label>🕐 ថ្ងៃ ម៉ោង យក</label><input type="datetime-local" id="f_bag_taken_dt${sfx}"></div>
+      <div class="fld"><label>🧑‍⚕️ បុគ្គលិក-Lab</label><select id="f_bag_lab_staff${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select></div>
+    </div>`;
+
+  // Add back_fields div INSIDE this bag
+  const bfDiv = document.createElement('div');
+  bfDiv.id = 'back_fields' + sfx;
+  bfDiv.style.cssText = 'display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
+  bfDiv.innerHTML = `
+    <div class="fld">
+      <label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
+      <input type="text" id="f_back_giver${sfx}" placeholder="ឈ្មោះ..."
+        style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
+    </div>
+    <div class="fld">
+      <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
+      <div style="display:flex;gap:6px">
+        <input type="date" id="f_back_date${sfx}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
+        <input type="time" id="f_back_time${sfx}" style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;background:white">
+      </div>
+    </div>
+    <div class="fld">
+      <label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
+      <select id="f_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'JetBrains Mono',monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+    </div>
+    <div class="fld">
+      <label style="color:var(--red)">📝 មូលហេតុ</label>
+      <input type="text" id="f_back_reason${sfx}" placeholder="មូលហេតុ..."
+        style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
+    </div>`;
+  // Insert back_fields INSIDE the bag div
+  div.appendChild(bfDiv);
+
+  document.getElementById('bagContainer').appendChild(div);
+  updateBagUI();
+}
+
+function removeSingleBag(sfx) {
+  const el = document.getElementById('bagrow' + sfx);
+  if (el) {
+    el.remove();
+    currentBagCount--;
+    updateBagUI();
+    bagUsedChange({checked: false}, sfx); // recount used
+  }
+}
+
+function removeBagRow() {
+  if (currentBagCount <= 1) return;
+  const sfx = '_' + currentBagCount;
+  const el = document.getElementById('bagrow' + sfx);
+  if (el) el.remove();
+  currentBagCount--;
+  updateBagUI();
+}
+
+function updateBagUI() {
+  const addBtn    = document.getElementById('btnAddBag');
+  const removeBtn = document.getElementById('btnRemoveBag');
+  const label     = document.getElementById('bagCountLabel');
+  if (label)     label.textContent = 'Bag ' + currentBagCount + ' / ' + MAX_BAGS;
+  if (addBtn)    addBtn.style.opacity = currentBagCount >= MAX_BAGS ? '0.4' : '1';
+  if (removeBtn) removeBtn.style.display = currentBagCount > 1 ? 'inline-flex' : 'none';
+}
+
+// Reset bag rows to 1
+function resetBagRows() {
+  const container = document.getElementById('bagContainer');
+  // Remove all except first bag
+  const bags = container.querySelectorAll('.bag-row');
+  bags.forEach((b, i) => { if (i > 0) b.remove(); });
+  currentBagCount = 1;
+  updateBagUI();
+}
+
+// Count checked
+// ── NBTC Checkbox Change ──
+function nbtcChange(chk) {
+  const lbl  = document.getElementById('lbl_nbtc');
+  const span = document.getElementById('span_nbtc');
+  if (chk.checked) {
+    if (lbl)  { lbl.style.borderColor='var(--blue)'; lbl.style.background='var(--blue2)'; }
+    if (span) { span.textContent='✅ ឈាមមកពី NBTC (PL)'; span.style.color='var(--blue)'; }
+  } else {
+    if (lbl)  { lbl.style.borderColor='var(--border)'; lbl.style.background='white'; }
+    if (span) { span.textContent='ឈាមមកពី NBTC (PL)'; span.style.color='inherit'; }
+  }
+}
+
+// ── Data Entry: Cannot Return Change ──
+function dataEntryCannotChange(chk) {
+  const wrap     = document.getElementById('f_cannot_wrap');
+  const span     = document.getElementById('f_cannot_span');
+  const label    = document.getElementById('f_cannot_label');
+  const reasonEl = document.getElementById('f_reason');
+  const reasonLbl= document.getElementById('f_reason_label');
+
+  if (chk.checked) {
+    // ពុំអាចសង → zero out not_returned and given_count
+    if (wrap)  { wrap.style.borderColor='var(--red)'; wrap.style.background='var(--red3)'; }
+    if (span)  { span.textContent='⛔ ពុំអាចសង'; span.style.color='var(--red)'; }
+    if (label) { label.style.color='var(--red)'; }
+    // Set auto fields to 0
+    const notRet = document.getElementById('f_not_returned');
+    const givCnt = document.getElementById('f_given_count');
+    if (notRet) { notRet.value = 0; notRet.style.color='var(--muted)'; }
+    if (givCnt) { givCnt.value = 0; givCnt.style.color='var(--muted)'; }
+    // Highlight reason as required
+    // Re-run calc to enforce zeros
+    calc();
+    if (reasonEl)  { reasonEl.style.borderColor='var(--red)'; reasonEl.style.boxShadow='0 0 0 3px rgba(185,28,28,.08)'; reasonEl.placeholder='* សូមបំពេញមូលហេតុ...'; reasonEl.focus(); }
+    if (reasonLbl) { reasonLbl.innerHTML='📝 មូលហេតុ <span style="color:var(--red);font-weight:900">* (ត្រូវបំពេញ)</span>'; reasonLbl.style.color='var(--red)'; }
+  } else {
+    // Unchecked → restore
+    if (wrap)  { wrap.style.borderColor='var(--border)'; wrap.style.background='white'; }
+    if (span)  { span.textContent='ពុំអាចសង'; span.style.color='inherit'; }
+    if (label) { label.style.color=''; }
+    // Recalc
+    calc();
+    const notRetR = document.getElementById('f_not_returned');
+    const givCntR = document.getElementById('f_given_count');
+    if (notRetR) notRetR.style.color='';
+    if (givCntR) givCntR.style.color='';
+    if (reasonEl)  { reasonEl.style.borderColor=''; reasonEl.style.boxShadow=''; reasonEl.placeholder='មូលហេតុ...'; }
+    if (reasonLbl) { reasonLbl.innerHTML='📝 មូលហេតុ'; reasonLbl.style.color=''; }
+  }
+}
+
+// ── Bag Back Stock Change ──
+function bagBackChange(chk, sfx) {
+  const lbl    = document.getElementById('lbl_back'    + sfx);
+  const span   = document.getElementById('span_back'   + sfx);
+  const row    = document.getElementById('bagrow'      + sfx);
+  const fields = document.getElementById('back_fields' + sfx);
+
+  if (chk.checked) {
+    if (lbl)    { lbl.style.borderColor='var(--red)'; lbl.style.background='var(--red3)'; }
+    if (span)   { span.textContent='🔄 វិលរួច'; span.style.color='var(--red)'; }
+    if (row)    { row.style.borderColor='var(--red)'; }
+    // Show extra fields
+    if (fields) { fields.style.display='grid'; }
+    // Uncheck "យកប្រើរួច" if checked
+    const usedCb = document.getElementById('f_bag_used' + sfx);
+    if (usedCb && usedCb.checked) {
+      usedCb.checked = false;
+      bagUsedChange(usedCb, sfx);
+    }
+    // Auto +1 to back_stock
+    const bkEl = document.getElementById('f_back_stock');
+    if (bkEl) { bkEl.value = (parseFloat(bkEl.value)||0) + 1; calc(); }
+    // Focus on first field
+    setTimeout(() => { document.getElementById('f_back_giver'+sfx)?.focus(); }, 100);
+  } else {
+    if (lbl)    { lbl.style.borderColor='var(--border)'; lbl.style.background='white'; }
+    if (span)   { span.textContent='វិលស្តុក'; span.style.color='inherit'; }
+    if (row)    { row.style.borderColor='var(--border)'; }
+    // Hide extra fields
+    if (fields) { fields.style.display='none'; }
+    // Auto -1 from back_stock
+    const bkEl = document.getElementById('f_back_stock');
+    if (bkEl) { bkEl.value = Math.max(0,(parseFloat(bkEl.value)||0)-1); calc(); }
+  }
+}
+
+// Count checked "យកប្រើរួច" boxes → update f_used
+function bagUsedChange(chk, sfx) {
+  // Style the label
+  const lbl = document.getElementById('lbl_used' + sfx);
+  const span = document.getElementById('span_used' + sfx);
+  const row = document.getElementById('bagrow' + sfx);
+  if (chk.checked) {
+    lbl.style.borderColor = 'var(--green)';
+    lbl.style.background  = 'var(--green2)';
+    span.textContent = '✅ យកប្រើរួច';
+    if (row) row.classList.add('bag-used-done');
+  } else {
+    lbl.style.borderColor = 'var(--border)';
+    lbl.style.background  = 'white';
+    span.textContent = 'យកប្រើ';
+    if (row) row.classList.remove('bag-used-done');
+  }
+  // Count all checked bags → set f_used
+  const sfxList = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
+  let usedCount = 0;
+  sfxList.forEach(s => {
+    const el = document.getElementById('f_bag_used' + s);
+    if (el && el.checked) usedCount++;
+  });
+  document.getElementById('f_used').value = usedCount;
+  calc();
+}
+
+// ── SN Auto Format ──
+function formatSN(input) {
+  // Remove "SN-" prefix if user typed it
+  let val = input.value.replace(/^SN-/i, '').replace(/[^0-9A-Za-z]/g, '');
+  input.value = val;
+  // Show preview below input
+  let preview = document.getElementById('sn_preview');
+  if (!preview) {
+    preview = document.createElement('div');
+    preview.id = 'sn_preview';
+    preview.style.cssText = 'font-size:12px;font-weight:800;color:#0369A1;font-family:JetBrains Mono,monospace;margin-top:4px;letter-spacing:1px;min-height:16px';
+    input.closest('.fld').appendChild(preview);
+  }
+  preview.textContent = val ? '→ SN-' + val : '';
+}
+
+// Get formatted SN value
+function getSNValue() {
+  const val = document.getElementById('f_sn')?.value?.trim() || '';
+  return val ? 'SN-' + val : '';
+}
+
+// ── Doctor Auto Format ──
+function formatDoctor(input) {
+  let val = input.value.replace(/^វេជ្ជ[- \s]*/u, '');
+  input.value = val;
+  // Show preview
+  let preview = document.getElementById('doc_preview');
+  if (!preview) {
+    preview = document.createElement('div');
+    preview.id = 'doc_preview';
+    preview.style.cssText = 'font-size:12px;font-weight:800;color:#C2410C;font-family:Noto Sans Khmer,sans-serif;margin-top:4px;min-height:16px';
+    input.closest('.fld').appendChild(preview);
+  }
+  preview.textContent = val ? '→ វេជ្ជ-' + val : '';
+}
+
+function getDoctorValue() {
+  const val = document.getElementById('f_doctor_req')?.value?.trim() || '';
+  return val ? 'វេជ្ជ-' + val : '';
+}
+
+function calc() {
+  const xm  = parseFloat(document.getElementById('f_xmatch').value)     || 0;
+  const us  = parseFloat(document.getElementById('f_used').value)        || 0;
+  const bk  = parseFloat(document.getElementById('f_back_stock').value)  || 0;
+  const ret = parseFloat(document.getElementById('f_return').value)      || 0;
+  // ស្តុកផ្ញើ = X-Match − យកប្រើ − វិលចូលស្តុក
+  document.getElementById('f_stock_sent').value   = Math.max(0, xm - us - bk);
+  // នៅជំពាក់ = X-Match − វិលចូលស្តុក − សង
+  // ពុំអាចសង → zero នៅជំពាក់ + មិនទាន់សង
+  if (document.getElementById('f_cannot_return')?.checked) {
+    document.getElementById('f_given_count').value  = 0;
+    document.getElementById('f_not_returned').value = 0;
+  } else {
+    document.getElementById('f_given_count').value  = Math.max(0, xm - bk - ret);
+    // មិនទាន់សង = X-Match − វិលចូលស្តុក − សង
+    document.getElementById('f_not_returned').value = Math.max(0, xm - bk - ret);
+  }
+}
+
+// ═══════════════════════════════════════════
+// FORM READ / CLEAR
+// ═══════════════════════════════════════════
+function readForm() {
+  const xm = parseFloat(document.getElementById('f_xmatch').value) || 0;
+  const us  = parseFloat(document.getElementById('f_used').value)   || 0;
+  return {
+    sheet:         document.getElementById('daySelect').value,
+    sn_code:       getSNValue(),
+    date:          document.getElementById('f_date').value || null,
+    hn:            v('f_hn'), name: v('f_name'), age: v('f_age'),
+    gender:        document.querySelector('input[name="gender"]:checked')?.value || 'ប',
+    ward_from:     v('f_ward_from'), ward_to: v('f_ward_to'), phone: v('f_phone'),
+    doctor_req:    getDoctorValue(), diagnosis: v('f_diagnosis'),
+    hb:            v('f_hb'), ht: v('f_ht'), blood_code: v('f_blood_code'),
+    bag_used:   document.getElementById('f_bag_used')?.checked  ? 'yes' : '',
+    bag_back:        document.getElementById('f_bag_back')?.checked   ? 'yes' : '',
+    bag_back_giver:  (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_giver')?.value||'') : '') || null,
+    bag_back_dt:     (document.getElementById('f_bag_back')?.checked ? ((document.getElementById('f_back_date')?.value||'') + ' ' + (document.getElementById('f_back_time')?.value||'')) : '') || null,
+    bag_back_lab:    (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_lab')?.value||'') : '') || null,
+    bag_back_reason: (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_reason')?.value||'') : '') || null,
+    bag_back_2: document.getElementById('f_bag_back_2')?.checked ? 'yes' : '',
+    bag_back_3: document.getElementById('f_bag_back_3')?.checked ? 'yes' : '',
+    bag_back_4: document.getElementById('f_bag_back_4')?.checked ? 'yes' : '',
+    bag_back_5: document.getElementById('f_bag_back_5')?.checked ? 'yes' : '',
+    bag_back_6: document.getElementById('f_bag_back_6')?.checked ? 'yes' : '',
+    bag_back_7: document.getElementById('f_bag_back_7')?.checked ? 'yes' : '',
+    bag_used_2: document.getElementById('f_bag_used_2')?.checked ? 'yes' : '',
+    bag_used_3: document.getElementById('f_bag_used_3')?.checked ? 'yes' : '',
+    bag_used_4: document.getElementById('f_bag_used_4')?.checked ? 'yes' : '',
+    bag_used_5: document.getElementById('f_bag_used_5')?.checked ? 'yes' : '',
+    bag_used_6: document.getElementById('f_bag_used_6')?.checked ? 'yes' : '',
+    bag_used_7: document.getElementById('f_bag_used_7')?.checked ? 'yes' : '',
+    blood_code_2: v('f_blood_code_2'), blood_code_3: v('f_blood_code_3'),
+    bag_taker:    v('f_bag_taker'),    bag_taken_dt:    v('f_bag_taken_dt'),    bag_lab_staff:    v('f_bag_lab_staff'),
+    bag_taker_2:  v('f_bag_taker_2'),  bag_taken_dt_2:  v('f_bag_taken_dt_2'),  bag_lab_staff_2:  v('f_bag_lab_staff_2'),
+    bag_taker_3:  v('f_bag_taker_3'),  bag_taken_dt_3:  v('f_bag_taken_dt_3'),  bag_lab_staff_3:  v('f_bag_lab_staff_3'),
+    bag_taker_4:  v('f_bag_taker_4'),  bag_taken_dt_4:  v('f_bag_taken_dt_4'),  bag_lab_staff_4:  v('f_bag_lab_staff_4'),
+    bag_taker_5:  v('f_bag_taker_5'),  bag_taken_dt_5:  v('f_bag_taken_dt_5'),  bag_lab_staff_5:  v('f_bag_lab_staff_5'),
+    bag_taker_6:  v('f_bag_taker_6'),  bag_taken_dt_6:  v('f_bag_taken_dt_6'),  bag_lab_staff_6:  v('f_bag_lab_staff_6'),
+    bag_taker_7:  v('f_bag_taker_7'),  bag_taken_dt_7:  v('f_bag_taken_dt_7'),  bag_lab_staff_7:  v('f_bag_lab_staff_7'),
+    blood_code_4: v('f_blood_code_4'), blood_code_5: v('f_blood_code_5'),
+    blood_code_6: v('f_blood_code_6'), blood_code_7: v('f_blood_code_7'),
+    grp:           document.getElementById('f_group').value,
+    grp_2: document.getElementById('f_group_2')?.value||null,
+    grp_3: document.getElementById('f_group_3')?.value||null,
+    grp_4: document.getElementById('f_group_4')?.value||null,
+    grp_5: document.getElementById('f_group_5')?.value||null,
+    grp_6: document.getElementById('f_group_6')?.value||null,
+    grp_7: document.getElementById('f_group_7')?.value||null,
+    blood_type:    document.getElementById('f_blood_type').value,
+    blood_type_2: document.getElementById('f_blood_type_2')?.value||null,
+    blood_type_3: document.getElementById('f_blood_type_3')?.value||null,
+    blood_type_4: document.getElementById('f_blood_type_4')?.value||null,
+    blood_type_5: document.getElementById('f_blood_type_5')?.value||null,
+    blood_type_6: document.getElementById('f_blood_type_6')?.value||null,
+    blood_type_7: document.getElementById('f_blood_type_7')?.value||null,
+    blood_exp:     document.getElementById('f_blood_exp').value || null,
+    blood_exp_2:  document.getElementById('f_blood_exp_2')?.value||null,
+    blood_exp_3:  document.getElementById('f_blood_exp_3')?.value||null,
+    blood_exp_4:  document.getElementById('f_blood_exp_4')?.value||null,
+    blood_exp_5:  document.getElementById('f_blood_exp_5')?.value||null,
+    blood_exp_6:  document.getElementById('f_blood_exp_6')?.value||null,
+    blood_exp_7:  document.getElementById('f_blood_exp_7')?.value||null,
+    xmatch:        v('f_xmatch'),
+    xmatch_staff:  v('f_xmatch_staff'),
+    xmatch_dt:     (() => { const d=document.getElementById('f_xmatch_date')?.value||''; const t=document.getElementById('f_xmatch_time')?.value||''; return d&&t?d+' '+t:(d||t||null); })(),
+    nbtc:          document.getElementById('f_nbtc')?.checked ? 'yes' : '',
+    s25:           document.getElementById('f_s25').checked  ? 'ok' : '',
+    s37:           document.getElementById('f_s37').checked  ? 'ok' : '',
+    anti:          document.getElementById('f_anti').checked ? 'ok' : '',
+    come:          document.getElementById('f_come').checked ? 'ok' : '',
+    qty_new:       v('f_new'), qty_borrow: v('f_borrow'), qty_return: v('f_return'),
+    stock_sent:    Math.max(0, xm - us - (parseFloat(document.getElementById('f_back_stock').value) || 0)),
+    qty_used:      v('f_used'), back_stock: v('f_back_stock'),
+    doctor_out:    v('f_doctor_out'), checkin_dt: v('f_checkin_dt'),
+    given_count:   document.getElementById('f_cannot_return')?.checked ? '0' : (document.getElementById('f_given_count')?.value || null),
+    lab_person:    v('f_lab_person'),
+    ward_recv:     v('f_ward_recv'), out_date:      (() => { const d = document.getElementById('f_out_date')?.value||''; const t = document.getElementById('f_out_time')?.value||''; return d&&t?d+' '+t:(d||t||null); })(),
+    not_returned:  document.getElementById('f_cannot_return')?.checked ? '0' : Math.max(0, xm - (parseFloat(document.getElementById('f_back_stock').value)||0) - (parseFloat(document.getElementById('f_return').value)||0)),
+    cannot_return: document.getElementById('f_cannot_return').checked ? 'ពុំអាច' : '',
+    given_back:    v('f_given_back'), info_time: v('f_info_time'),
+    info_recv:     v('f_info_recv'), reason: v('f_reason')
+  };
+}
+function v(id) { return document.getElementById(id)?.value?.trim() || null; }
+
+function clearForm() {
+  ['f_sn','f_date','f_hn','f_name','f_age','f_ward_from','f_ward_to','f_phone','f_doctor_req',
+   'f_diagnosis','f_hb','f_ht','f_blood_code','f_blood_exp','f_xmatch','f_new',
+   'f_borrow','f_return','f_used','f_back_stock','f_doctor_out','f_checkin_dt',
+   'f_given_count','f_lab_person','f_ward_recv','f_out_date','f_given_back',
+   'f_info_time','f_info_recv','f_reason','f_stock_sent','f_not_returned',
+   'f_blood_code_2','f_blood_code_3','f_blood_code_4','f_blood_code_5','f_blood_code_6','f_blood_code_7',
+   'f_bag_taker','f_bag_taken_dt','f_bag_lab_staff',
+   'f_bag_taker_2','f_bag_taken_dt_2','f_bag_lab_staff_2',
+   'f_bag_taker_3','f_bag_taken_dt_3','f_bag_lab_staff_3',
+   'f_bag_taker_4','f_bag_taken_dt_4','f_bag_lab_staff_4',
+   'f_bag_taker_5','f_bag_taken_dt_5','f_bag_lab_staff_5',
+   'f_bag_taker_6','f_bag_taken_dt_6','f_bag_lab_staff_6',
+   'f_bag_taker_7','f_bag_taken_dt_7','f_bag_lab_staff_7',
+   'f_blood_exp_2','f_blood_exp_3','f_blood_exp_4','f_blood_exp_5','f_blood_exp_6','f_blood_exp_7']
+  .forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['f_s25','f_s37','f_anti','f_come','f_cannot_return'].forEach(id => {
+    document.getElementById(id).checked = false;
+  });
+  // Reset select fields
+  ['f_xmatch_staff','f_ward_from','f_ward_to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  // Reset bag lab_staff selects
+  ['','_2','_3','_4','_5','_6','_7'].forEach(s => {
+    const el = document.getElementById('f_bag_lab_staff' + s);
+    if (el) el.value = '';
+    const el2 = document.getElementById('f_back_lab' + s);
+    if (el2) el2.value = '';
+  });
+  // Reset cannot_return UI
+  dataEntryCannotChange({checked: false});
+  // Reset NBTC
+  const nbtcEl = document.getElementById('f_nbtc');
+  if (nbtcEl) { nbtcEl.checked = false; nbtcChange(nbtcEl); }
+  document.getElementById('f_group').value = '';
+  document.getElementById('f_blood_type').value = '';
+  [2,3,4,5,6,7].forEach(n => {
+    const g = document.getElementById('f_group_'+n); if(g) g.value='';
+    const t = document.getElementById('f_blood_type_'+n); if(t) t.value='';
+  });
+  // Reset bag_used checkboxes
+  ['','_2','_3','_4','_5','_6','_7'].forEach(s => {
+    const cb = document.getElementById('f_bag_used'+s);
+    if (cb) { cb.checked = false; bagUsedChange(cb, s); }
+    const cb2 = document.getElementById('f_bag_back'+s);
+    if (cb2) { cb2.checked = false; bagBackChange(cb2, s); }
+    // Clear back fields
+    ['f_back_giver','f_back_date','f_back_time','f_back_lab','f_back_reason'].forEach(fid => {
+      const el = document.getElementById(fid + s); if (el) el.value = '';
+    });
+  });
+  document.querySelector('input[name="gender"][value="ប"]').checked = true;
+  document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
+  resetBagRows();
+}
+
+// ═══════════════════════════════════════════
+// SAVE RECORD
+// ═══════════════════════════════════════════
+async function saveRecord() {
+  const rec = readForm();
+  if (!rec.hn && !rec.name) { showToast('⚠️ សូមបញ្ចូល HN ឬ ឈ្មោះ', 'err'); return false; }
+  // Validate: cannot_return requires reason
+  if (document.getElementById('f_cannot_return')?.checked && !rec.reason?.trim()) {
+    const r = document.getElementById('f_reason');
+    if (r) { r.style.borderColor='var(--red)'; r.style.boxShadow='0 0 0 3px rgba(185,28,28,.12)'; r.focus(); }
+    showToast('⚠️ សូមបំពេញ មូលហេតុ ព្រោះ tick ពុំអាចសង!', 'err');
+    return false;
+  }
+
+  setBtnLoading('btn1', true);
+  setBtnLoading('btnSave', true);
+  try {
+    await sbInsert(rec);
+    showToast('✅ Saved to Supabase!', 'ok');
+    return true;
+  } catch(e) {
+    showToast('❌ Error: ' + e.message, 'err'); return false;
+  } finally {
+    setBtnLoading('btn1', false);
+    setBtnLoading('btnSave', false);
+  }
+}
+
+async function saveAndNew() {
+  const ok = await saveRecord();
+  if (ok) clearForm();
+}
+
+function setBtnLoading(id, on) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (on) { el._orig = el.innerHTML; el.innerHTML = '<span class="spinner"></span> Saving...'; el.disabled = true; }
+  else    { el.innerHTML = el._orig || el.innerHTML; el.disabled = false; }
+}
+
+// ═══════════════════════════════════════════
+// LOAD & RENDER TABLE
+// ═══════════════════════════════════════════
+async function loadRecords() {
+  document.getElementById('tableWrap').innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading from Supabase...</p></div>';
+  try {
+    allRecs = await sbSelect();
+    const sheets = [...new Set(allRecs.map(r => r.sheet))];
+    document.getElementById('st-total').textContent = allRecs.length;
+    document.getElementById('st-days').textContent  = sheets.length;
+    buildChips(sheets);
+    updateSpecialCounts();
+    applyFilter();
+  } catch(e) {
+    setDbStatus(false);
+    document.getElementById('tableWrap').innerHTML = `<div class="empty"><div class="ei">❌</div><p>Error: ${e.message}</p></div>`;
+    showToast('❌ Cannot load: ' + e.message, 'err');
+  }
+}
+
+function buildChips(sheets) {
+  const bar = document.getElementById('dayBar'); bar.innerHTML = '';
+  const all = document.createElement('div');
+  all.className = 'dchip' + (activeDay === 'all' ? ' on' : '');
+  all.textContent = 'ទាំងអស់ (' + allRecs.length + ')';
+  all.onclick = () => { activeDay = 'all'; buildChips([...new Set(allRecs.map(r => r.sheet))]); applyFilter(); };
+  bar.appendChild(all);
+  sheets.sort().forEach(s => {
+    const cnt = allRecs.filter(r => r.sheet === s).length;
+    const c = document.createElement('div');
+    c.className = 'dchip' + (activeDay === s ? ' on' : '');
+    c.textContent = s + ' (' + cnt + ')';
+    c.onclick = () => { activeDay = s; buildChips(sheets); applyFilter(); };
+    bar.appendChild(c);
+  });
+}
+
+let activeSpecial = ''; // 'sent' | 'jamphak' | 'notret' | ''
+
+function updateSpecialCounts() {
+  const sentCount    = allRecs.filter(r => parseFloat(r.stock_sent)   > 0).length;
+  const jamphakCount = allRecs.filter(r => parseFloat(r.given_count)  > 0).length;
+  const notretCount  = allRecs.filter(r => parseFloat(r.not_returned) > 0).length;
+  const cs = document.getElementById('cnt-sent');
+  const cj = document.getElementById('cnt-jamphak');
+  const cn = document.getElementById('cnt-notret');
+  if (cs) cs.textContent = sentCount;
+  if (cj) cj.textContent = jamphakCount;
+  if (cn) cn.textContent = notretCount;
+}
+
+function filterSpecial(type) {
+  // Toggle
+  if (activeSpecial === type) { activeSpecial = ''; }
+  else { activeSpecial = type; }
+  // Update button styles
+  ['sent','jamphak','notret'].forEach(t => {
+    const btn = document.getElementById('btn-filter-' + t);
+    if (!btn) return;
+    btn.className = 'filter-btn';
+    if (activeSpecial === t) {
+      if (t === 'sent')    btn.classList.add('active-gold');
+      if (t === 'jamphak') btn.classList.add('active-orange');
+      if (t === 'notret')  btn.classList.add('active-red');
+    }
+  });
+  applyFilter();
+}
+
+function clearSpecialFilter() {
+  activeSpecial = '';
+  ['sent','jamphak','notret'].forEach(t => {
+    const btn = document.getElementById('btn-filter-' + t);
+    if (btn) btn.className = 'filter-btn';
+  });
+  applyFilter();
+}
+
+function applyFilter() {
+  const hn   = (document.getElementById('s-hn')?.value   || '').trim().toLowerCase();
+  const wd   = (document.getElementById('s-ward')?.value || '').trim().toLowerCase();
+  const dt   = (document.getElementById('s-date')?.value || '').trim();
+  filtered = allRecs.filter(r => {
+    if (activeDay !== 'all' && r.sheet !== activeDay) return false;
+    if (hn && !String(r.hn        || '').toLowerCase().includes(hn)) return false;
+    if (wd && !String(r.ward_from || '').toLowerCase().includes(wd)) return false;
+    if (dt && !String(r.date      || '').includes(dt)) return false;
+    // Special filters
+    if (activeSpecial === 'sent'    && !(parseFloat(r.stock_sent)   > 0)) return false;
+    if (activeSpecial === 'jamphak' && !(parseFloat(r.given_count)  > 0)) return false;
+    if (activeSpecial === 'notret'  && !(parseFloat(r.not_returned) > 0)) return false;
+    return true;
+  });
+  document.getElementById('st-filt').textContent = filtered.length;
+  document.getElementById('st-show').textContent = Math.min(filtered.length, PER);
+  updateSpecialCounts();
+  curPage = 1;
+  renderTable();
+}
+
+function clearSearch() {
+  document.getElementById('s-hn').value   = '';
+  document.getElementById('s-ward').value = '';
+  document.getElementById('s-date').value = '';
+  applyFilter();
+}
+
+const TCOLS = ['sn_code','date','hn','name','age','gender','ward_from','ward_to','doctor_req',
+               'diagnosis','hb','grp','blood_type','xmatch','s25',
+               'qty_new','qty_borrow','qty_return','stock_sent','qty_used','given_count',
+               'not_returned','lab_person','ward_recv','reason'];
+const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែកស្នើ','ទៅ','គ្រូពេទ្យ','Dx','Hb',
+               'Group','ប្រភេទ','X-Match','25C',
+               '🆕 ថ្មី','🔄 ខ្ចី','↩️ សង','📦 ស្តុកផ្ញើ','✅ យកប្រើ','⏳ នៅជំពាក់',
+               '❗ មិនទាន់សង','Lab','WARD','មូលហេតុ'];
+
+function renderTable() {
+  const wrap = document.getElementById('tableWrap');
+  const hn = (document.getElementById('s-hn')?.value   || '').trim().toLowerCase();
+  const wd = (document.getElementById('s-ward')?.value || '').trim().toLowerCase();
+  const dt = (document.getElementById('s-date')?.value || '').trim();
+
+  if (!filtered.length) {
+    wrap.innerHTML = `<div class="empty"><div class="ei">${allRecs.length ? '🔍' : '📋'}</div><p>${allRecs.length ? 'គ្មាន Record ត្រូវ Filter' : 'មិនទាន់មី Record<br><small>ចូល Data Entry ដើម្បីបញ្ចូល</small>'}</p></div>`;
+    document.getElementById('pag').innerHTML = ''; return;
+  }
+
+  const tp = Math.ceil(filtered.length / PER);
+  const st = (curPage - 1) * PER;
+  const pg = filtered.slice(st, st + PER);
+  document.getElementById('st-show').textContent = pg.length;
+
+  let h = `<table><thead><tr><th>#</th>${THDRS.map(t => `<th>${t}</th>`).join('')}<th>Sheet</th><th>⚙</th></tr></thead><tbody>`;
+
+  pg.forEach((r, i) => {
+    const gi = st + i;
+    const g = r.grp || '';
+    const gc = g.includes('AB') ? 'AB' : g.includes('A') ? 'A' : g.includes('B') ? 'B' : g.includes('O') ? 'O' : 'm';
+    const gB  = g ? `<span class="badge b${gc}">${g}</span>` : '-';
+    const gnB = r.gender === 'ប' ? `<span class="badge bm">ប</span>` : `<span class="badge bf">ស</span>`;
+    const okB = val => val ? `<span class="badge bok">✓</span>` : '-';
+    const numR = val => (val !== null && val !== undefined && val !== '') ? `<b style="color:var(--red)">${val}</b>` : '-';
+    const numG = val => (val !== null && val !== undefined && val !== '') ? `<b style="color:var(--gold)">${val}</b>` : '-';
+
+    const cv = {
+      sn_code: r.sn_code ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:#0369A1;background:#F0F9FF;padding:2px 8px;border-radius:6px;font-size:11px">${r.sn_code}</span>` : '-',
+      date: r.date ? (dt ? hl(r.date, dt) : r.date) : '-',
+      hn: r.hn ? (hn ? hl(r.hn, hn) : r.hn) : '-',
+      name: r.name || '-', age: r.age || '-', gender: gnB,
+      ward_from: r.ward_from ? (wd ? hl(r.ward_from, wd) : r.ward_from) : '-',
+      ward_to: r.ward_to || '-', doctor_req: r.doctor_req ? `<span style="background:#FFF7ED;color:#C2410C;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;font-family:'Noto Sans Khmer',sans-serif">${r.doctor_req}</span>` : '-',
+      diagnosis: r.diagnosis || '-', hb: r.hb || '-',
+      grp: gB, blood_type: r.blood_type || '-',
+      xmatch: r.xmatch || '-', s25: okB(r.s25),
+      qty_new:    r.qty_new    ? `<span class="td-badge td-blue">${r.qty_new}</span>`   : '-',
+      qty_borrow: r.qty_borrow ? `<span class="td-badge td-purple">${r.qty_borrow}</span>` : '-',
+      qty_return: r.qty_return ? `<span class="td-badge td-teal">${r.qty_return}</span>`  : '-',
+      stock_sent:   (r.stock_sent!=null&&r.stock_sent!=='') ? `<span class="td-badge td-gold">${r.stock_sent}</span>` : '-',
+      qty_used:     r.qty_used ? `<span class="td-badge td-green">${r.qty_used}</span>`  : '-',
+      given_count:  (r.given_count!=null&&r.given_count!=='') ? `<span class="td-badge td-orange">${r.given_count}</span>` : '-',
+      not_returned: (r.not_returned!=null&&r.not_returned!=='') ? `<span class="td-badge td-red">${r.not_returned}</span>` : '-',
+      lab_person: r.lab_person || '-', ward_recv: r.ward_recv || '-', reason: r.reason || '-'
+    };
+
+    h += `<tr><td>${gi + 1}</td>`;
+    TCOLS.forEach(k => h += `<td title="${String(cv[k]).replace(/<[^>]+>/g,'')||''}">${cv[k] ?? '-'}</td>`);
+    h += `<td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">${r.sheet}</td>`;
+    h += `<td><div class="tbl-act"><button class="ib edit" onclick="openEdit(${gi})" title="Edit">✏️</button><button class="ib del" onclick="delRec(${r.id})" title="Delete">🗑</button></div></td></tr>`;
+  });
+
+  h += '</tbody></table>';
+  wrap.innerHTML = h;
+  renderPag(tp);
+}
+
+function hl(s, q) {
+  return String(s).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
+}
+
+function renderPag(tp) {
+  const p = document.getElementById('pag');
+  if (tp <= 1) { p.innerHTML = `<span>${filtered.length} records</span><span></span>`; return; }
+  let h = `<span>Page ${curPage}/${tp} · ${filtered.length} records</span><div class="pag-btns">`;
+  h += `<button class="pb" onclick="goPg(1)" ${curPage===1?'disabled':''}>«</button>`;
+  h += `<button class="pb" onclick="goPg(${curPage-1})" ${curPage===1?'disabled':''}>‹</button>`;
+  for (let i = Math.max(1, curPage-2); i <= Math.min(tp, curPage+2); i++)
+    h += `<button class="pb ${i===curPage?'on':''}" onclick="goPg(${i})">${i}</button>`;
+  h += `<button class="pb" onclick="goPg(${curPage+1})" ${curPage===tp?'disabled':''}>›</button>`;
+  h += `<button class="pb" onclick="goPg(${tp})" ${curPage===tp?'disabled':''}>»</button></div>`;
+  p.innerHTML = h;
+}
+function goPg(p) { curPage = p; renderTable(); }
+
+// ═══════════════════════════════════════════
+// DELETE
+// ═══════════════════════════════════════════
+async function delRec(id) {
+  if (!confirm('Delete record ១ ក្បាល ពី Supabase?')) return;
+  try {
+    await sbDelete(id);
+    showToast('🗑 Deleted', 'info');
+    await loadRecords();
+  } catch(e) { showToast('❌ ' + e.message, 'err'); }
+}
+
+// ═══════════════════════════════════════════
+// EDIT
+// ═══════════════════════════════════════════
+function openEdit(i) {
+  const r = filtered[i]; editId = r.id;
+  document.getElementById('editSub').textContent = 'ID: ' + r.id + ' · HN: ' + (r.hn || '—') + ' · ' + (r.name || '—');
+  document.getElementById('editBody').innerHTML = buildEditForm(r);
+  document.getElementById('editModal').classList.add('open');
+  // Recalc auto fields after modal opens
+  setTimeout(() => editCalc(), 50);
+}
+
+function ef(k, l, t, val) {
+  return `<div class="fld"><label>${l}</label><input type="${t}" data-key="${k}" value="${eH(String(val ?? ''))}" style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"></div>`;
+}
+function esel(k, l, opts, val) {
+  return `<div class="fld"><label>${l}</label><select data-key="${k}" style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none">${opts.map(o => `<option ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
+}
+function eH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+function buildEditForm(r) {
+  function einp(key, label, type, val, extra='') {
+    return `<div class="fld">
+      <label>${label}</label>
+      <input type="${type}" data-key="${key}" value="${eH(String(val??''))}"
+        style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none;transition:border-color .2s"
+        onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'" ${extra}>
+    </div>`;
+  }
+  function esel(key, label, opts_html) {
+    return `<div class="fld">
+      <label>${label}</label>
+      <select data-key="${key}"
+        style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s"
+        onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        ${opts_html}
+      </select>
+    </div>`;
+  }
+  function staffOpts(v) {
+    const list = ['','SMH','SLS','NBT','SPT','SSD','HSN','CCT','HSC','KRN','TSP','HSP','SSN','EKP','VVK','SCL','PVN','YMR','NSM','THL','CSI','DOD','HCY','LST','DSP','VCN','LSN','KNT','YKN','TEL','CSR','SML','ECP'];
+    return list.map(s=>`<option value="${s}" ${s===(v||'')?'selected':''}>${s||'-- ជ្រើស --'}</option>`).join('');
+  }
+  function grpOpts(v) {
+    return ['','A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Neg']
+      .map(o=>`<option value="${o}" ${o===(v||'')?'selected':''}>${o||'-- ជ្រើស --'}</option>`).join('');
+  }
+  function wardOpts(v) {
+    return ['','ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES']
+      .map(o=>`<option value="${o}" ${o===(v||'')?'selected':''}>${o||'-- ជ្រើស --'}</option>`).join('');
+  }
+  function typeOpts(v) {
+    return [['','-- ជ្រើស --'],['WB','WB'],['RC','RC'],['PL','PL'],['FFP','FFP']]
+      .map(([val,lbl])=>`<option value="${val}" ${val===(v||'')?'selected':''}>${lbl}</option>`).join('');
+  }
+  function secDiv(icon, label, color) {
+    return `<div style="display:flex;align-items:center;gap:12px;margin:20px 0 14px">
+      <span style="padding:5px 16px;border-radius:20px;font-size:12px;font-weight:800;color:white;background:${color};white-space:nowrap">${icon} ${label}</span>
+      <div style="flex:1;height:1.5px;background:var(--border)"></div>
+    </div>`;
+  }
+  function autoField(key, label, color, val) {
+    return `<div class="fld">
+      <label style="color:${color}">${label} 🔢</label>
+      <div style="display:flex;border:2px solid ${color};border-radius:9px;overflow:hidden;background:${color}22">
+        <input type="number" data-key="${key}" value="${val??''}" id="edit_${key}"
+          style="border:none;outline:none;flex:1;padding:11px 14px;font-size:15px;font-weight:900;color:${color};background:transparent;font-family:'JetBrains Mono',monospace">
+        <span style="background:${color}22;border-left:1.5px solid ${color};padding:11px 12px;font-size:11px;font-weight:700;color:${color};display:flex;align-items:center;font-family:'JetBrains Mono',monospace">auto</span>
+      </div>
+    </div>`;
+  }
+
+  // ── Build bag rows: only show bags that have data, always show at least Bag 1 ──
+  const bagSfxs = ['','_2','_3','_4','_5','_6','_7'];
+  function bagHasData(sfx) {
+    return !!(r['blood_code'+sfx] || r['grp'+sfx] || r['blood_type'+sfx] || r['blood_exp'+sfx] || r['bag_used'+sfx]);
+  }
+
+  // Determine which bags to show
+  let editBagCount = 1;
+  bagSfxs.forEach((sfx, i) => { if (i > 0 && bagHasData(sfx)) editBagCount = i + 1; });
+
+  function makeBagRowEdit(sfx, n) {
+    const code    = r['blood_code'+sfx] || '';
+    const grp     = r['grp'+sfx] || '';
+    const btype   = r['blood_type'+sfx] || '';
+    const bexp    = r['blood_exp'+sfx] || '';
+    const taker   = r['bag_taker'+sfx] || '';
+    const takenDt = r['bag_taken_dt'+sfx] || '';
+    const used    = r['bag_used'+sfx] === 'yes';
+    const title   = n === 1 ? 'Bag 1 (ដំបូង)' : `Bag ${n}`;
+    const bgStyle = used ? 'background:#F0FDF4;border-color:var(--green)' : '';
+
+    return `<div class="bag-row" id="edit_bagrow${sfx}" style="${bgStyle}">
+      <div class="bag-row-title">
+        <span style="background:var(--red);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0">${n}</span>
+        ${title}
+        ${n > 1 ? `<button type="button" onclick="editRemoveBag('${sfx}')"
+          style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer;font-weight:600">✕ លុប</button>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:1.8fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">
+        <div class="fld"><label>📋 លេខកូដ</label>
+          <input type="text" data-key="blood_code${sfx}" value="${eH(code)}"
+            style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:'JetBrains Mono',monospace;outline:none;letter-spacing:.5px"
+            onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div class="fld">
+          <label style="color:var(--green)">✅ យកប្រើរួច</label>
+          <label id="edit_lbl_used${sfx}"
+            style="display:flex;align-items:center;gap:8px;border:2px solid ${used?'var(--green)':'var(--border)'};border-radius:9px;padding:10px 14px;cursor:pointer;background:${used?'var(--green2)':'white'};transition:all .15s;font-size:14px;font-weight:700"
+            onmouseenter="this.style.borderColor='var(--green)'"
+            onmouseleave="if(!document.getElementById('edit_bag_used${sfx}').checked)this.style.borderColor='var(--border)'">
+            <input type="checkbox" id="edit_bag_used${sfx}" data-key="bag_used${sfx}"
+              ${used?'checked':''}
+              style="accent-color:var(--green);width:17px;height:17px"
+              onchange="editBagUsedChange(this,'${sfx}')">
+            <span id="edit_span_used${sfx}" style="font-size:14px;font-weight:700">${used?'✅ យកប្រើរួច':'យកប្រើ'}</span>
+          </label>
+        </div>
+        <div class="fld">
+          <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
+          <label id="edit_lbl_back${sfx}"
+            style="display:flex;align-items:center;gap:8px;border:2px solid ${r['bag_back'+sfx]?'var(--red)':'var(--border)'};border-radius:9px;padding:10px 14px;cursor:pointer;background:${r['bag_back'+sfx]?'var(--red3)':'white'};transition:all .15s;font-size:14px;font-weight:700"
+            onmouseenter="this.style.borderColor='var(--red)'"
+            onmouseleave="if(!document.getElementById('edit_bag_back${sfx}').checked)this.style.borderColor='var(--border)'">
+            <input type="checkbox" id="edit_bag_back${sfx}" data-key="bag_back${sfx}"
+              ${r['bag_back'+sfx]?'checked':''}
+              style="accent-color:var(--red);width:17px;height:17px"
+              onchange="editBagBackChange(this,'${sfx}')">
+            <span id="edit_span_back${sfx}" style="font-size:14px;font-weight:700;color:${r['bag_back'+sfx]?'var(--red)':'inherit'}">${r['bag_back'+sfx]?'🔄 វិលរួច':'វិលស្តុក'}</span>
+          </label>
+        </div>
+        <div class="fld"><label>🩸 Group / Rh</label>
+          <select data-key="grp${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none">
+            ${grpOpts(grp)}
+          </select>
+        </div>
+        <div class="fld"><label>💉 ប្រភេទ</label>
+          <select data-key="blood_type${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none">
+            ${typeOpts(btype)}
+          </select>
+        </div>
+        <div class="fld"><label>📅 ថ្ងៃផុត</label>
+          <input type="date" data-key="blood_exp${sfx}" value="${eH(bexp)}"
+            style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
+        </div>
+        <div class="fld"><label>👤 អ្នកយកប្រើ</label>
+          <input type="text" data-key="bag_taker${sfx}" value="${eH(taker)}"
+            style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none"
+            onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div class="fld"><label>🕐 ថ្ងៃ ម៉ោង យក</label>
+          <input type="datetime-local" data-key="bag_taken_dt${sfx}" value="${eH(takenDt)}"
+            style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none"
+            onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        </div>
+        <div class="fld"><label>🧑‍⚕️ បុគ្គលិក-Lab</label>
+          <select data-key="bag_lab_staff${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Build visible bag rows
+  let bagRowsHtml = '<div id="editBagContainer">';
+  for (let i = 0; i < editBagCount; i++) {
+    bagRowsHtml += makeBagRowEdit(bagSfxs[i], i+1);
+  }
+  bagRowsHtml += '</div>';
+
+  // Add bag button (if less than 7)
+  bagRowsHtml += `
+  <div style="display:flex;align-items:center;gap:10px;margin:12px 0 4px">
+    <button type="button" id="editBtnAddBag" onclick="editAddBag()"
+      style="display:flex;align-items:center;gap:8px;padding:9px 18px;border:2px dashed var(--red);border-radius:10px;background:rgba(185,28,28,.04);color:var(--red);font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Noto Sans Khmer',sans-serif">
+      ➕ បន្ថែម Bag
+    </button>
+    <span id="editBagCountLabel" style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace">Bag ${editBagCount} / 7</span>
+  </div>`;
+
+  return `
+  ${secDiv('🏥','ព័ត៌មានអ្នកជំងឺ','var(--dark)')}
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:4px">
+    <div class="fld">
+      <label>🏷️ SN ប៉ុងឈាម</label>
+      <div style="display:flex;border:2px solid var(--border);border-radius:9px;overflow:hidden;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+        <span style="background:#F0F9FF;border-right:1.5px solid #BAE6FD;padding:11px 12px;font-size:13px;font-weight:800;color:#0369A1;white-space:nowrap;display:flex;align-items:center;font-family:'JetBrains Mono',monospace">SN-</span>
+        <input type="text" data-key="sn_code" id="edit_sn_input"
+          value="${eH(String(r.sn_code||'').replace(/^SN-/i,''))}"
+          placeholder="058770..."
+          oninput="this.dataset.rawval=this.value"
+          style="border:none;outline:none;flex:1;padding:11px 14px;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:1px">
+      </div>
+    </div>
+    ${einp('date','📅 ថ្ងៃ','date',r.date)}
+    ${einp('hn','🪪 HN ជំងឺ','text',r.hn)}
+    ${einp('name','👤 ឈ្មោះ','text',r.name)}
+    ${einp('age','🔢 អាយុ','number',r.age)}
+    <div class="fld"><label>⚧ ភេទ</label>
+      <select data-key="gender" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none">
+        <option ${'ប'===r.gender?'selected':''}>ប</option>
+        <option ${'ស'===r.gender?'selected':''}>ស</option>
+      </select>
+    </div>
+    <div class="fld">
+      <label>🏥 ផ្នែកស្នើ</label>
+      <select data-key="ward_from"
+        style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none"
+        onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        ${wardOpts(r.ward_from)}
+      </select>
+    </div>
+    <div class="fld">
+      <label>➡️ ទៅ</label>
+      <select data-key="ward_to"
+        style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none"
+        onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        ${wardOpts(r.ward_to)}
+      </select>
+    </div>
+    ${einp('phone','📞 ទូរសព្ទ','text',r.phone)}
+    <div class="fld">
+      <label>👨‍⚕️ គ្រូពេទ្យ ស្នើ</label>
+      <div style="display:flex;border:2px solid var(--border);border-radius:9px;overflow:hidden;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+        <span style="background:#FFF7ED;border-right:1.5px solid #FED7AA;padding:11px 12px;font-size:13px;font-weight:800;color:#C2410C;white-space:nowrap;display:flex;align-items:center;font-family:'Noto Sans Khmer',sans-serif">វេជ្ជ-</span>
+        <input type="text" data-key="doctor_req" id="edit_doctor_req"
+          value="${eH(String(r.doctor_req||'').replace(/^វេជ្ជ[-\s]*/u,''))}"
+          placeholder="ឈ្មោះ..."
+          style="border:none;outline:none;flex:1;padding:11px 14px;font-size:14px;font-weight:600;font-family:'Noto Sans Khmer',sans-serif">
+      </div>
+    </div>
+    ${einp('diagnosis','🩺 Diagnosis','text',r.diagnosis)}
+    ${einp('hb','🔬 Hb','number',r.hb)}
+    ${einp('ht','🔬 Ht','number',r.ht)}
+  </div>
+
+  ${secDiv('🩸','ព័ត៌មានសាកឈាម','var(--red)')}
+  ${bagRowsHtml}
+
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:14px">
+    <div class="fld">
+      <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">⚗️ X-MATCH (BAG)</label>
+      <div style="display:flex;border:2.5px solid var(--red);border-radius:10px;overflow:hidden;background:#FFF5F5">
+        <input type="number" data-key="xmatch" value="${eH(String(r.xmatch??''))}" 
+          oninput="editCalc()"
+          style="border:none;outline:none;flex:1;padding:11px 14px;font-size:18px;font-weight:900;color:var(--red);font-family:'JetBrains Mono',monospace;background:transparent">
+        <span style="background:#FECACA;border-left:2px solid var(--red);padding:11px 14px;font-size:14px;font-weight:900;color:var(--red);display:flex;align-items:center">Bag</span>
+      </div>
+    </div>
+    ${einp('xmatch_staff','🧑‍⚕️ បុគ្គលិកធ្វើ X-Match','text',r.xmatch_staff)}
+    <div class="fld">
+      <label>🕐 ថ្ងៃ ម៉ោង ធ្វើ X-Match</label>
+      <div style="display:flex;gap:6px">
+        <input type="date" data-key="xmatch_date" value="${eH(String(r.xmatch_dt||'').split(' ')[0])}"
+          style="flex:1.2;border:2px solid var(--border);border-radius:9px;padding:11px 10px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;outline:none"
+          onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+        <input type="time" data-key="xmatch_time" value="${eH(String(r.xmatch_dt||'').split(' ')[1]||'')}"
+          style="flex:1;border:2px solid var(--border);border-radius:9px;padding:11px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none"
+          onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+      </div>
+    </div>
+    <div class="fld">
+      <label style="color:var(--blue)">🏥 ករណីឈាម NBTC (PL)</label>
+      <div style="display:flex;border:2px solid ${r.nbtc?'var(--blue)':'var(--border)'};border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:${r.nbtc?'var(--blue2)':'white'}" onclick="this.querySelector('input').click()">
+        <input type="checkbox" data-key="nbtc" ${r.nbtc?'checked':''} style="accent-color:var(--blue);width:17px;height:17px">
+        <span style="font-size:13px;font-weight:700;color:${r.nbtc?'var(--blue)':'inherit'}">${r.nbtc?'✅ ឈាមមកពី NBTC (PL)':'ឈាមមកពី NBTC (PL)'}</span>
+      </div>
+    </div>
+    <div class="fld"><label>🔬 Saline 25C</label>
+      <div style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:${r.s25?'var(--green2)':'white'}" onclick="this.querySelector('input').click()">
+        <input type="checkbox" data-key="s25" ${r.s25?'checked':''} style="accent-color:var(--green);width:16px;height:16px">
+        <span style="font-size:13px;font-weight:700">${r.s25?'✓ ok':'ok?'}</span>
+      </div>
+    </div>
+    <div class="fld"><label>🔬 Saline 37C</label>
+      <div style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:${r.s37?'var(--green2)':'white'}" onclick="this.querySelector('input').click()">
+        <input type="checkbox" data-key="s37" ${r.s37?'checked':''} style="accent-color:var(--green);width:16px;height:16px">
+        <span style="font-size:13px;font-weight:700">${r.s37?'✓ ok':'ok?'}</span>
+      </div>
+    </div>
+    <div class="fld"><label>🔬 Anti.IGG</label>
+      <div style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:${r.anti?'var(--green2)':'white'}" onclick="this.querySelector('input').click()">
+        <input type="checkbox" data-key="anti" ${r.anti?'checked':''} style="accent-color:var(--green);width:16px;height:16px">
+        <span style="font-size:13px;font-weight:700">${r.anti?'✓ ok':'ok?'}</span>
+      </div>
+    </div>
+    <div class="fld"><label>🔬 Come Check</label>
+      <div style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:${r.come?'var(--green2)':'white'}" onclick="this.querySelector('input').click()">
+        <input type="checkbox" data-key="come" ${r.come?'checked':''} style="accent-color:var(--green);width:16px;height:16px">
+        <span style="font-size:13px;font-weight:700">${r.come?'✓ ok':'ok?'}</span>
+      </div>
+    </div>
+  </div>
+
+  ${secDiv('💊','ការប្រើប្រាស់សាកឈាម','var(--gold)')}
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:12px">
+    ${einp('qty_new','🆕 ថ្មី','number',r.qty_new)}
+    ${einp('qty_borrow','🔄 ខ្ចី','number',r.qty_borrow)}
+    ${einp('qty_return','↩️ សង','number',r.qty_return,'oninput="editCalc()"')}
+    ${autoField('stock_sent','📦 ស្តុកផ្ញើ','var(--gold)',r.stock_sent)}
+    ${einp('qty_used','✅ យកប្រើ','number',r.qty_used,'oninput="editCalc()"')}
+    ${autoField('given_count','⏳ នៅជំពាក់','#EA580C',r.given_count)}
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+    <div class="fld">
+      <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">🔙 វិលចូលស្តុក</label>
+      <div style="display:flex;border:2.5px solid var(--red);border-radius:10px;overflow:hidden;background:var(--red3)">
+        <input type="number" data-key="back_stock" value="${eH(String(r.back_stock??''))}"
+          oninput="editCalc()"
+          style="border:none;outline:none;flex:1;padding:11px 14px;font-size:18px;font-weight:900;color:var(--red);font-family:'JetBrains Mono',monospace;background:transparent">
+        <span style="background:#FECACA;border-left:2px solid var(--red);padding:11px 14px;font-size:14px;font-weight:900;color:var(--red);display:flex;align-items:center">Bag</span>
+      </div>
+    </div>
+  </div>
+
+  ${secDiv('🔄','ព័ត៌មានត្រលប់ / ផ្នែក','var(--green)')}
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+    ${autoField('not_returned','❗ មិនទាន់សង','var(--red)',r.not_returned)}
+    <div class="fld"><label>⛔ ពុំមានលទ្ធភាព</label>
+      <div id="edit_cannot_wrap" style="display:flex;border:2px solid ${r.cannot_return?'var(--red)':'var(--border)'};border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:${r.cannot_return?'var(--red3)':'white'};transition:all .2s" onclick="this.querySelector('input').click()">
+        <input type="checkbox" id="edit_cannot_return_cb" data-key="cannot_return" ${r.cannot_return?'checked':''} style="accent-color:var(--red);width:16px;height:16px" onchange="cannotReturnChange(this)">
+        <span id="edit_cannot_span" style="font-size:13px;font-weight:700;color:${r.cannot_return?'var(--red)':'inherit'}">${r.cannot_return?'⛔ ពុំអាចសង':'ពុំអាចសង'}</span>
+      </div>
+    </div>
+    ${einp('given_back','📦 ចំនួនផ្តល់','number',r.given_back)}
+    ${einp('info_time','⏰ ម៉ោង ព័ត៌មាន','time',r.info_time)}
+    ${einp('info_recv','👤 អ្នកទទួល','text',r.info_recv)}
+  </div>
+  <div style="margin-top:12px">
+    <div class="fld">
+      <label id="edit_reason_label" style="color:${r.cannot_return?'var(--red)':'var(--muted)'}">📝 មូលហេតុ ${r.cannot_return?'<span style=\"color:var(--red);font-weight:900\">* (ត្រូវបំពេញ)</span>':''}</label>
+      <input type="text" data-key="reason" id="edit_reason_input" value="${eH(String(r.reason??''))}"
+        style="border:2px solid ${r.cannot_return?'var(--red)':'var(--border)'};border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none;transition:all .2s"
+        placeholder="${r.cannot_return?'* សូមបំពេញមូលហេតុ...':'មូលហេតុ...'}"
+        onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor=document.getElementById('edit_cannot_return_cb')?.checked?'var(--red)':'var(--border)'">
+    </div>
+  </div>`;
+}
+// Edit modal bag used change
+function editBagUsedChange(chk, sfx) {
+  const lbl  = document.getElementById('edit_lbl_used'  + sfx);
+  const span = document.getElementById('edit_span_used' + sfx);
+  const row  = document.getElementById('edit_bagrow'    + sfx);
+  if (chk.checked) {
+    if (lbl)  { lbl.style.borderColor='var(--green)'; lbl.style.background='var(--green2)'; }
+    if (span) span.textContent = '✅ យកប្រើរួច';
+    if (row)  { row.style.background='#F0FDF4'; row.style.borderRadius='10px'; row.style.padding='12px'; }
+  } else {
+    if (lbl)  { lbl.style.borderColor='var(--border)'; lbl.style.background='white'; }
+    if (span) span.textContent = 'យកប្រើ';
+    if (row)  { row.style.background=''; row.style.padding=''; }
+  }
+  // Count checked → update qty_used
+  const sfxList = ['','_2','_3','_4','_5','_6','_7'];
+  let cnt = 0;
+  sfxList.forEach(s => {
+    const el = document.getElementById('edit_bag_used' + s);
+    if (el && el.checked) cnt++;
+  });
+  const usedEl = document.querySelector('#editBody [data-key="qty_used"]');
+  if (usedEl) { usedEl.value = cnt; }
+  editCalc();
+}
+
+// ── Cannot Return Change ──
+function cannotReturnChange(chk) {
+  const wrap    = document.getElementById('edit_cannot_wrap');
+  const span    = document.getElementById('edit_cannot_span');
+  const notRet  = document.getElementById('edit_not_returned');
+  const givCnt  = document.getElementById('edit_given_count');
+  const reasonEl= document.getElementById('edit_reason_input');
+  const reasonLbl= document.getElementById('edit_reason_label');
+
+  if (chk.checked) {
+    // ពុំអាចសង → zero out both fields
+    if (wrap)    { wrap.style.borderColor='var(--red)'; wrap.style.background='var(--red3)'; }
+    if (span)    { span.textContent='⛔ ពុំអាចសង'; span.style.color='var(--red)'; }
+    if (notRet)  { notRet.value = 0; notRet.style.color='var(--muted)'; }
+    if (givCnt)  { givCnt.value = 0; givCnt.style.color='var(--muted)'; }
+    // Also zero given_count auto field in edit modal
+    const gcEdit = document.getElementById('edit_given_count');
+    const nrEdit = document.getElementById('edit_not_returned');
+    if (gcEdit) { gcEdit.value = 0; }
+    if (nrEdit) { nrEdit.value = 0; }
+    // Recalc to enforce 0
+    editCalc();
+    // Highlight reason field as required
+    if (reasonEl)  { reasonEl.style.borderColor='var(--red)'; reasonEl.placeholder='* សូមបំពេញមូលហេតុ...'; reasonEl.focus(); }
+    if (reasonLbl) { reasonLbl.innerHTML='📝 មូលហេតុ <span style="color:var(--red);font-weight:900">* (ត្រូវបំពេញ)</span>'; reasonLbl.style.color='var(--red)'; }
+  } else {
+    // Unchecked → restore
+    if (wrap)    { wrap.style.borderColor='var(--border)'; wrap.style.background='white'; }
+    if (span)    { span.textContent='ពុំអាចសង'; span.style.color='inherit'; }
+    if (notRet)  { notRet.style.color=''; }
+    if (givCnt)  { givCnt.style.color=''; }
+    // Recalc
+    editCalc();
+    if (reasonEl)  { reasonEl.style.borderColor='var(--border)'; reasonEl.placeholder='មូលហេតុ...'; }
+    if (reasonLbl) { reasonLbl.innerHTML='📝 មូលហេតុ'; reasonLbl.style.color='var(--muted)'; }
+  }
+}
+
+// Edit modal: add bag row dynamically
+let editBagCount = 1;
+function editAddBag() {
+  const container = document.getElementById('editBagContainer');
+  if (!container) return;
+  const existing = container.querySelectorAll('.bag-row').length;
+  if (existing >= 7) return;
+  const n   = existing + 1;
+  const sfxList = ['','_2','_3','_4','_5','_6','_7'];
+  const sfx = sfxList[existing];
+  const div = document.createElement('div');
+  div.className = 'bag-row';
+  div.id = 'edit_bagrow' + sfx;
+  div.style.marginTop = '10px';
+
+  const grpOpts = `<option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option>`;
+  const typeOpts = `<option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option>`;
+  const staffOpts = `<option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option>`;
+
+  div.innerHTML = `
+    <div class="bag-row-title">
+      <span style="background:var(--red);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0">${n}</span>
+      Bag ${n}
+      <button type="button" onclick="editRemoveBag('${sfx}')"
+        style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer;font-weight:600">✕ លុប</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1.8fr 140px 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">
+      <div class="fld"><label>📋 លេខកូដ</label>
+        <input type="text" data-key="blood_code${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:'JetBrains Mono',monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">
+      </div>
+      <div class="fld">
+        <label style="color:var(--green)">✅ យកប្រើរួច</label>
+        <label id="edit_lbl_used${sfx}" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+          onmouseenter="this.style.borderColor='var(--green)'"
+          onmouseleave="if(!document.getElementById('edit_bag_used${sfx}').checked)this.style.borderColor='var(--border)'">
+          <input type="checkbox" id="edit_bag_used${sfx}" data-key="bag_used${sfx}" style="accent-color:var(--green);width:17px;height:17px" onchange="editBagUsedChange(this,'${sfx}')">
+          <span id="edit_span_used${sfx}" style="font-size:14px;font-weight:700">យកប្រើ</span>
+        </label>
+      </div>
+      <div class="fld">
+        <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
+        <label id="edit_lbl_back${sfx}" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+          onmouseenter="this.style.borderColor='var(--red)'"
+          onmouseleave="if(!document.getElementById('edit_bag_back${sfx}').checked)this.style.borderColor='var(--border)'">
+          <input type="checkbox" id="edit_bag_back${sfx}" data-key="bag_back${sfx}" style="accent-color:var(--red);width:17px;height:17px" onchange="editBagBackChange(this,'${sfx}')">
+          <span id="edit_span_back${sfx}" style="font-size:14px;font-weight:700">វិលស្តុក</span>
+        </label>
+      </div>
+      <div class="fld"><label>🩸 Group / Rh</label>
+        <select data-key="grp${sfx}" style="${sel_normal}">${grpOpts}</select>
+      </div>
+      <div class="fld"><label>💉 ប្រភេទ</label>
+        <select data-key="blood_type${sfx}" style="${sel_normal}">${typeOpts}</select>
+      </div>
+      <div class="fld"><label>📅 ថ្ងៃផុត</label>
+        <input type="date" data-key="blood_exp${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
+      </div>
+      <div class="fld"><label>👤 អ្នកយកប្រើ</label>
+        <input type="text" data-key="bag_taker${sfx}" placeholder="ឈ្មោះ..." style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
+      </div>
+      <div class="fld"><label>🕐 ថ្ងៃ ម៉ោង យក</label>
+        <input type="datetime-local" data-key="bag_taken_dt${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
+      </div>
+      <div class="fld"><label>🧑‍⚕️ បុគ្គលិក-LAB</label>
+        <select data-key="bag_lab_staff${sfx}" style="${sel}">${staffOpts}</select>
+      </div>
+    </div>`;
+  container.appendChild(div);
+  const lbl = document.getElementById('editBagCountLabel');
+  if (lbl) lbl.textContent = 'Bag ' + (existing+1) + ' / 7';
+  const btn = document.getElementById('editBtnAddBag');
+  if (btn && existing+1 >= 7) btn.style.opacity = '0.4';
+}
+
+function editRemoveBag(sfx) {
+  const el = document.getElementById('edit_bagrow' + sfx);
+  if (el) {
+    el.remove();
+    // Recount used
+    editBagUsedChange({checked:false}, sfx);
+    const container = document.getElementById('editBagContainer');
+    const cnt = container ? container.querySelectorAll('.bag-row').length : 1;
+    const lbl = document.getElementById('editBagCountLabel');
+    if (lbl) lbl.textContent = 'Bag ' + cnt + ' / 7';
+    const btn = document.getElementById('editBtnAddBag');
+    if (btn) btn.style.opacity = '1';
+  }
+}
+
+// Edit modal: bag back change
+function editBagBackChange(chk, sfx) {
+  const lbl  = document.getElementById('edit_lbl_back'  + sfx);
+  const span = document.getElementById('edit_span_back' + sfx);
+  const row  = document.getElementById('edit_bagrow'    + sfx);
+  const bfId = 'edit_back_fields' + sfx;
+  let   bf   = document.getElementById(bfId);
+
+  if (chk.checked) {
+    if (lbl)  { lbl.style.borderColor='var(--red)'; lbl.style.background='var(--red3)'; }
+    if (span) { span.textContent='🔄 វិលរួច'; span.style.color='var(--red)'; }
+    if (row)  { row.style.borderColor='var(--red)'; }
+    // Uncheck used
+    const usedCb = document.getElementById('edit_bag_used' + sfx);
+    if (usedCb && usedCb.checked) { usedCb.checked=false; editBagUsedChange(usedCb, sfx); }
+    // Auto +1 to back_stock in edit modal
+    const bkEl = document.querySelector('#editBody [data-key="back_stock"]');
+    if (bkEl) { bkEl.value = (parseFloat(bkEl.value)||0) + 1; editCalc(); }
+    // Show back fields - create if not exists
+    if (!bf) {
+      bf = document.createElement('div');
+      bf.id = bfId;
+      bf.style.cssText = 'margin-top:12px;padding:14px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
+      bf.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <div class="fld"><label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
+          <input type="text" data-key="bag_back_giver${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none;background:white" placeholder="ឈ្មោះ..."></div>
+        <div class="fld"><label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
+          <div style="display:flex;gap:6px">
+            <input type="date" data-key="bag_back_date${sfx}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
+            <input type="time" data-key="bag_back_time${sfx}" style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;background:white">
+          </div></div>
+        <div class="fld"><label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
+          <select data-key="bag_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select></div>
+        <div class="fld"><label style="color:var(--red)">📝 មូលហេតុ</label>
+          <input type="text" data-key="bag_back_reason${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none;background:white" placeholder="មូលហេតុ..."></div>
+      </div>`;
+      const rowEl = document.getElementById('edit_bagrow' + sfx);
+      if (rowEl) rowEl.appendChild(bf);
+    }
+    if (bf) bf.style.display = 'block';
+  } else {
+    if (lbl)  { lbl.style.borderColor='var(--border)'; lbl.style.background='white'; }
+    if (span) { span.textContent='វិលស្តុក'; span.style.color='inherit'; }
+    if (row)  { row.style.borderColor='var(--border)'; }
+    if (bf)   bf.style.display = 'none';
+    // Auto -1 from back_stock
+    const bkEl2 = document.querySelector('#editBody [data-key="back_stock"]');
+    if (bkEl2) { bkEl2.value = Math.max(0,(parseFloat(bkEl2.value)||0) - 1); editCalc(); }
+  }
+}
+
+// Edit modal auto calc
+function editCalc() {
+  const g = key => {
+    const el = document.querySelector('#editBody [data-key="'+key+'"]');
+    return el ? parseFloat(el.value)||0 : 0;
+  };
+  const s = (key, val) => {
+    const el = document.getElementById('edit_'+key);
+    if (el) el.value = Math.max(0, val);
+  };
+  const xm  = g('xmatch');
+  const us  = g('qty_used');
+  const bk  = g('back_stock');
+  const ret = g('qty_return');
+  // ស្តុកផ្ញើ = X-Match − យកប្រើ − វិលចូលស្តុក
+  s('stock_sent',   xm - us - bk);
+  // ពុំអាចសង → zero
+  const cannotCb = document.getElementById('edit_cannot_return_cb');
+  if (cannotCb && cannotCb.checked) {
+    s('given_count',  0);
+    s('not_returned', 0);
+  } else {
+    // នៅជំពាក់ = X-Match − វិលចូលស្តុក − សង
+    s('given_count',  xm - bk - ret);
+    // មិនទាន់សង = X-Match − វិលចូលស្តុក − សង
+    s('not_returned', xm - bk - ret);
+  }
+}
+
+async function saveEdit() {
+  // Validate: if cannot_return checked, reason must be filled
+  const cannotCb = document.getElementById('edit_cannot_return_cb');
+  const reasonEl = document.getElementById('edit_reason_input');
+  if (cannotCb && cannotCb.checked && reasonEl && !reasonEl.value.trim()) {
+    reasonEl.style.borderColor = 'var(--red)';
+    reasonEl.style.boxShadow   = '0 0 0 3px rgba(185,28,28,.15)';
+    reasonEl.focus();
+    showToast('⚠️ សូមបំពេញ មូលហេតុ ព្រោះ tick ពុំអាចសង!', 'err');
+    return;
+  }
+  const row = {};
+  document.querySelectorAll('#editBody [data-key]').forEach(el => {
+    if (el.type === 'checkbox') {
+      const k = el.dataset.key;
+      if (k && k.startsWith('bag_used')) row[k] = el.checked ? 'yes' : '';
+      else if (k === 'cannot_return') row[k] = el.checked ? 'ពុំអាច' : '';
+      else row[k] = el.checked ? 'ok' : '';
+    } else if (el.dataset.key === 'sn_code') {
+      const raw = el.value.trim().replace(/^SN-/i, '');
+      row['sn_code'] = raw ? 'SN-' + raw : null;
+    } else if (el.dataset.key === 'doctor_req') {
+      const raw = el.value.trim().replace(/^វេជ្ជ[- \s]*/u, '');
+      row['doctor_req'] = raw ? 'វេជ្ជ-' + raw : null;
+    } else if (el.dataset.key === 'checkin_time' || el.dataset.key === 'out_time') {
+      // Skip - combined below
+    } else if (el.dataset.key === 'checkin_date') {
+      const t = document.querySelector('#editBody [data-key="checkin_time"]')?.value || '';
+      const d = el.value || '';
+      row['checkin_dt'] = d && t ? d + ' ' + t : (d || t || null);
+    } else if (el.dataset.key === 'out_date') {
+      const t = document.querySelector('#editBody [data-key="out_time"]')?.value || '';
+      const d = el.value || '';
+      row['out_date'] = d && t ? d + ' ' + t : (d || t || null);
+    } else if (el.dataset.key === 'xmatch_date') {
+      const t = document.querySelector('#editBody [data-key="xmatch_time"]')?.value || '';
+      const d = el.value || '';
+      row['xmatch_dt'] = d && t ? d + ' ' + t : (d || t || null);
+    } else if (el.dataset.key === 'xmatch_time') {
+      // handled above
+    } else if (el.dataset.key === 'nbtc') {
+      row['nbtc'] = el.checked ? 'yes' : '';
+    } else if (el.dataset.key && el.dataset.key.startsWith('bag_back') && el.type === 'checkbox') {
+      row[el.dataset.key] = el.checked ? 'yes' : '';
+    } else {
+      row[el.dataset.key] = el.value || null;
+    }
+  });
+  const xm  = parseFloat(row.xmatch)||0;
+  const us  = parseFloat(row.qty_used)||0;
+  const bk  = parseFloat(row.back_stock)||0;
+  const ret = parseFloat(row.qty_return)||0;
+  row.stock_sent   = Math.max(0, xm - us - bk);
+  const cannotRet  = document.getElementById('edit_cannot_return_cb')?.checked;
+  row.given_count  = cannotRet ? 0 : Math.max(0, xm - bk - ret);
+  row.not_returned = cannotRet ? 0 : Math.max(0, xm - bk - ret);
+
+  const btn = document.getElementById('btnEditSave');
+  btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> Saving...'; btn.disabled = true;
+  try {
+    await sbUpdate(editId, row);
+    closeModal(); showToast('✅ Updated in Supabase!', 'ok');
+    await loadRecords();
+  } catch(e) { showToast('❌ ' + e.message, 'err'); }
+  finally { btn.innerHTML = btn._orig; btn.disabled = false; }
+}
+
+function closeModal() { document.getElementById('editModal').classList.remove('open'); editId = null; }
+
+// ═══════════════════════════════════════════
+// IMPORT EXCEL
+// ═══════════════════════════════════════════
+const ua = document.getElementById('uploadArea');
+const fi = document.getElementById('fileInput');
+ua.addEventListener('dragover', e => { e.preventDefault(); ua.classList.add('drag'); });
+ua.addEventListener('dragleave', () => ua.classList.remove('drag'));
+ua.addEventListener('drop', e => { e.preventDefault(); ua.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+fi.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  if (!file.name.match(/\.(xlsx|xlsm|xls)$/i)) { showToast('⚠️ Excel files only', 'err'); return; }
+  document.getElementById('fileTag').style.display = 'inline-flex';
+  document.getElementById('fileTagName').textContent = file.name;
+  document.getElementById('btnImport').disabled = false;
+  showProg(true);
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      importWB = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: true });
+      const d = importWB.SheetNames.filter(n => n.toLowerCase().includes('day'));
+      showProg(false); showToast(`📂 Loaded! ${d.length} day sheets`, 'ok');
+    } catch(err) { showProg(false); showToast('❌ ' + err.message, 'err'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function importExcel() {
+  if (!importWB) { showToast('Upload file ជាមុន!', 'err'); return; }
+  const btn = document.getElementById('btnImport');
+  btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> Importing...'; btn.disabled = true;
+  showProg(true);
+
+  const days = importWB.SheetNames.filter(n => n.toLowerCase().includes('day'));
+  let added = 0, batch = [];
+
+  for (const sName of days) {
+    const ws  = importWB.Sheets[sName];
+    const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    for (let r = 2; r < raw.length; r++) {
+      const row = raw[r]; if (!row) continue;
+      const has = [1,2,3,4,5].some(c => { const vv = row[c]; return vv !== null && vv !== undefined && String(vv).trim() !== ''; });
+      if (!has) continue;
+      const xm = parseFloat(row[17]) || 0, us = parseFloat(row[26]) || 0;
+      batch.push({
+        sheet: sName, date: fv(row[1]), hn: fv(row[2]), name: fv(row[3]),
+        age: fv(row[4]), gender: fv(row[5]) || 'ប', ward_from: fv(row[6]),
+        ward_to: fv(row[7]), phone: fv(row[8]), doctor_req: fv(row[9]),
+        diagnosis: fv(row[10]), hb: fv(row[11]), ht: fv(row[12]),
+        blood_code: fv(row[13]), grp: fv(row[14]), blood_type: fv(row[15]),
+        blood_exp: fv(row[16]), xmatch: fv(row[17]),
+        s25: fv(row[18]), s37: fv(row[19]), anti: fv(row[20]), come: fv(row[21]),
+        qty_new: fv(row[22]), qty_borrow: fv(row[23]), qty_return: fv(row[24]),
+        stock_sent: xm - us, qty_used: fv(row[26]), back_stock: fv(row[27]),
+        doctor_out: fv(row[28]), checkin_dt: fv(row[29]), given_count: fv(row[30]),
+        lab_person: fv(row[31]), ward_recv: fv(row[32]), out_date: fv(row[33]),
+        not_returned: xm - us, cannot_return: null, given_back: fv(row[36]),
+        info_time: fv(row[37]), info_recv: fv(row[38]), reason: fv(row[39])
+      });
+      added++;
+    }
+  }
+
+  // Batch insert in chunks of 100
+  try {
+    const CHUNK = 100;
+    for (let i = 0; i < batch.length; i += CHUNK) {
+      await sbInsert(batch.slice(i, i + CHUNK));
+      const pct = Math.round(((i + CHUNK) / batch.length) * 100);
+      document.getElementById('progFill').style.width = Math.min(pct, 100) + '%';
+    }
+    showProg(false);
+    const res = document.getElementById('importResult');
+    res.style.display = 'block';
+    res.textContent = `✅ Import ជោគជ័យ! បានបញ្ចូល ${added} records ពី ${days.length} day sheets ទៅ Supabase`;
+    showToast(`✅ Imported ${added} records!`, 'ok');
+  } catch(e) {
+    showProg(false); showToast('❌ Import error: ' + e.message, 'err');
+  } finally {
+    btn.innerHTML = btn._orig; btn.disabled = false;
+  }
+}
+
+function fv(vv) {
+  if (vv === null || vv === undefined) return null;
+  if (vv instanceof Date) return vv.toISOString().split('T')[0];
+  const s = String(vv).trim();
+  return s === '' ? null : s;
+}
+
+// ═══════════════════════════════════════════
+// EXPORT EXCEL
+// ═══════════════════════════════════════════
+function exportExcel() {
+  const exportData = (filtered && filtered.length > 0) ? filtered : allRecs;
+  if (!exportData.length) { showToast('គ្មាន records', 'err'); return; }
+
+  const hn   = (document.getElementById('s-hn')?.value   || '').trim();
+  const wd   = (document.getElementById('s-ward')?.value || '').trim();
+  const dt   = (document.getElementById('s-date')?.value || '').trim();
+  const isFiltered = hn || wd || dt || activeDay !== 'all' || activeSpecial;
+  const label = isFiltered ? '_filtered' : '_all';
+
+  const wb2 = XLSX.utils.book_new();
+
+  // ── Header ──
+  const hdr = [
+    'No','Sheet','SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ភេទ',
+    'ផ្នែកស្នើ','ទៅ','ទូរ','គ្រូពេទ្យស្នើ','Dx','Hb','Ht',
+    // Per-bag fields
+    'Bag No','លេខកូដ','Group/Rh','ប្រភេទ','ថ្ងៃផុត',
+    'យកប្រើរួច','អ្នកយកប្រើ','ថ្ងៃ ម៉ោង យក','បុគ្គលិក-Lab',
+    // X-Match
+    'X-Match','បុគ្គលិក X-Match','ថ្ងៃ ម៉ោង X-Match','NBTC(PL)',
+    '25C','37C','Anti.IGG','Come Chk',
+    // Usage
+    'ថ្មី','ខ្ចី','សង','ស្តុកផ្ញើ','យកប្រើ','នៅជំពាក់',
+    // Return
+    'មិនទាន់សង','ពុំអាចសង','ម៉ោងព័ត៌មាន','អ្នកទទួល','មូលហេតុ',
+    // Checkin
+    'គ្រូពេទ្យកាត់ចូល','ថ្ងៃ ម៉ោង កាត់ចូល','ចំនួននៅជំពាក់(ត្រ.)',
+  ];
+
+  const BAG_SFXS = ['','_2','_3','_4','_5','_6','_7'];
+  const rows = [hdr];
+  let globalNo = 1;
+
+  exportData.forEach(r => {
+    // Check which bags have data
+    const activeBags = BAG_SFXS.filter(sfx =>
+      r['blood_code'+sfx] || r['grp'+sfx] || r['blood_type'+sfx] || r['bag_used'+sfx]
+    );
+    const bagsToExport = activeBags.length > 0 ? activeBags : [''];
+
+    bagsToExport.forEach((sfx, bi) => {
+      const bagNo = BAG_SFXS.indexOf(sfx) + 1;
+      const isFirst = bi === 0;
+
+      rows.push([
+        isFirst ? globalNo : '',                    // No (only first bag row)
+        isFirst ? r.sheet : '',                     // Sheet
+        isFirst ? (r.sn_code||'') : '',            // SN
+        isFirst ? (r.date||'') : '',               // ថ្ងៃ
+        isFirst ? (r.hn||'') : '',                 // HN
+        isFirst ? (r.name||'') : '',               // ឈ្មោះ
+        isFirst ? (r.age||'') : '',                // អាយុ
+        isFirst ? (r.gender||'') : '',             // ភេទ
+        isFirst ? (r.ward_from||'') : '',          // ផ្នែកស្នើ
+        isFirst ? (r.ward_to||'') : '',            // ទៅ
+        isFirst ? (r.phone||'') : '',              // ទូរ
+        isFirst ? (r.doctor_req||'') : '',         // គ្រូពេទ្យ
+        isFirst ? (r.diagnosis||'') : '',          // Dx
+        isFirst ? (r.hb||'') : '',                // Hb
+        isFirst ? (r.ht||'') : '',                // Ht
+        // Per-bag
+        bagNo,                                      // Bag No
+        r['blood_code'+sfx] || '',                 // លេខកូដ
+        r['grp'+sfx] || '',                        // Group
+        r['blood_type'+sfx] || '',                 // ប្រភេទ
+        r['blood_exp'+sfx] || '',                  // ថ្ងៃផុត
+        r['bag_used'+sfx] === 'yes' ? 'yes' : '', // យកប្រើ
+        r['bag_taker'+sfx] || '',                  // អ្នកយក
+        r['bag_taken_dt'+sfx] || '',               // ថ្ងៃ ម៉ោង យក
+        r['bag_lab_staff'+sfx] || '',              // Lab staff
+        // X-Match (first bag only)
+        isFirst ? (r.xmatch||'') : '',
+        isFirst ? (r.xmatch_staff||'') : '',
+        isFirst ? (r.xmatch_dt||'') : '',
+        isFirst ? (r.nbtc||'') : '',
+        isFirst ? (r.s25||'') : '',
+        isFirst ? (r.s37||'') : '',
+        isFirst ? (r.anti||'') : '',
+        isFirst ? (r.come||'') : '',
+        // Usage
+        isFirst ? (r.qty_new||'') : '',
+        isFirst ? (r.qty_borrow||'') : '',
+        isFirst ? (r.qty_return||'') : '',
+        isFirst ? (r.stock_sent??'') : '',
+        isFirst ? (r.qty_used||'') : '',
+        isFirst ? (r.given_count??'') : '',
+        // Return
+        isFirst ? (r.not_returned??'') : '',
+        isFirst ? (r.cannot_return||'') : '',
+        isFirst ? (r.info_time||'') : '',
+        isFirst ? (r.info_recv||'') : '',
+        isFirst ? (r.reason||'') : '',
+        // Checkin
+        isFirst ? (r.doctor_out||'') : '',
+        isFirst ? (r.checkin_dt||'') : '',
+        isFirst ? (r.given_back||'') : '',
+      ]);
+    });
+
+    globalNo++;
+  });
+
+  // Create worksheet
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  // Style header row bold (basic)
+  ws['!cols'] = hdr.map((h, i) => {
+    // Make bag code column wider
+    if (i === 16) return { wch: 18 }; // លេខកូដ
+    if (i === 4)  return { wch: 14 }; // HN
+    if (i === 5)  return { wch: 18 }; // ឈ្មោះ
+    return { wch: 12 };
+  });
+
+  XLSX.utils.book_append_sheet(wb2, ws, 'Main File');
+
+  // Also create per-sheet tabs
+  const ds = {};
+  exportData.forEach(r => { if (!ds[r.sheet]) ds[r.sheet] = []; ds[r.sheet].push(r); });
+
+  const fname = 'blood_report_' + new Date().toISOString().slice(0,10) + label + '.xlsx';
+  XLSX.writeFile(wb2, fname);
+  showToast('⬇️ Exported ' + exportData.length + ' records · ' + (rows.length-1) + ' rows (per bag)', 'ok');
+}
+
+// ═══════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════
+function showProg(on) {
+  document.getElementById('progBar').style.display = on ? 'block' : 'none';
+  if (on) { const f = document.getElementById('progFill'); f.style.width = '0%'; setTimeout(() => f.style.width = '30%', 50); }
+}
+let tt;
+function showToast(m, t = 'info') {
+  const el = document.getElementById('toast');
+  el.textContent = m; el.className = `toast ${t} show`;
+  clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
+
+// Auto-select current month
+(function() {
+  const monthNum = new Date().getMonth() + 1;
+  const sel = document.getElementById('daySelect');
+  if (!sel) return;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === 'Month ' + monthNum) {
+      sel.selectedIndex = i;
+      break;
+    }
+  }
+})();
+if (SB_URL && SB_URL !== 'YOUR_SUPABASE_URL' && SB_KEY) loadRecords();
+</script>
+</body>
+</html>
