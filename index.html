@@ -279,14 +279,14 @@ input[type=number]::-webkit-outer-spin-button {
 const SB_CONFIG = { url: 'https://eafafsasgootmplemioi.supabase.co', key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZmFmc2FzZ29vdG1wbGVtaW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDE3NzcsImV4cCI6MjA5MjQxNzc3N30.r6t1MFr6qKSRM_lsLXmo5DtU4GvE9X0xqb4ImIzrcLg' };
 // ═══════════════════════════════════════════
 
-let SB_URL = 'https://eafafsasgootmplemioi.supabase.co';
-let SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZmFmc2FzZ29vdG1wbGVtaW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDE3NzcsImV4cCI6MjA5MjQxNzc3N30.r6t1MFr6qKSRM_lsLXmo5DtU4GvE9X0xqb4ImIzrcLg';
+var SB_URL = 'https://eafafsasgootmplemioi.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZmFmc2FzZ29vdG1wbGVtaW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDE3NzcsImV4cCI6MjA5MjQxNzc3N30.r6t1MFr6qKSRM_lsLXmo5DtU4GvE9X0xqb4ImIzrcLg';
 const TABLE = 'blood_records';
 
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
-let allRecs = [];
+var allRecs = [];
 let filtered = [];
 let curPage  = 1;
 const PER    = 50;
@@ -412,7 +412,7 @@ function showPage(id) {
 // FORMULA
 // ═══════════════════════════════════════════
 // ── DYNAMIC BAG ROWS ──
-let currentBagCount = 1;
+var currentBagCount = 1;
 const MAX_BAGS = 7;
 const BAG_SFXS = ['','_2','_3','_4','_5','_6','_7'];
 
@@ -942,7 +942,7 @@ function buildChips(sheets) {
   });
 }
 
-let activeSpecial = ''; // 'sent' | 'jamphak' | 'notret' | ''
+var activeSpecial = ''; // 'sent' | 'jamphak' | 'notret' | ''
 
 function updateSpecialCounts() {
   const sentCount    = allRecs.filter(r => parseFloat(r.stock_sent)   > 0).length;
@@ -1969,7 +1969,7 @@ function showProg(on) {
   document.getElementById('progBar').style.display = on ? 'block' : 'none';
   if (on) { const f = document.getElementById('progFill'); f.style.width = '0%'; setTimeout(() => f.style.width = '30%', 50); }
 }
-let tt;
+var tt;
 function showToast(m, t = 'info') {
   const el = document.getElementById('toast');
   el.textContent = m; el.className = `toast ${t} show`;
