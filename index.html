@@ -25,7 +25,7 @@ html{scroll-behavior:smooth}
 body{font-family:'Noto Sans Khmer',sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.6;min-height:100vh}
 
 /* ── SETUP OVERLAY ── */
-#setupOverlay{position:fixed;inset:0;background:var(--dark);z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px}
+#setupOverlay{position:fixed;inset:0;background:var(--dark);z-index:9999;display:none;align-items:center;justify-content:center;padding:24px}
 .setup-box{background:#161D27;border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:40px;width:100%;max-width:560px;box-shadow:var(--shadow-lg)}
 .setup-logo{width:56px;height:56px;background:var(--red);border-radius:50% 50% 50% 0;transform:rotate(-45deg);margin:0 auto 28px;display:flex;align-items:center;justify-content:center;animation:pulse 2.5s infinite}
 .setup-logo span{transform:rotate(45deg);font-size:22px}
@@ -679,6 +679,9 @@ input[type=number]::-webkit-outer-spin-button {
       <button class="filter-btn" id="btn-filter-notret" onclick="filterSpecial('notret')">
         ❗ មិនទាន់សង <span id="cnt-notret" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
       </button>
+      <button class="filter-btn" id="btn-filter-cannot" onclick="filterSpecial('cannot')">
+        ⛔ ពុំអាចសង <span id="cnt-cannot" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
       <button class="filter-btn" style="margin-left:auto" onclick="clearSpecialFilter()">✕ Clear Filter</button>
     </div>
     <div class="day-bar" id="dayBar"><span style="color:var(--light);font-size:11px">Loading...</span></div>
@@ -740,14 +743,11 @@ input[type=number]::-webkit-outer-spin-button {
 // ═══════════════════════════════════════════
 // ✅ CONFIG — Admin បំពេញត្រង់នេះ ១ ដងគត់
 // ═══════════════════════════════════════════
-const SB_CONFIG = {
-  url: 'YOUR_SUPABASE_URL',   // ← Paste Project URL ត្រង់នេះ
-  key: 'YOUR_SUPABASE_KEY',   // ← Paste anon/publishable key ត្រង់នេះ
-};
+const SB_CONFIG = { url: 'https://eafafsasgootmplemioi.supabase.co', key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZmFmc2FzZ29vdG1wbGVtaW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDE3NzcsImV4cCI6MjA5MjQxNzc3N30.r6t1MFr6qKSRM_lsLXmo5DtU4GvE9X0xqb4ImIzrcLg' };
 // ═══════════════════════════════════════════
 
-let SB_URL = SB_CONFIG.url || localStorage.getItem('sb_url') || '';
-let SB_KEY = SB_CONFIG.key || localStorage.getItem('sb_key') || '';
+let SB_URL = 'https://eafafsasgootmplemioi.supabase.co';
+let SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZmFmc2FzZ29vdG1wbGVtaW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDE3NzcsImV4cCI6MjA5MjQxNzc3N30.r6t1MFr6qKSRM_lsLXmo5DtU4GvE9X0xqb4ImIzrcLg';
 const TABLE = 'blood_records';
 
 // ═══════════════════════════════════════════
@@ -852,12 +852,12 @@ function resetConnection() {
 }
 
 // Auto-connect — hide setup if config hardcoded or saved
-const isHardcoded = SB_CONFIG.url !== 'YOUR_SUPABASE_URL' && SB_CONFIG.key !== 'YOUR_SUPABASE_KEY';
+const isHardcoded = SB_CONFIG.url !== 'https://eafafsasgootmplemioi.supabase.co' && SB_CONFIG.key !== 'sb_publishable_REEKwClXZMQ6gFlw2zOnZw_m24PP9m5';
 if (isHardcoded) {
   localStorage.setItem('sb_url', SB_URL);
   localStorage.setItem('sb_key', SB_KEY);
 }
-if (SB_URL && SB_URL !== 'YOUR_SUPABASE_URL' && SB_KEY) {
+if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) {
   document.getElementById('setupOverlay').style.display = 'none';
   setDbStatus(true);
 }
@@ -1415,12 +1415,15 @@ function updateSpecialCounts() {
   const sentCount    = allRecs.filter(r => parseFloat(r.stock_sent)   > 0).length;
   const jamphakCount = allRecs.filter(r => parseFloat(r.given_count)  > 0).length;
   const notretCount  = allRecs.filter(r => parseFloat(r.not_returned) > 0).length;
+  const cannotCount  = allRecs.filter(r => r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes').length;
   const cs = document.getElementById('cnt-sent');
   const cj = document.getElementById('cnt-jamphak');
   const cn = document.getElementById('cnt-notret');
+  const cc = document.getElementById('cnt-cannot');
   if (cs) cs.textContent = sentCount;
   if (cj) cj.textContent = jamphakCount;
   if (cn) cn.textContent = notretCount;
+  if (cc) cc.textContent = cannotCount;
 }
 
 function filterSpecial(type) {
@@ -1428,7 +1431,7 @@ function filterSpecial(type) {
   if (activeSpecial === type) { activeSpecial = ''; }
   else { activeSpecial = type; }
   // Update button styles
-  ['sent','jamphak','notret'].forEach(t => {
+  ['sent','jamphak','notret','cannot'].forEach(t => {
     const btn = document.getElementById('btn-filter-' + t);
     if (!btn) return;
     btn.className = 'filter-btn';
@@ -1436,6 +1439,7 @@ function filterSpecial(type) {
       if (t === 'sent')    btn.classList.add('active-gold');
       if (t === 'jamphak') btn.classList.add('active-orange');
       if (t === 'notret')  btn.classList.add('active-red');
+      if (t === 'cannot')  btn.classList.add('active-red');
     }
   });
   applyFilter();
@@ -1443,7 +1447,7 @@ function filterSpecial(type) {
 
 function clearSpecialFilter() {
   activeSpecial = '';
-  ['sent','jamphak','notret'].forEach(t => {
+  ['sent','jamphak','notret','cannot'].forEach(t => {
     const btn = document.getElementById('btn-filter-' + t);
     if (btn) btn.className = 'filter-btn';
   });
@@ -1463,6 +1467,7 @@ function applyFilter() {
     if (activeSpecial === 'sent'    && !(parseFloat(r.stock_sent)   > 0)) return false;
     if (activeSpecial === 'jamphak' && !(parseFloat(r.given_count)  > 0)) return false;
     if (activeSpecial === 'notret'  && !(parseFloat(r.not_returned) > 0)) return false;
+    if (activeSpecial === 'cannot'  && !(r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes')) return false;
     return true;
   });
   document.getElementById('st-filt').textContent = filtered.length;
@@ -1993,59 +1998,47 @@ function editAddBag() {
   div.className = 'bag-row';
   div.id = 'edit_bagrow' + sfx;
   div.style.marginTop = '10px';
-
-  const grpOpts = `<option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option>`;
-  const typeOpts = `<option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option>`;
-  const staffOpts = `<option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option>`;
-
-  div.innerHTML = `
-    <div class="bag-row-title">
-      <span style="background:var(--red);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0">${n}</span>
-      Bag ${n}
-      <button type="button" onclick="editRemoveBag('${sfx}')"
-        style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer;font-weight:600">✕ លុប</button>
-    </div>
-    <div style="display:grid;grid-template-columns:1.8fr 140px 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">
-      <div class="fld"><label>📋 លេខកូដ</label>
-        <input type="text" data-key="blood_code${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:'JetBrains Mono',monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">
-      </div>
-      <div class="fld">
-        <label style="color:var(--green)">✅ យកប្រើរួច</label>
-        <label id="edit_lbl_used${sfx}" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
-          onmouseenter="this.style.borderColor='var(--green)'"
-          onmouseleave="if(!document.getElementById('edit_bag_used${sfx}').checked)this.style.borderColor='var(--border)'">
-          <input type="checkbox" id="edit_bag_used${sfx}" data-key="bag_used${sfx}" style="accent-color:var(--green);width:17px;height:17px" onchange="editBagUsedChange(this,'${sfx}')">
-          <span id="edit_span_used${sfx}" style="font-size:14px;font-weight:700">យកប្រើ</span>
-        </label>
-      </div>
-      <div class="fld">
-        <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
-        <label id="edit_lbl_back${sfx}" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
-          onmouseenter="this.style.borderColor='var(--red)'"
-          onmouseleave="if(!document.getElementById('edit_bag_back${sfx}').checked)this.style.borderColor='var(--border)'">
-          <input type="checkbox" id="edit_bag_back${sfx}" data-key="bag_back${sfx}" style="accent-color:var(--red);width:17px;height:17px" onchange="editBagBackChange(this,'${sfx}')">
-          <span id="edit_span_back${sfx}" style="font-size:14px;font-weight:700">វិលស្តុក</span>
-        </label>
-      </div>
-      <div class="fld"><label>🩸 Group / Rh</label>
-        <select data-key="grp${sfx}" style="${sel_normal}">${grpOpts}</select>
-      </div>
-      <div class="fld"><label>💉 ប្រភេទ</label>
-        <select data-key="blood_type${sfx}" style="${sel_normal}">${typeOpts}</select>
-      </div>
-      <div class="fld"><label>📅 ថ្ងៃផុត</label>
-        <input type="date" data-key="blood_exp${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
-      </div>
-      <div class="fld"><label>👤 អ្នកយកប្រើ</label>
-        <input type="text" data-key="bag_taker${sfx}" placeholder="ឈ្មោះ..." style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
-      </div>
-      <div class="fld"><label>🕐 ថ្ងៃ ម៉ោង យក</label>
-        <input type="datetime-local" data-key="bag_taken_dt${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">
-      </div>
-      <div class="fld"><label>🧑‍⚕️ បុគ្គលិក-LAB</label>
-        <select data-key="bag_lab_staff${sfx}" style="${sel}">${staffOpts}</select>
-      </div>
-    </div>`;
+  div.innerHTML =
+    '<div class="bag-row-title">' +
+      '<span style="background:var(--red);color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;flex-shrink:0">' + n + '</span>' +
+      'Bag ' + n +
+      '<button type="button" onclick="editRemoveBag(\'' + sfx + '\')" style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer;font-weight:600">✕ លុប</button>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1.8fr 140px 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">' +
+      '<div class="fld"><label>📋 លេខកូដ</label>' +
+        '<input type="text" data-key="blood_code' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:'JetBrains Mono',monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">' +
+      '</div>' +
+      '<div class="fld"><label style="color:var(--green)">✅ យកប្រើរួច</label>' +
+        '<label id="edit_lbl_used' + sfx + '" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700" onmouseenter="this.style.borderColor=\'var(--green)\'" onmouseleave="if(!document.getElementById(\'edit_bag_used' + sfx + '\').checked)this.style.borderColor=\'var(--border)\'">' +
+          '<input type="checkbox" id="edit_bag_used' + sfx + '" data-key="bag_used' + sfx + '" style="accent-color:var(--green);width:17px;height:17px" onchange="editBagUsedChange(this,\'' + sfx + '\')">' +
+          '<span id="edit_span_used' + sfx + '" style="font-size:14px;font-weight:700">យកប្រើ</span>' +
+        '</label>' +
+      '</div>' +
+      '<div class="fld"><label style="color:var(--red)">🔄 វិលចូលស្តុក</label>' +
+        '<label id="edit_lbl_back' + sfx + '" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700" onmouseenter="this.style.borderColor=\'var(--red)\'" onmouseleave="if(!document.getElementById(\'edit_bag_back' + sfx + '\').checked)this.style.borderColor=\'var(--border)\'">' +
+          '<input type="checkbox" id="edit_bag_back' + sfx + '" data-key="bag_back' + sfx + '" style="accent-color:var(--red);width:17px;height:17px" onchange="editBagBackChange(this,\'' + sfx + '\')">' +
+          '<span id="edit_span_back' + sfx + '" style="font-size:14px;font-weight:700">វិលស្តុក</span>' +
+        '</label>' +
+      '</div>' +
+      '<div class="fld"><label>🩸 Group / Rh</label>' +
+        '<select data-key="grp' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>' +
+      '</div>' +
+      '<div class="fld"><label>💉 ប្រភេទ</label>' +
+        '<select data-key="blood_type' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>' +
+      '</div>' +
+      '<div class="fld"><label>📅 ថ្ងៃផុត</label>' +
+        '<input type="date" data-key="blood_exp' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">' +
+      '</div>' +
+      '<div class="fld"><label>👤 អ្នកយកប្រើ</label>' +
+        '<input type="text" data-key="bag_taker' + sfx + '" placeholder="ឈ្មោះ..." style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">' +
+      '</div>' +
+      '<div class="fld"><label>🕐 ថ្ងៃ ម៉ោង យក</label>' +
+        '<input type="datetime-local" data-key="bag_taken_dt' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'Noto Sans Khmer',sans-serif;outline:none">' +
+      '</div>' +
+      '<div class="fld"><label>🧑‍⚕️ បុគ្គលិក-LAB</label>' +
+        '<select data-key="bag_lab_staff' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:'JetBrains Mono',monospace;font-weight:600;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>' +
+      '</div>' +
+    '</div>';
   container.appendChild(div);
   const lbl = document.getElementById('editBagCountLabel');
   if (lbl) lbl.textContent = 'Bag ' + (existing+1) + ' / 7';
@@ -2454,20 +2447,16 @@ function showToast(m, t = 'info') {
 // INIT
 // ═══════════════════════════════════════════
 document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
-
-// Auto-select current month
 (function() {
   const monthNum = new Date().getMonth() + 1;
   const sel = document.getElementById('daySelect');
   if (!sel) return;
   for (let i = 0; i < sel.options.length; i++) {
-    if (sel.options[i].value === 'Month ' + monthNum) {
-      sel.selectedIndex = i;
-      break;
-    }
+    if (sel.options[i].value === 'Month ' + monthNum) { sel.selectedIndex = i; break; }
   }
 })();
-if (SB_URL && SB_URL !== 'YOUR_SUPABASE_URL' && SB_KEY) loadRecords();
+setDbStatus(true);
+loadRecords();
 </script>
 </body>
 </html>
