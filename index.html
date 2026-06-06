@@ -269,472 +269,6 @@ input[type=number]::-webkit-outer-spin-button {
   to   { opacity:1; transform:translateY(0); }
 }
 </style>
-</head>
-<body>
-
-<!-- ══════════════════════════════════════
-     SETUP OVERLAY (first time)
-══════════════════════════════════════ -->
-<div id="setupOverlay">
-  <div class="setup-box">
-    <div class="setup-logo"><span>🩸</span></div>
-    <h2>Blood Report Manager</h2>
-    <p>ភ្ជាប់ Supabase Database ដើម្បីផ្ទុក Data<br>ពួម Multi-user · Cloud Backup · Unlimited</p>
-
-    <div class="setup-step">
-      <p><span class="setup-step-num">1</span>ចូល <code>supabase.com</code> → Sign Up Free → Create Project</p>
-    </div>
-    <div class="setup-step">
-      <p><span class="setup-step-num">2</span>ចូល SQL Editor → New Query → Copy SQL ពី file <code>supabase_setup.sql</code> → Run</p>
-    </div>
-    <div class="setup-step">
-      <p><span class="setup-step-num">3</span>ចូល Project Settings → API → Copy <code>Project URL</code> និង <code>anon key</code></p>
-    </div>
-
-    <div class="setup-field">
-      <label>Supabase Project URL</label>
-      <input type="url" id="sb_url" placeholder="https://xxxxxxxxxxxx.supabase.co">
-    </div>
-    <div class="setup-field">
-      <label>Supabase Anon Key</label>
-      <input type="text" id="sb_key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-    </div>
-    <div class="setup-err" id="setupErr">❌ មិនអាចភ្ជាប់ — សូមពិនិត្យ URL និង Key</div>
-    <button class="setup-btn" onclick="connectSupabase()" id="connectBtn">
-      🔌 ភ្ជាប់ Supabase
-    </button>
-    <p style="color:rgba(255,255,255,.25);font-size:11px;text-align:center;margin-top:14px">
-      Key ត្រូវបានរក្សាទុកក្នុង localStorage · អាច Reset បានពេលណាក៏បាន<br>
-      <span style="color:rgba(255,255,255,.15)">Admin: Paste URL+Key ក្នុង file HTML · line SB_CONFIG</span>
-    </p>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════
-     TOPBAR
-══════════════════════════════════════ -->
-<div class="topbar">
-  <div class="topbar-inner">
-    <div class="logo"><span>🩸</span></div>
-    <div class="topbar-title">
-      <h1>Blood Report Manager</h1>
-      <p>Supabase Cloud · Multi-user</p>
-    </div>
-    <div class="nav-tabs">
-      <button class="nav-tab active" onclick="showPage('pg-entry')">📝 Data Entry</button>
-      <button class="nav-tab" onclick="showPage('pg-main')">📊 Main File</button>
-      <button class="nav-tab" onclick="showPage('pg-import')">📂 Import Excel</button>
-    </div>
-    <div class="db-badge" onclick="resetConnection()" title="Click to reset connection">
-      <div class="db-dot" id="dbDot"></div>
-      <span id="dbLabel">Connected</span>
-    </div>
-  </div>
-</div>
-
-<div class="main">
-
-<!-- ════════════════════════════════
-     PAGE 1 — DATA ENTRY
-════════════════════════════════ -->
-<div id="pg-entry" class="page active">
-  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-    <div>
-      <h2 style="font-size:22px;font-weight:900">បញ្ចូល Data អ្នកជំងឺ</h2>
-      <p style="color:var(--muted);font-size:13px;margin-top:3px">Form ដូចទៅ Excel · Day Sheet Structure · Save ទៅ Supabase</p>
-    </div>
-    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <select id="daySelect" style="border:2px solid var(--border);border-radius:9px;padding:10px 16px;font-family:'Noto Sans Khmer',sans-serif;font-size:14px;font-weight:600;cursor:pointer;background:white;color:var(--text)">
-        <option value="Month 1">Month 1 — January (មករា)</option>
-        <option value="Month 2">Month 2 — February (កុម្ភៈ)</option>
-        <option value="Month 3">Month 3 — March (មីនា)</option>
-        <option value="Month 4">Month 4 — April (មេសា)</option>
-        <option value="Month 5">Month 5 — May (ឧសភា)</option>
-        <option value="Month 6">Month 6 — June (មិថុនា)</option>
-        <option value="Month 7">Month 7 — July (កក្កដា)</option>
-        <option value="Month 8">Month 8 — August (សីហា)</option>
-        <option value="Month 9">Month 9 — September (កញ្ញា)</option>
-        <option value="Month 10">Month 10 — October (តុលា)</option>
-        <option value="Month 11">Month 11 — November (វិច្ឆិកា)</option>
-        <option value="Month 12">Month 12 — December (ធ្នូ)</option>
-      </select>
-      <button class="btn btn-ghost" onclick="clearForm()">🗑 Clear</button>
-      <button class="btn btn-gold" id="btnSaveNew" onclick="saveAndNew()">💾+ Save &amp; New</button>
-      <button class="btn btn-red" id="btnSave" onclick="saveRecord()">💾 Save to Supabase</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-body">
-
-      <!-- S1: អ្នកជំងឺ -->
-      <div class="sec-div">
-        <span class="sec-lbl" style="background:var(--dark)">🏥 ព័ត៌មានអ្នកជំងឺ</span>
-        <div class="sec-line"></div>
-      </div>
-      <div class="fg g6">
-        <div class="fld">
-          <label>🏷️ SN ប៉ុងឈាម</label>
-          <div class="iu">
-            <input type="text" id="f_sn" placeholder="058770..."
-              oninput="formatSN(this)"
-              style="border:none!important;outline:none;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;letter-spacing:1px">
-            <span class="unit" style="background:#F0F9FF;border-color:#BAE6FD;color:#0369A1;font-weight:700">SN-</span>
-          </div>
-        </div>
-        <div class="fld"><label>ថ្ងៃខែឆ្នាំ <span class="req">*</span></label><input type="date" id="f_date"></div>
-        <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX"></div>
-        <div class="fld cs2"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
-        <div class="fld"><label>អាយុ</label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none"><span class="unit">ឆ្នាំ</span></div></div>
-      </div>
-      <div class="fg g5" style="margin-top:11px">
-        <div class="fld"><label>ភេទ</label><div class="radio-g"><label><input type="radio" name="gender" value="ប" checked><span>👨 ប្រុស</span></label><label><input type="radio" name="gender" value="ស"><span>👩 ស្រី</span></label></div></div>
-        <div class="fld"><label>ផ្នែកស្នើ</label><select id="f_ward_from" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
-        <div class="fld"><label>បញ្ជូន ទៅផ្នែក</label><select id="f_ward_to" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
-        <div class="fld"><label>លេខទូរសព្ទ</label><input type="text" id="f_phone" placeholder="0XX XXX XXX"></div>
-        <div class="fld">
-          <label>👨‍⚕️ គ្រូពេទ្យ ស្នើ</label>
-          <div class="iu" style="border-color:var(--border)">
-            <span class="unit" style="background:#FFF7ED;border-color:#FED7AA;color:#C2410C;font-weight:800;font-size:13px">វេជ្ជ-</span>
-            <input type="text" id="f_doctor_req" placeholder="ឈ្មោះ..."
-              oninput="formatDoctor(this)"
-              style="border:none!important;outline:none;font-family:'Noto Sans Khmer',sans-serif;font-weight:600;font-size:14px">
-          </div>
-        </div>
-      </div>
-      <div class="fg g4" style="margin-top:11px">
-        <div class="fld cs2"><label>រោគវិនិច្ឆ័យ</label><input type="text" id="f_diagnosis" placeholder="Diagnosis / Anemia..."></div>
-        <div class="fld"><label>Hb (g/dL)</label><div class="iu"><input type="number" id="f_hb" placeholder="0.0" step="0.1" style="border:none!important;outline:none"><span class="unit">g/dL</span></div></div>
-        <div class="fld"><label>Ht (%)</label><div class="iu"><input type="number" id="f_ht" placeholder="0" style="border:none!important;outline:none"><span class="unit">%</span></div></div>
-      </div>
-
-      <!-- S2: សាកឈាម -->
-      <div class="sec-div">
-        <span class="sec-lbl" style="background:var(--red)">🩸 ព័ត៌មានសាកឈាម</span>
-        <div class="sec-line"></div>
-      </div>
-
-      <!-- Bag rows container -->
-      <div id="bagContainer">
-        <!-- Bag 1 (always visible) -->
-        <div class="bag-row" id="bagrow">
-          <div class="bag-row-title">
-            <span>1</span>
-            Bag 1 (ដំបូង)
-          </div>
-          <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
-            <div class="fld">
-              <label>📋 លេខកូដ សាក់ឈាម</label>
-              <input type="text" id="f_blood_code" placeholder="e.g. 20261234">
-            </div>
-            <div class="fld">
-              <label style="color:var(--green)">✅ យកប្រើរួច</label>
-              <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
-                     id="lbl_used"
-                     onmouseenter="this.style.borderColor='var(--green)'"
-                     onmouseleave="this.style.borderColor=document.getElementById('f_bag_used').checked?'var(--green)':'var(--border)'">
-                <input type="checkbox" id="f_bag_used" style="accent-color:var(--green);width:17px;height:17px" onchange="bagUsedChange(this,'')">
-                <span id="span_used" style="font-size:14px;font-weight:700">យកប្រើ</span>
-              </label>
-            </div>
-            <div class="fld">
-              <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
-              <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
-                     id="lbl_back"
-                     onmouseenter="this.style.borderColor='var(--red)'"
-                     onmouseleave="this.style.borderColor=document.getElementById('f_bag_back').checked?'var(--red)':'var(--border)'">
-                <input type="checkbox" id="f_bag_back" style="accent-color:var(--red);width:17px;height:17px" onchange="bagBackChange(this,'')">
-                <span id="span_back" style="font-size:14px;font-weight:700">វិលស្តុក</span>
-              </label>
-            </div>
-            <div class="fld">
-              <label>🩸 Group / Rh</label>
-              <select id="f_group"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>
-            </div>
-            <div class="fld">
-              <label>💉 ប្រភេទ</label>
-              <select id="f_blood_type"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>
-            </div>
-            <div class="fld">
-              <label>📅 ថ្ងៃផុតកំណត់</label>
-              <input type="date" id="f_blood_exp">
-            </div>
-            <div class="fld">
-              <label>👤 អ្នកយកប្រើ</label>
-              <input type="text" id="f_bag_taker" placeholder="ឈ្មោះ...">
-            </div>
-            <div class="fld">
-              <label>🕐 ថ្ងៃ ម៉ោង យក</label>
-              <input type="datetime-local" id="f_bag_taken_dt">
-            </div>
-            <div class="fld">
-              <label>🧑‍⚕️ បុគ្គលិក-Lab</label>
-              <select id="f_bag_lab_staff" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
-            </div>
-          </div>
-        
-
-        <!-- Back fields INSIDE Bag 1 -->
-        <div id="back_fields" style="display:none;margin-top:14px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease">
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-            <div class="fld">
-              <label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
-              <input type="text" id="f_back_giver" placeholder="ឈ្មោះ..."
-                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
-            </div>
-            <div class="fld">
-              <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
-              <div style="display:flex;gap:6px">
-                <input type="date" id="f_back_date"
-                  style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
-                <input type="time" id="f_back_time"
-                  style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;background:white">
-              </div>
-            </div>
-            <div class="fld">
-              <label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
-              <select id="f_back_lab" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'JetBrains Mono',monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
-            </div>
-            <div class="fld">
-              <label style="color:var(--red)">📝 មូលហេតុ</label>
-              <input type="text" id="f_back_reason" placeholder="មូលហេតុ..."
-                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-
-
-      <!-- Add Bag Button -->
-      <div style="display:flex;align-items:center;gap:12px;margin:14px 0">
-        <button type="button" onclick="addBagRow()" id="btnAddBag"
-          style="display:flex;align-items:center;gap:8px;padding:10px 20px;border:2px dashed var(--red);border-radius:10px;background:rgba(185,28,28,.04);color:var(--red);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Noto Sans Khmer',sans-serif">
-          ➕ បន្ថែម Bag
-        </button>
-        <span id="bagCountLabel" style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">Bag 1 / 7</span>
-        <button type="button" onclick="removeBagRow()" id="btnRemoveBag" style="display:none;padding:8px 14px;border:2px solid var(--border);border-radius:9px;background:white;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">
-          ➖ លុប Bag ចុងក្រោយ
-        </button>
-      </div>
-
-      <!-- X-Match + Saline checks row -->
-      <div class="fg g5" style="margin-top:4px">
-        <div class="fld">
-          <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">⚗️ X-MATCH (BAG)</label>
-          <div class="iu" style="border:2.5px solid var(--red);border-radius:10px;background:#FFF5F5">
-            <input type="number" id="f_xmatch" placeholder="0" min="0" oninput="calc()"
-              style="border:none!important;outline:none;font-size:18px;font-weight:900;color:var(--red);font-family:'JetBrains Mono',monospace;background:transparent">
-            <span class="unit" style="background:#FECACA;border-color:var(--red);color:var(--red);font-weight:900;font-size:14px">Bag</span>
-          </div>
-        </div>
-        <div class="fld"><label>🔬 Saline IGM T.25C</label><div class="chk-g"><label><input type="checkbox" id="f_s25"><span>✓ ok</span></label></div></div>
-        <div class="fld"><label>🔬 Saline IGM T.37C</label><div class="chk-g"><label><input type="checkbox" id="f_s37"><span>✓ ok</span></label></div></div>
-        <div class="fld"><label>🔬 Anti. Human IGG</label><div class="chk-g"><label><input type="checkbox" id="f_anti"><span>✓ ok</span></label></div></div>
-        <div class="fld"><label>🔬 Come Check Cell</label><div class="chk-g"><label><input type="checkbox" id="f_come"><span>✓ ok</span></label></div></div>
-      </div>
-
-      <!-- X-Match Staff + DateTime + NBTC row -->
-      <div class="fg g3" style="margin-top:12px;padding:16px;background:#F8FAFC;border-radius:12px;border:1.5px solid var(--border)">
-        <div class="fld">
-          <label>🧑‍⚕️ បុគ្គលិកធ្វើ X-Match</label>
-          <select id="f_xmatch_staff" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
-        </div>
-        <div class="fld">
-          <label>🕐 ថ្ងៃ ម៉ោង ធ្វើ X-Match</label>
-          <div style="display:flex;gap:6px">
-            <input type="date" id="f_xmatch_date"
-              style="flex:1.2;border:2px solid var(--border);border-radius:9px;padding:10px 10px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;outline:none;transition:border-color .2s"
-              onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
-            <input type="time" id="f_xmatch_time"
-              style="flex:1;border:2px solid var(--border);border-radius:9px;padding:10px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s"
-              onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
-          </div>
-        </div>
-        <div class="fld">
-          <label style="color:var(--blue)">🏥 ករណីឈាម NBTC (PL)</label>
-          <label id="lbl_nbtc"
-            style="display:flex;align-items:center;gap:10px;border:2px solid var(--border);border-radius:9px;padding:10px 16px;cursor:pointer;background:white;transition:all .2s;font-size:14px;font-weight:700"
-            onmouseenter="this.style.borderColor='var(--blue)'"
-            onmouseleave="this.style.borderColor=document.getElementById('f_nbtc').checked?'var(--blue)':'var(--border)'">
-            <input type="checkbox" id="f_nbtc"
-              style="accent-color:var(--blue);width:18px;height:18px"
-              onchange="nbtcChange(this)">
-            <span id="span_nbtc" style="font-size:14px;font-weight:700">ឈាមមកពី NBTC (PL)</span>
-          </label>
-        </div>
-      </div>
-      <!-- S3: ការប្រើប្រាស់ -->
-      <div class="sec-div">
-        <span class="sec-lbl" style="background:var(--gold)">💊 ការប្រើប្រាស់សាកឈាម</span>
-        <div class="sec-line"></div>
-      </div>
-      <!-- Row 1: ថ្មី ខ្ចី សង ស្តុកផ្ញើ យកប្រើ វិលចូលស្តុក -->
-      <div class="fg g6">
-        <div class="fld"><label>ថ្មី</label><div class="iu"><input type="number" id="f_new" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
-        <div class="fld"><label>ខ្ចី</label><div class="iu"><input type="number" id="f_borrow" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
-        <div class="fld"><label>សង</label><div class="iu"><input type="number" id="f_return" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
-        <div class="fld"><label style="color:var(--gold)">ស្តុកផ្ញើ 🔢 (auto)</label><div class="iu" style="border-color:var(--gold);background:var(--gold2)"><input type="number" id="f_stock_sent" readonly style="border:none!important;outline:none;background:transparent;color:var(--gold);font-weight:700"><span class="unit" style="border-color:var(--gold)">auto</span></div></div>
-        <div class="fld"><label>យកប្រើ</label><div class="iu"><input type="number" id="f_used" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
-        <div class="fld"><label style="color:#EA580C">⏳ នៅជំពាក់ 🔢 (auto)</label><div class="iu" style="border-color:#EA580C;background:#FFEDD5"><input type="number" id="f_given_count" readonly style="border:none!important;outline:none;background:transparent;color:#EA580C;font-weight:900;font-size:15px"><span class="unit" style="border-color:#EA580C;background:#FED7AA;color:#EA580C;font-weight:900">auto</span></div></div>
-        <div class="fld"><label style="color:var(--red);font-weight:800">🔙 វិលចូលស្តុក</label><div class="iu" style="border-color:var(--red);background:var(--red3)"><input type="number" id="f_back_stock" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none;color:var(--red);font-weight:900;font-size:15px;background:transparent"><span class="unit" style="border-color:var(--red);background:#FECACA;color:var(--red);font-weight:900">Bag</span></div></div>
-      </div>
-      <!-- Row 2: គ្រូពេទ្យ ថ្ងៃកាត់ចូល ចំនួនផ្តល់ Lab WARD ថ្ងៃចេញ -->
-      
-
-      <!-- S4: ត្រលប់ -->
-      <div class="sec-div">
-        <span class="sec-lbl" style="background:var(--green)">🔄 ព័ត៌មានត្រលប់ / ផ្នែក</span>
-        <div class="sec-line"></div>
-      </div>
-      <div class="fg g5">
-        <div class="fld"><label style="color:var(--red)">មិនទាន់ សង 🔢</label><div class="iu" style="border-color:var(--red);background:var(--red3)"><input type="number" id="f_not_returned" readonly style="border:none!important;outline:none;background:transparent;color:var(--red);font-weight:700"><span class="unit" style="border-color:var(--red)">auto</span></div></div>
-        <div class="fld">
-          <label id="f_cannot_label">⛔ ពុំមានលទ្ធភាព</label>
-          <div id="f_cannot_wrap" style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:white;transition:all .2s" onclick="this.querySelector('input').click()">
-            <input type="checkbox" id="f_cannot_return" style="accent-color:var(--red);width:16px;height:16px" onchange="dataEntryCannotChange(this)">
-            <span id="f_cannot_span" style="font-size:14px;font-weight:700">ពុំអាចសង</span>
-          </div>
-        </div>
-        <div class="fld"><label>ចំនួន ផ្តល់ (ត្រ.)</label><div class="iu"><input type="number" id="f_given_back" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
-        <div class="fld"><label>ម៉ោង ផ្តល់ព័ត៌មាន</label><input type="time" id="f_info_time"></div>
-        <div class="fld"><label>អ្នកទទួលព័ត៌មាន</label><input type="text" id="f_info_recv" placeholder="ឈ្មោះ..."></div>
-      </div>
-      <div class="fg g3" style="margin-top:11px">
-        <div class="fld cs2">
-          <label id="f_reason_label">📝 មូលហេតុ</label>
-          <input type="text" id="f_reason" placeholder="មូលហេតុ..."
-            style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;transition:all .2s">
-        </div>
-      </div>
-
-      <div style="display:flex;gap:10px;margin-top:28px;justify-content:flex-end;padding-top:20px;border-top:1px solid var(--border)">
-        <button class="btn btn-ghost" onclick="clearForm()">🗑 Clear Form</button>
-        <button class="btn btn-gold" id="btn2" onclick="saveAndNew()">💾+ Save &amp; New</button>
-        <button class="btn btn-red" style="padding:9px 28px" id="btn1" onclick="saveRecord()">💾 Save to Supabase</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ════════════════════════════════
-     PAGE 2 — MAIN FILE
-════════════════════════════════ -->
-<div id="pg-main" class="page">
-  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-    <div>
-      <h2 style="font-size:18px;font-weight:800">Main File — Records ទាំងអស់</h2>
-      <p style="color:var(--muted);font-size:12px;margin-top:2px">Realtime ពី Supabase Cloud · Multi-user</p>
-    </div>
-    <div style="margin-left:auto;display:flex;gap:8px">
-      <button class="btn btn-ghost" onclick="loadRecords()">🔄 Refresh</button>
-      <button class="btn btn-green" onclick="exportExcel()">⬇️ Export Excel</button>
-    </div>
-  </div>
-
-  <div class="stats-row">
-    <div class="stat-card red"><div class="stat-val" id="st-total">—</div><div class="stat-lbl">Records ទាំងអស់</div></div>
-    <div class="stat-card blue"><div class="stat-val" id="st-days">—</div><div class="stat-lbl">Day Sheets</div></div>
-    <div class="stat-card green"><div class="stat-val" id="st-show">—</div><div class="stat-lbl">Showing</div></div>
-    <div class="stat-card gold"><div class="stat-val" id="st-filt">—</div><div class="stat-lbl">Filtered</div></div>
-  </div>
-
-  <div class="card">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px 16px;border-bottom:1px solid var(--border);background:#FAFBFC">
-      <!-- Search HN -->
-      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
-        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">🔍 HN ជំងឺ</label>
-        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
-          <input type="text" id="s-hn" placeholder="HN..." oninput="applyFilter()"
-            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent">
-        </div>
-      </div>
-      <!-- Search Ward -->
-      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
-        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">🏥 Ward / ផ្នែក</label>
-        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
-          <input type="text" id="s-ward" placeholder="Ward..." oninput="applyFilter()"
-            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent">
-        </div>
-      </div>
-      <!-- Search Date -->
-      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
-        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">📅 ថ្ងៃខែឆ្នាំ</label>
-        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
-          <input type="date" id="s-date" oninput="applyFilter()"
-            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent;cursor:pointer">
-        </div>
-      </div>
-      <button class="btn btn-ghost" onclick="clearSearch()" style="align-self:flex-end;padding:7px 14px;font-size:12px">✕ Clear</button>
-    </div>
-    <!-- Filter buttons row -->
-    <div style="display:flex;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap;align-items:center">
-      <span style="font-size:11px;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:.8px;text-transform:uppercase;margin-right:4px">Filter ⚡</span>
-      <button class="filter-btn" id="btn-filter-sent" onclick="filterSpecial('sent')">
-        📦 ឈាមផ្ញើ <span id="cnt-sent" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
-      </button>
-      <button class="filter-btn" id="btn-filter-jamphak" onclick="filterSpecial('jamphak')">
-        ⏳ ឈាមជំពាក់ <span id="cnt-jamphak" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
-      </button>
-      <button class="filter-btn" id="btn-filter-notret" onclick="filterSpecial('notret')">
-        ❗ មិនទាន់សង <span id="cnt-notret" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
-      </button>
-      <button class="filter-btn" id="btn-filter-cannot" onclick="filterSpecial('cannot')">
-        ⛔ ពុំអាចសង <span id="cnt-cannot" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
-      </button>
-      <button class="filter-btn" style="margin-left:auto" onclick="clearSpecialFilter()">✕ Clear Filter</button>
-    </div>
-    <div class="day-bar" id="dayBar"><span style="color:var(--light);font-size:11px">Loading...</span></div>
-    <div class="tbl-wrap" id="tableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading data...</p></div></div>
-    <div class="pag" id="pag"><span></span></div>
-  </div>
-</div>
-
-<!-- ════════════════════════════════
-     PAGE 3 — IMPORT EXCEL
-════════════════════════════════ -->
-<div id="pg-import" class="page">
-  <div style="margin-bottom:16px">
-    <h2 style="font-size:18px;font-weight:800">Import Excel → Supabase</h2>
-    <p style="color:var(--muted);font-size:12px;margin-top:2px">Upload Excel ហើយ import records ទៅ Supabase Cloud</p>
-  </div>
-  <div class="card">
-    <div class="card-body">
-      <div class="upload-area" id="uploadArea">
-        <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls">
-        <div style="font-size:40px;margin-bottom:10px">📂</div>
-        <h3>Drag &amp; Drop ឬ Click Upload</h3>
-        <p>Excel file (.xlsx, .xlsm) · day(1) ដល់ day(31)</p>
-        <div id="fileTag" style="display:none" class="file-tag">📄 <span id="fileTagName"></span></div>
-      </div>
-      <div class="prog-bar" id="progBar"><div class="prog-fill" id="progFill"></div></div>
-      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-red" id="btnImport" disabled onclick="importExcel()">⚙️ Import ទៅ Supabase</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('fileInput').click()">📂 ជ្រើស File</button>
-      </div>
-      <div id="importResult" style="display:none;margin-top:16px;padding:14px 18px;background:var(--green2);border:1px solid var(--green);border-radius:10px;color:#065F46;font-size:13px;font-weight:600"></div>
-    </div>
-  </div>
-</div>
-
-</div><!-- /main -->
-
-<!-- EDIT MODAL -->
-<div class="overlay" id="editModal">
-  <div class="modal">
-    <div class="modal-head">
-      <div><h3>✏️ Edit Record</h3><p id="editSub">—</p></div>
-      <button class="close-btn" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body" id="editBody"></div>
-    <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-red" id="btnEditSave" onclick="saveEdit()">💾 Save to Supabase</button>
-    </div>
-  </div>
-</div>
-
-<div class="toast" id="toast"></div>
 
 <script>
 // ═══════════════════════════════════════════
@@ -1415,7 +949,7 @@ function updateSpecialCounts() {
   const sentCount    = allRecs.filter(r => parseFloat(r.stock_sent)   > 0).length;
   const jamphakCount = allRecs.filter(r => parseFloat(r.given_count)  > 0).length;
   const notretCount  = allRecs.filter(r => parseFloat(r.not_returned) > 0).length;
-  const cannotCount  = allRecs.filter(r => r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes').length;
+  const cannotCount = allRecs.filter(r => r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes').length;
   const cs = document.getElementById('cnt-sent');
   const cj = document.getElementById('cnt-jamphak');
   const cn = document.getElementById('cnt-notret');
@@ -1467,7 +1001,7 @@ function applyFilter() {
     if (activeSpecial === 'sent'    && !(parseFloat(r.stock_sent)   > 0)) return false;
     if (activeSpecial === 'jamphak' && !(parseFloat(r.given_count)  > 0)) return false;
     if (activeSpecial === 'notret'  && !(parseFloat(r.not_returned) > 0)) return false;
-    if (activeSpecial === 'cannot'  && !(r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes')) return false;
+    if (activeSpecial === 'cannot' && !(r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes')) return false;
     return true;
   });
   document.getElementById('st-filt').textContent = filtered.length;
@@ -2446,17 +1980,497 @@ function showToast(m, t = 'info') {
 // ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
+// Force connect with embedded credentials
+SB_URL = 'https://eafafsasgootmplemioi.supabase.co';
+SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhZmFmc2FzZ29vdG1wbGVtaW9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDE3NzcsImV4cCI6MjA5MjQxNzc3N30.r6t1MFr6qKSRM_lsLXmo5DtU4GvE9X0xqb4ImIzrcLg';
+localStorage.setItem('sb_url', SB_URL);
+localStorage.setItem('sb_key', SB_KEY);
+const _ov = document.getElementById('setupOverlay');
+if (_ov) _ov.style.display = 'none';
+setDbStatus(true);
+loadRecords();
 document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
+
+// Auto-select current month
 (function() {
   const monthNum = new Date().getMonth() + 1;
   const sel = document.getElementById('daySelect');
   if (!sel) return;
   for (let i = 0; i < sel.options.length; i++) {
-    if (sel.options[i].value === 'Month ' + monthNum) { sel.selectedIndex = i; break; }
+    if (sel.options[i].value === 'Month ' + monthNum) {
+      sel.selectedIndex = i;
+      break;
+    }
   }
 })();
-setDbStatus(true);
-loadRecords();
+if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) loadRecords();
 </script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SETUP OVERLAY (first time)
+══════════════════════════════════════ -->
+<div id="setupOverlay">
+  <div class="setup-box">
+    <div class="setup-logo"><span>🩸</span></div>
+    <h2>Blood Report Manager</h2>
+    <p>ភ្ជាប់ Supabase Database ដើម្បីផ្ទុក Data<br>ពួម Multi-user · Cloud Backup · Unlimited</p>
+
+    <div class="setup-step">
+      <p><span class="setup-step-num">1</span>ចូល <code>supabase.com</code> → Sign Up Free → Create Project</p>
+    </div>
+    <div class="setup-step">
+      <p><span class="setup-step-num">2</span>ចូល SQL Editor → New Query → Copy SQL ពី file <code>supabase_setup.sql</code> → Run</p>
+    </div>
+    <div class="setup-step">
+      <p><span class="setup-step-num">3</span>ចូល Project Settings → API → Copy <code>Project URL</code> និង <code>anon key</code></p>
+    </div>
+
+    <div class="setup-field">
+      <label>Supabase Project URL</label>
+      <input type="url" id="sb_url" placeholder="https://xxxxxxxxxxxx.supabase.co">
+    </div>
+    <div class="setup-field">
+      <label>Supabase Anon Key</label>
+      <input type="text" id="sb_key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+    </div>
+    <div class="setup-err" id="setupErr">❌ មិនអាចភ្ជាប់ — សូមពិនិត្យ URL និង Key</div>
+    <button class="setup-btn" onclick="connectSupabase()" id="connectBtn">
+      🔌 ភ្ជាប់ Supabase
+    </button>
+    <p style="color:rgba(255,255,255,.25);font-size:11px;text-align:center;margin-top:14px">
+      Key ត្រូវបានរក្សាទុកក្នុង localStorage · អាច Reset បានពេលណាក៏បាន<br>
+      <span style="color:rgba(255,255,255,.15)">Admin: Paste URL+Key ក្នុង file HTML · line SB_CONFIG</span>
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TOPBAR
+══════════════════════════════════════ -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="logo"><span>🩸</span></div>
+    <div class="topbar-title">
+      <h1>Blood Report Manager</h1>
+      <p>Supabase Cloud · Multi-user</p>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showPage('pg-entry')">📝 Data Entry</button>
+      <button class="nav-tab" onclick="showPage('pg-main')">📊 Main File</button>
+      <button class="nav-tab" onclick="showPage('pg-import')">📂 Import Excel</button>
+    </div>
+    <div class="db-badge" onclick="resetConnection()" title="Click to reset connection">
+      <div class="db-dot" id="dbDot"></div>
+      <span id="dbLabel">Connected</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+<!-- ════════════════════════════════
+     PAGE 1 — DATA ENTRY
+════════════════════════════════ -->
+<div id="pg-entry" class="page active">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+    <div>
+      <h2 style="font-size:22px;font-weight:900">បញ្ចូល Data អ្នកជំងឺ</h2>
+      <p style="color:var(--muted);font-size:13px;margin-top:3px">Form ដូចទៅ Excel · Day Sheet Structure · Save ទៅ Supabase</p>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="daySelect" style="border:2px solid var(--border);border-radius:9px;padding:10px 16px;font-family:'Noto Sans Khmer',sans-serif;font-size:14px;font-weight:600;cursor:pointer;background:white;color:var(--text)">
+        <option value="Month 1">Month 1 — January (មករា)</option>
+        <option value="Month 2">Month 2 — February (កុម្ភៈ)</option>
+        <option value="Month 3">Month 3 — March (មីនា)</option>
+        <option value="Month 4">Month 4 — April (មេសា)</option>
+        <option value="Month 5">Month 5 — May (ឧសភា)</option>
+        <option value="Month 6">Month 6 — June (មិថុនា)</option>
+        <option value="Month 7">Month 7 — July (កក្កដា)</option>
+        <option value="Month 8">Month 8 — August (សីហា)</option>
+        <option value="Month 9">Month 9 — September (កញ្ញា)</option>
+        <option value="Month 10">Month 10 — October (តុលា)</option>
+        <option value="Month 11">Month 11 — November (វិច្ឆិកា)</option>
+        <option value="Month 12">Month 12 — December (ធ្នូ)</option>
+      </select>
+      <button class="btn btn-ghost" onclick="clearForm()">🗑 Clear</button>
+      <button class="btn btn-gold" id="btnSaveNew" onclick="saveAndNew()">💾+ Save &amp; New</button>
+      <button class="btn btn-red" id="btnSave" onclick="saveRecord()">💾 Save to Supabase</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+
+      <!-- S1: អ្នកជំងឺ -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--dark)">🏥 ព័ត៌មានអ្នកជំងឺ</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="fg g6">
+        <div class="fld">
+          <label>🏷️ SN ប៉ុងឈាម</label>
+          <div class="iu">
+            <input type="text" id="f_sn" placeholder="058770..."
+              oninput="formatSN(this)"
+              style="border:none!important;outline:none;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;letter-spacing:1px">
+            <span class="unit" style="background:#F0F9FF;border-color:#BAE6FD;color:#0369A1;font-weight:700">SN-</span>
+          </div>
+        </div>
+        <div class="fld"><label>ថ្ងៃខែឆ្នាំ <span class="req">*</span></label><input type="date" id="f_date"></div>
+        <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX"></div>
+        <div class="fld cs2"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
+        <div class="fld"><label>អាយុ</label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none"><span class="unit">ឆ្នាំ</span></div></div>
+      </div>
+      <div class="fg g5" style="margin-top:11px">
+        <div class="fld"><label>ភេទ</label><div class="radio-g"><label><input type="radio" name="gender" value="ប" checked><span>👨 ប្រុស</span></label><label><input type="radio" name="gender" value="ស"><span>👩 ស្រី</span></label></div></div>
+        <div class="fld"><label>ផ្នែកស្នើ</label><select id="f_ward_from" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
+        <div class="fld"><label>បញ្ជូន ទៅផ្នែក</label><select id="f_ward_to" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:'Noto Sans Khmer',sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
+        <div class="fld"><label>លេខទូរសព្ទ</label><input type="text" id="f_phone" placeholder="0XX XXX XXX"></div>
+        <div class="fld">
+          <label>👨‍⚕️ គ្រូពេទ្យ ស្នើ</label>
+          <div class="iu" style="border-color:var(--border)">
+            <span class="unit" style="background:#FFF7ED;border-color:#FED7AA;color:#C2410C;font-weight:800;font-size:13px">វេជ្ជ-</span>
+            <input type="text" id="f_doctor_req" placeholder="ឈ្មោះ..."
+              oninput="formatDoctor(this)"
+              style="border:none!important;outline:none;font-family:'Noto Sans Khmer',sans-serif;font-weight:600;font-size:14px">
+          </div>
+        </div>
+      </div>
+      <div class="fg g4" style="margin-top:11px">
+        <div class="fld cs2"><label>រោគវិនិច្ឆ័យ</label><input type="text" id="f_diagnosis" placeholder="Diagnosis / Anemia..."></div>
+        <div class="fld"><label>Hb (g/dL)</label><div class="iu"><input type="number" id="f_hb" placeholder="0.0" step="0.1" style="border:none!important;outline:none"><span class="unit">g/dL</span></div></div>
+        <div class="fld"><label>Ht (%)</label><div class="iu"><input type="number" id="f_ht" placeholder="0" style="border:none!important;outline:none"><span class="unit">%</span></div></div>
+      </div>
+
+      <!-- S2: សាកឈាម -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--red)">🩸 ព័ត៌មានសាកឈាម</span>
+        <div class="sec-line"></div>
+      </div>
+
+      <!-- Bag rows container -->
+      <div id="bagContainer">
+        <!-- Bag 1 (always visible) -->
+        <div class="bag-row" id="bagrow">
+          <div class="bag-row-title">
+            <span>1</span>
+            Bag 1 (ដំបូង)
+          </div>
+          <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
+            <div class="fld">
+              <label>📋 លេខកូដ សាក់ឈាម</label>
+              <input type="text" id="f_blood_code" placeholder="e.g. 20261234">
+            </div>
+            <div class="fld">
+              <label style="color:var(--green)">✅ យកប្រើរួច</label>
+              <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+                     id="lbl_used"
+                     onmouseenter="this.style.borderColor='var(--green)'"
+                     onmouseleave="this.style.borderColor=document.getElementById('f_bag_used').checked?'var(--green)':'var(--border)'">
+                <input type="checkbox" id="f_bag_used" style="accent-color:var(--green);width:17px;height:17px" onchange="bagUsedChange(this,'')">
+                <span id="span_used" style="font-size:14px;font-weight:700">យកប្រើ</span>
+              </label>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">🔄 វិលចូលស្តុក</label>
+              <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
+                     id="lbl_back"
+                     onmouseenter="this.style.borderColor='var(--red)'"
+                     onmouseleave="this.style.borderColor=document.getElementById('f_bag_back').checked?'var(--red)':'var(--border)'">
+                <input type="checkbox" id="f_bag_back" style="accent-color:var(--red);width:17px;height:17px" onchange="bagBackChange(this,'')">
+                <span id="span_back" style="font-size:14px;font-weight:700">វិលស្តុក</span>
+              </label>
+            </div>
+            <div class="fld">
+              <label>🩸 Group / Rh</label>
+              <select id="f_group"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>
+            </div>
+            <div class="fld">
+              <label>💉 ប្រភេទ</label>
+              <select id="f_blood_type"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>
+            </div>
+            <div class="fld">
+              <label>📅 ថ្ងៃផុតកំណត់</label>
+              <input type="date" id="f_blood_exp">
+            </div>
+            <div class="fld">
+              <label>👤 អ្នកយកប្រើ</label>
+              <input type="text" id="f_bag_taker" placeholder="ឈ្មោះ...">
+            </div>
+            <div class="fld">
+              <label>🕐 ថ្ងៃ ម៉ោង យក</label>
+              <input type="datetime-local" id="f_bag_taken_dt">
+            </div>
+            <div class="fld">
+              <label>🧑‍⚕️ បុគ្គលិក-Lab</label>
+              <select id="f_bag_lab_staff" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+            </div>
+          </div>
+        
+
+        <!-- Back fields INSIDE Bag 1 -->
+        <div id="back_fields" style="display:none;margin-top:14px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+            <div class="fld">
+              <label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
+              <input type="text" id="f_back_giver" placeholder="ឈ្មោះ..."
+                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
+              <div style="display:flex;gap:6px">
+                <input type="date" id="f_back_date"
+                  style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
+                <input type="time" id="f_back_time"
+                  style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;background:white">
+              </div>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
+              <select id="f_back_lab" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'JetBrains Mono',monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">📝 មូលហេតុ</label>
+              <input type="text" id="f_back_reason" placeholder="មូលហេតុ..."
+                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;background:white">
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+
+      <!-- Add Bag Button -->
+      <div style="display:flex;align-items:center;gap:12px;margin:14px 0">
+        <button type="button" onclick="addBagRow()" id="btnAddBag"
+          style="display:flex;align-items:center;gap:8px;padding:10px 20px;border:2px dashed var(--red);border-radius:10px;background:rgba(185,28,28,.04);color:var(--red);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Noto Sans Khmer',sans-serif">
+          ➕ បន្ថែម Bag
+        </button>
+        <span id="bagCountLabel" style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">Bag 1 / 7</span>
+        <button type="button" onclick="removeBagRow()" id="btnRemoveBag" style="display:none;padding:8px 14px;border:2px solid var(--border);border-radius:9px;background:white;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s">
+          ➖ លុប Bag ចុងក្រោយ
+        </button>
+      </div>
+
+      <!-- X-Match + Saline checks row -->
+      <div class="fg g5" style="margin-top:4px">
+        <div class="fld">
+          <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">⚗️ X-MATCH (BAG)</label>
+          <div class="iu" style="border:2.5px solid var(--red);border-radius:10px;background:#FFF5F5">
+            <input type="number" id="f_xmatch" placeholder="0" min="0" oninput="calc()"
+              style="border:none!important;outline:none;font-size:18px;font-weight:900;color:var(--red);font-family:'JetBrains Mono',monospace;background:transparent">
+            <span class="unit" style="background:#FECACA;border-color:var(--red);color:var(--red);font-weight:900;font-size:14px">Bag</span>
+          </div>
+        </div>
+        <div class="fld"><label>🔬 Saline IGM T.25C</label><div class="chk-g"><label><input type="checkbox" id="f_s25"><span>✓ ok</span></label></div></div>
+        <div class="fld"><label>🔬 Saline IGM T.37C</label><div class="chk-g"><label><input type="checkbox" id="f_s37"><span>✓ ok</span></label></div></div>
+        <div class="fld"><label>🔬 Anti. Human IGG</label><div class="chk-g"><label><input type="checkbox" id="f_anti"><span>✓ ok</span></label></div></div>
+        <div class="fld"><label>🔬 Come Check Cell</label><div class="chk-g"><label><input type="checkbox" id="f_come"><span>✓ ok</span></label></div></div>
+      </div>
+
+      <!-- X-Match Staff + DateTime + NBTC row -->
+      <div class="fg g3" style="margin-top:12px;padding:16px;background:#F8FAFC;border-radius:12px;border:1.5px solid var(--border)">
+        <div class="fld">
+          <label>🧑‍⚕️ បុគ្គលិកធ្វើ X-Match</label>
+          <select id="f_xmatch_staff" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+        </div>
+        <div class="fld">
+          <label>🕐 ថ្ងៃ ម៉ោង ធ្វើ X-Match</label>
+          <div style="display:flex;gap:6px">
+            <input type="date" id="f_xmatch_date"
+              style="flex:1.2;border:2px solid var(--border);border-radius:9px;padding:10px 10px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;outline:none;transition:border-color .2s"
+              onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+            <input type="time" id="f_xmatch_time"
+              style="flex:1;border:2px solid var(--border);border-radius:9px;padding:10px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .2s"
+              onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+          </div>
+        </div>
+        <div class="fld">
+          <label style="color:var(--blue)">🏥 ករណីឈាម NBTC (PL)</label>
+          <label id="lbl_nbtc"
+            style="display:flex;align-items:center;gap:10px;border:2px solid var(--border);border-radius:9px;padding:10px 16px;cursor:pointer;background:white;transition:all .2s;font-size:14px;font-weight:700"
+            onmouseenter="this.style.borderColor='var(--blue)'"
+            onmouseleave="this.style.borderColor=document.getElementById('f_nbtc').checked?'var(--blue)':'var(--border)'">
+            <input type="checkbox" id="f_nbtc"
+              style="accent-color:var(--blue);width:18px;height:18px"
+              onchange="nbtcChange(this)">
+            <span id="span_nbtc" style="font-size:14px;font-weight:700">ឈាមមកពី NBTC (PL)</span>
+          </label>
+        </div>
+      </div>
+      <!-- S3: ការប្រើប្រាស់ -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--gold)">💊 ការប្រើប្រាស់សាកឈាម</span>
+        <div class="sec-line"></div>
+      </div>
+      <!-- Row 1: ថ្មី ខ្ចី សង ស្តុកផ្ញើ យកប្រើ វិលចូលស្តុក -->
+      <div class="fg g6">
+        <div class="fld"><label>ថ្មី</label><div class="iu"><input type="number" id="f_new" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>ខ្ចី</label><div class="iu"><input type="number" id="f_borrow" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>សង</label><div class="iu"><input type="number" id="f_return" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label style="color:var(--gold)">ស្តុកផ្ញើ 🔢 (auto)</label><div class="iu" style="border-color:var(--gold);background:var(--gold2)"><input type="number" id="f_stock_sent" readonly style="border:none!important;outline:none;background:transparent;color:var(--gold);font-weight:700"><span class="unit" style="border-color:var(--gold)">auto</span></div></div>
+        <div class="fld"><label>យកប្រើ</label><div class="iu"><input type="number" id="f_used" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label style="color:#EA580C">⏳ នៅជំពាក់ 🔢 (auto)</label><div class="iu" style="border-color:#EA580C;background:#FFEDD5"><input type="number" id="f_given_count" readonly style="border:none!important;outline:none;background:transparent;color:#EA580C;font-weight:900;font-size:15px"><span class="unit" style="border-color:#EA580C;background:#FED7AA;color:#EA580C;font-weight:900">auto</span></div></div>
+        <div class="fld"><label style="color:var(--red);font-weight:800">🔙 វិលចូលស្តុក</label><div class="iu" style="border-color:var(--red);background:var(--red3)"><input type="number" id="f_back_stock" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none;color:var(--red);font-weight:900;font-size:15px;background:transparent"><span class="unit" style="border-color:var(--red);background:#FECACA;color:var(--red);font-weight:900">Bag</span></div></div>
+      </div>
+      <!-- Row 2: គ្រូពេទ្យ ថ្ងៃកាត់ចូល ចំនួនផ្តល់ Lab WARD ថ្ងៃចេញ -->
+      
+
+      <!-- S4: ត្រលប់ -->
+      <div class="sec-div">
+        <span class="sec-lbl" style="background:var(--green)">🔄 ព័ត៌មានត្រលប់ / ផ្នែក</span>
+        <div class="sec-line"></div>
+      </div>
+      <div class="fg g5">
+        <div class="fld"><label style="color:var(--red)">មិនទាន់ សង 🔢</label><div class="iu" style="border-color:var(--red);background:var(--red3)"><input type="number" id="f_not_returned" readonly style="border:none!important;outline:none;background:transparent;color:var(--red);font-weight:700"><span class="unit" style="border-color:var(--red)">auto</span></div></div>
+        <div class="fld">
+          <label id="f_cannot_label">⛔ ពុំមានលទ្ធភាព</label>
+          <div id="f_cannot_wrap" style="display:flex;border:2px solid var(--border);border-radius:9px;padding:10px 14px;gap:8px;align-items:center;cursor:pointer;background:white;transition:all .2s" onclick="this.querySelector('input').click()">
+            <input type="checkbox" id="f_cannot_return" style="accent-color:var(--red);width:16px;height:16px" onchange="dataEntryCannotChange(this)">
+            <span id="f_cannot_span" style="font-size:14px;font-weight:700">ពុំអាចសង</span>
+          </div>
+        </div>
+        <div class="fld"><label>ចំនួន ផ្តល់ (ត្រ.)</label><div class="iu"><input type="number" id="f_given_back" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>ម៉ោង ផ្តល់ព័ត៌មាន</label><input type="time" id="f_info_time"></div>
+        <div class="fld"><label>អ្នកទទួលព័ត៌មាន</label><input type="text" id="f_info_recv" placeholder="ឈ្មោះ..."></div>
+      </div>
+      <div class="fg g3" style="margin-top:11px">
+        <div class="fld cs2">
+          <label id="f_reason_label">📝 មូលហេតុ</label>
+          <input type="text" id="f_reason" placeholder="មូលហេតុ..."
+            style="border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;font-family:'Noto Sans Khmer',sans-serif;width:100%;outline:none;transition:all .2s">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:28px;justify-content:flex-end;padding-top:20px;border-top:1px solid var(--border)">
+        <button class="btn btn-ghost" onclick="clearForm()">🗑 Clear Form</button>
+        <button class="btn btn-gold" id="btn2" onclick="saveAndNew()">💾+ Save &amp; New</button>
+        <button class="btn btn-red" style="padding:9px 28px" id="btn1" onclick="saveRecord()">💾 Save to Supabase</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════
+     PAGE 2 — MAIN FILE
+════════════════════════════════ -->
+<div id="pg-main" class="page">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+    <div>
+      <h2 style="font-size:18px;font-weight:800">Main File — Records ទាំងអស់</h2>
+      <p style="color:var(--muted);font-size:12px;margin-top:2px">Realtime ពី Supabase Cloud · Multi-user</p>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="loadRecords()">🔄 Refresh</button>
+      <button class="btn btn-green" onclick="exportExcel()">⬇️ Export Excel</button>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card red"><div class="stat-val" id="st-total">—</div><div class="stat-lbl">Records ទាំងអស់</div></div>
+    <div class="stat-card blue"><div class="stat-val" id="st-days">—</div><div class="stat-lbl">Day Sheets</div></div>
+    <div class="stat-card green"><div class="stat-val" id="st-show">—</div><div class="stat-lbl">Showing</div></div>
+    <div class="stat-card gold"><div class="stat-val" id="st-filt">—</div><div class="stat-lbl">Filtered</div></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px 16px;border-bottom:1px solid var(--border);background:#FAFBFC">
+      <!-- Search HN -->
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">🔍 HN ជំងឺ</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+          <input type="text" id="s-hn" placeholder="HN..." oninput="applyFilter()"
+            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent">
+        </div>
+      </div>
+      <!-- Search Ward -->
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">🏥 Ward / ផ្នែក</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+          <input type="text" id="s-ward" placeholder="Ward..." oninput="applyFilter()"
+            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent">
+        </div>
+      </div>
+      <!-- Search Date -->
+      <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:'JetBrains Mono',monospace">📅 ថ្ងៃខែឆ្នាំ</label>
+        <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
+          <input type="date" id="s-date" oninput="applyFilter()"
+            style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:'Noto Sans Khmer',sans-serif;flex:1;background:transparent;cursor:pointer">
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="clearSearch()" style="align-self:flex-end;padding:7px 14px;font-size:12px">✕ Clear</button>
+    </div>
+    <!-- Filter buttons row -->
+    <div style="display:flex;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap;align-items:center">
+      <span style="font-size:11px;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:.8px;text-transform:uppercase;margin-right:4px">Filter ⚡</span>
+      <button class="filter-btn" id="btn-filter-sent" onclick="filterSpecial('sent')">
+        📦 ឈាមផ្ញើ <span id="cnt-sent" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" id="btn-filter-jamphak" onclick="filterSpecial('jamphak')">
+        ⏳ ឈាមជំពាក់ <span id="cnt-jamphak" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" id="btn-filter-notret" onclick="filterSpecial('notret')">
+        ❗ មិនទាន់សង <span id="cnt-notret" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" id="btn-filter-cannot" onclick="filterSpecial('cannot')">
+        ⛔ ពុំអាចសង <span id="cnt-cannot" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
+      <button class="filter-btn" style="margin-left:auto" onclick="clearSpecialFilter()">✕ Clear Filter</button>
+    </div>
+    <div class="day-bar" id="dayBar"><span style="color:var(--light);font-size:11px">Loading...</span></div>
+    <div class="tbl-wrap" id="tableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading data...</p></div></div>
+    <div class="pag" id="pag"><span></span></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════
+     PAGE 3 — IMPORT EXCEL
+════════════════════════════════ -->
+<div id="pg-import" class="page">
+  <div style="margin-bottom:16px">
+    <h2 style="font-size:18px;font-weight:800">Import Excel → Supabase</h2>
+    <p style="color:var(--muted);font-size:12px;margin-top:2px">Upload Excel ហើយ import records ទៅ Supabase Cloud</p>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls">
+        <div style="font-size:40px;margin-bottom:10px">📂</div>
+        <h3>Drag &amp; Drop ឬ Click Upload</h3>
+        <p>Excel file (.xlsx, .xlsm) · day(1) ដល់ day(31)</p>
+        <div id="fileTag" style="display:none" class="file-tag">📄 <span id="fileTagName"></span></div>
+      </div>
+      <div class="prog-bar" id="progBar"><div class="prog-fill" id="progFill"></div></div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-red" id="btnImport" disabled onclick="importExcel()">⚙️ Import ទៅ Supabase</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('fileInput').click()">📂 ជ្រើស File</button>
+      </div>
+      <div id="importResult" style="display:none;margin-top:16px;padding:14px 18px;background:var(--green2);border:1px solid var(--green);border-radius:10px;color:#065F46;font-size:13px;font-weight:600"></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- EDIT MODAL -->
+<div class="overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div><h3>✏️ Edit Record</h3><p id="editSub">—</p></div>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="editBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-red" id="btnEditSave" onclick="saveEdit()">💾 Save to Supabase</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 </body>
 </html>
