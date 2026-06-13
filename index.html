@@ -886,6 +886,7 @@ async function saveRecord() {
   try {
     await sbInsert(rec);
     showToast('✅ Saved to Supabase!', 'ok');
+    _loadDiagnoses(); // refresh diagnosis list
     return true;
   } catch(e) {
     showToast('❌ Error: ' + e.message, 'err'); return false;
@@ -1345,10 +1346,8 @@ function buildEditForm(r) {
         <span style="background:#FFF7ED;border-right:1.5px solid #FED7AA;padding:11px 12px;font-size:13px;font-weight:800;color:#C2410C;white-space:nowrap;display:flex;align-items:center;font-family:Noto Sans Khmer,sans-serif">វេជ្ជ-</span>
         <input type="text" id="edit_doctor_req_txt"
           value="${eH(String(r.doctor_req||'').replace(/^វេជ្ជ[-\s]*/u,''))}"
-          placeholder="🔍 ស្វែងរក..."
-          autocomplete="off"
-          onclick="_editOpenDD()"
-          oninput="_editOnDoctorInput(this.value)"
+          placeholder="🔍 ស្វែងរក..." autocomplete="off"
+          onclick="_editOpenDD()" oninput="_editOnDoctorInput(this.value)"
           style="border:none;outline:none;flex:1;padding:11px 14px;font-size:14px;font-weight:600;font-family:Noto Sans Khmer,sans-serif;background:transparent;width:100%">
         <input type="hidden" data-key="doctor_req" id="edit_doctor_req_hid" value="${eH(r.doctor_req||'')}">
       </div>
@@ -1733,11 +1732,9 @@ async function saveEdit() {
     } else if (el.dataset.key && el.dataset.key.startsWith('bag_back_time')) {
       // Skip — combined with bag_back_date below
     } else if (el.dataset.key && el.dataset.key.startsWith('bag_back_date')) {
-      // Combine bag_back_date+bag_back_time → bag_back_dt (per bag suffix)
       var sfx = el.dataset.key.replace('bag_back_date', '') || '';
       var tEl = document.querySelector('#editBody [data-key="bag_back_time' + sfx + '"]');
-      var d = el.value || '';
-      var t = tEl ? (tEl.value || '') : '';
+      var d = el.value || ''; var t = tEl ? (tEl.value || '') : '';
       row['bag_back_dt' + sfx] = (d || t) ? (d + (t ? ' ' + t : '')) : null;
     } else {
       row[el.dataset.key] = el.value || null;
@@ -1757,6 +1754,7 @@ async function saveEdit() {
   try {
     await sbUpdate(editId, row);
     closeModal(); showToast('✅ Updated in Supabase!', 'ok');
+    _loadDiagnoses(); // refresh diagnosis list
     await loadRecords();
   } catch(e) { showToast('❌ ' + e.message, 'err'); }
   finally { btn.innerHTML = btn._orig; btn.disabled = false; }
@@ -2011,6 +2009,7 @@ if (_ov) _ov.style.display = 'none';
 setDbStatus(true);
 loadRecords();
 _fetchDoctorsOnly();
+_loadDiagnoses();
 document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
 
 // Auto-select current month
@@ -2165,7 +2164,13 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         </div>
       </div>
       <div class="fg g4" style="margin-top:11px">
-        <div class="fld cs2"><label>រោគវិនិច្ឆ័យ</label><input type="text" id="f_diagnosis" placeholder="Diagnosis / Anemia..."></div>
+        <div class="fld cs2"><label>រោគវិនិច្ឆ័យ</label>
+<div style="position:relative">
+  <input type="text" id="f_diagnosis" autocomplete="off" placeholder="Diagnosis / Anemia..."
+    oninput="_diagInput(this.value)" onfocus="_diagInput(this.value)" onblur="setTimeout(_diagClose,180)"
+    style="width:100%">
+  <div id="diag-dd" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:2px solid var(--red);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;z-index:9999"></div>
+</div></div>
         <div class="fld"><label>Hb (g/dL)</label><div class="iu"><input type="number" id="f_hb" placeholder="0.0" step="0.1" style="border:none!important;outline:none"><span class="unit">g/dL</span></div></div>
         <div class="fld"><label>Ht (%)</label><div class="iu"><input type="number" id="f_ht" placeholder="0" style="border:none!important;outline:none"><span class="unit">%</span></div></div>
       </div>
@@ -2696,7 +2701,55 @@ function _ddWardChange(ward) {
 function syncDoctorDropdowns() {}
 function _updateDatalist(ward) {}
 
-// Fetch doctors without touching Management UI
+// ── DIAGNOSIS AUTOCOMPLETE ──
+var allDiagnoses = [];
+
+function _loadDiagnoses() {
+  fetch(SB_URL + '/rest/v1/blood_records?select=diagnosis&diagnosis=not.is.null&diagnosis=not.eq.', {
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+  }).then(function(r){ return r.json(); }).then(function(rows){
+    var seen = {};
+    allDiagnoses = [];
+    if (!Array.isArray(rows)) return;
+    rows.forEach(function(r){
+      var d = (r.diagnosis || '').trim();
+      if (d && !seen[d]) { seen[d] = 1; allDiagnoses.push(d); }
+    });
+    allDiagnoses.sort();
+  }).catch(function(e){ console.error('_loadDiagnoses:', e); });
+}
+
+function _diagInput(q) {
+  var dd = document.getElementById('diag-dd');
+  if (!dd) return;
+  var list = q
+    ? allDiagnoses.filter(function(d){ return d.toLowerCase().indexOf(q.toLowerCase()) >= 0; })
+    : allDiagnoses.slice(0, 30);
+  if (!list.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = list.map(function(d){
+    var hl = d.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi'),
+      '<strong style="color:var(--red)">$1</strong>');
+    return '<div class="diag-item" data-val="' + d.replace(/"/g,'&quot;') + '" ' +
+      'style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6;transition:background .1s">' + hl + '</div>';
+  }).join('');
+  dd.querySelectorAll('.diag-item').forEach(function(el){
+    el.addEventListener('mouseenter', function(){ el.style.background = '#FEF2F2'; });
+    el.addEventListener('mouseleave', function(){ el.style.background = 'white'; });
+    el.addEventListener('mousedown', function(e){
+      e.preventDefault();
+      document.getElementById('f_diagnosis').value = el.dataset.val;
+      dd.style.display = 'none';
+    });
+  });
+  dd.style.display = 'block';
+}
+
+function _diagClose() {
+  var dd = document.getElementById('diag-dd');
+  if (dd) dd.style.display = 'none';
+}
+
+// ── DOCTOR DROPDOWN (Data Entry) ──
 function _fetchDoctorsOnly() {
   return fetch(SB_URL + '/rest/v1/doctors?select=*&order=ward,name', {
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
@@ -2735,7 +2788,7 @@ function _editGetHid() { return document.getElementById('edit_doctor_req_hid'); 
 function _editPosDD() {
   var inp = _editGetTxt(); var dd = _editGetDD();
   if (!inp || !dd) return;
-  var wrap = inp.closest('[style*="display:flex"]') || inp.parentElement;
+  var wrap = inp.parentElement;
   var r = wrap ? wrap.getBoundingClientRect() : inp.getBoundingClientRect();
   dd.style.position = 'fixed'; dd.style.top = (r.bottom + 2) + 'px';
   dd.style.left = r.left + 'px'; dd.style.width = r.width + 'px'; dd.style.zIndex = '999999';
@@ -2752,15 +2805,15 @@ function _editRenderDD(q) {
     dd.innerHTML = '<div style="padding:12px 16px;color:#9CA3AF;font-size:13px;text-align:center">' + msg + '</div>';
     return;
   }
-  dd.innerHTML = list.map(function(d) {
-    return '<div class="edit-ddi" data-val="វេជ្ជ-' + d.name + '" data-txt="' + d.name + '" style="padding:11px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid #F3F4F6;transition:background .1s">' +
+  dd.innerHTML = list.map(function(d){
+    return '<div class="edit-ddi" data-val="វេជ្ជ-' + d.name + '" data-txt="' + d.name + '" style="padding:11px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid #F3F4F6">' +
       '<span style="font-weight:700;font-family:Noto Sans Khmer,sans-serif">វេជ្ជ-' + d.name + '</span>' +
       '<span style="color:#9CA3AF;font-size:12px;margin-left:8px">(' + d.ward + ')</span></div>';
   }).join('');
-  dd.querySelectorAll('.edit-ddi').forEach(function(el) {
+  dd.querySelectorAll('.edit-ddi').forEach(function(el){
     el.addEventListener('mouseenter', function(){ el.style.background = '#FEF2F2'; });
     el.addEventListener('mouseleave', function(){ el.style.background = 'white'; });
-    el.addEventListener('mousedown', function(e) {
+    el.addEventListener('mousedown', function(e){
       e.preventDefault(); e.stopPropagation();
       var hid = _editGetHid(); var txt = _editGetTxt();
       if (hid) hid.value = el.dataset.val;
