@@ -745,11 +745,35 @@ function readForm() {
     bag_back_lab:    (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_lab')?.value||'') : '') || null,
     bag_back_reason: (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_reason')?.value||'') : '') || null,
     bag_back_2: document.getElementById('f_bag_back_2')?.checked ? 'yes' : '',
+    bag_back_giver_2:  (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_giver_2')?.value||'') : '') || null,
+    bag_back_dt_2:     (document.getElementById('f_bag_back_2')?.checked ? ((document.getElementById('f_back_date_2')?.value||'') + ' ' + (document.getElementById('f_back_time_2')?.value||'')) : '') || null,
+    bag_back_lab_2:    (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_lab_2')?.value||'') : '') || null,
+    bag_back_reason_2: (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_reason_2')?.value||'') : '') || null,
     bag_back_3: document.getElementById('f_bag_back_3')?.checked ? 'yes' : '',
+    bag_back_giver_3:  (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_giver_3')?.value||'') : '') || null,
+    bag_back_dt_3:     (document.getElementById('f_bag_back_3')?.checked ? ((document.getElementById('f_back_date_3')?.value||'') + ' ' + (document.getElementById('f_back_time_3')?.value||'')) : '') || null,
+    bag_back_lab_3:    (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_lab_3')?.value||'') : '') || null,
+    bag_back_reason_3: (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_reason_3')?.value||'') : '') || null,
     bag_back_4: document.getElementById('f_bag_back_4')?.checked ? 'yes' : '',
+    bag_back_giver_4:  (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_giver_4')?.value||'') : '') || null,
+    bag_back_dt_4:     (document.getElementById('f_bag_back_4')?.checked ? ((document.getElementById('f_back_date_4')?.value||'') + ' ' + (document.getElementById('f_back_time_4')?.value||'')) : '') || null,
+    bag_back_lab_4:    (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_lab_4')?.value||'') : '') || null,
+    bag_back_reason_4: (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_reason_4')?.value||'') : '') || null,
     bag_back_5: document.getElementById('f_bag_back_5')?.checked ? 'yes' : '',
+    bag_back_giver_5:  (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_giver_5')?.value||'') : '') || null,
+    bag_back_dt_5:     (document.getElementById('f_bag_back_5')?.checked ? ((document.getElementById('f_back_date_5')?.value||'') + ' ' + (document.getElementById('f_back_time_5')?.value||'')) : '') || null,
+    bag_back_lab_5:    (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_lab_5')?.value||'') : '') || null,
+    bag_back_reason_5: (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_reason_5')?.value||'') : '') || null,
     bag_back_6: document.getElementById('f_bag_back_6')?.checked ? 'yes' : '',
+    bag_back_giver_6:  (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_giver_6')?.value||'') : '') || null,
+    bag_back_dt_6:     (document.getElementById('f_bag_back_6')?.checked ? ((document.getElementById('f_back_date_6')?.value||'') + ' ' + (document.getElementById('f_back_time_6')?.value||'')) : '') || null,
+    bag_back_lab_6:    (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_lab_6')?.value||'') : '') || null,
+    bag_back_reason_6: (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_reason_6')?.value||'') : '') || null,
     bag_back_7: document.getElementById('f_bag_back_7')?.checked ? 'yes' : '',
+    bag_back_giver_7:  (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_giver_7')?.value||'') : '') || null,
+    bag_back_dt_7:     (document.getElementById('f_bag_back_7')?.checked ? ((document.getElementById('f_back_date_7')?.value||'') + ' ' + (document.getElementById('f_back_time_7')?.value||'')) : '') || null,
+    bag_back_lab_7:    (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_lab_7')?.value||'') : '') || null,
+    bag_back_reason_7: (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_reason_7')?.value||'') : '') || null,
     bag_used_2: document.getElementById('f_bag_used_2')?.checked ? 'yes' : '',
     bag_used_3: document.getElementById('f_bag_used_3')?.checked ? 'yes' : '',
     bag_used_4: document.getElementById('f_bag_used_4')?.checked ? 'yes' : '',
@@ -1733,7 +1757,8 @@ async function saveEdit() {
     } else if (el.dataset.key && el.dataset.key.startsWith('bag_back_time')) {
       // Skip — combined with bag_back_date below
     } else if (el.dataset.key && el.dataset.key.startsWith('bag_back_date')) {
-      var sfx = el.dataset.key.replace('bag_back_date', '') || '';
+      // Combine bag_back_date[sfx] + bag_back_time[sfx] → bag_back_dt[sfx]
+      var sfx = el.dataset.key.replace('bag_back_date', '');
       var tEl = document.querySelector('#editBody [data-key="bag_back_time' + sfx + '"]');
       var d = el.value || ''; var t = tEl ? (tEl.value || '') : '';
       row['bag_back_dt' + sfx] = (d || t) ? (d + (t ? ' ' + t : '')) : null;
