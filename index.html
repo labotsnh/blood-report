@@ -1703,7 +1703,6 @@ async function saveEdit() {
       const raw = el.value.trim().replace(/^SN-/i, '');
       row['sn_code'] = raw ? 'SN-' + raw : null;
     } else if (el.dataset.key === 'doctor_req') {
-      // hidden input stores full value set by DD; fallback to txt if empty
       var hidVal = el.value.trim();
       if (!hidVal) {
         var txtEl = document.getElementById('edit_doctor_req_txt');
@@ -1731,6 +1730,15 @@ async function saveEdit() {
       row['nbtc'] = el.checked ? 'yes' : '';
     } else if (el.dataset.key && el.dataset.key.startsWith('bag_back') && el.type === 'checkbox') {
       row[el.dataset.key] = el.checked ? 'yes' : '';
+    } else if (el.dataset.key && el.dataset.key.startsWith('bag_back_time')) {
+      // Skip — combined with bag_back_date below
+    } else if (el.dataset.key && el.dataset.key.startsWith('bag_back_date')) {
+      // Combine bag_back_date+bag_back_time → bag_back_dt (per bag suffix)
+      var sfx = el.dataset.key.replace('bag_back_date', '') || '';
+      var tEl = document.querySelector('#editBody [data-key="bag_back_time' + sfx + '"]');
+      var d = el.value || '';
+      var t = tEl ? (tEl.value || '') : '';
+      row['bag_back_dt' + sfx] = (d || t) ? (d + (t ? ' ' + t : '')) : null;
     } else {
       row[el.dataset.key] = el.value || null;
     }
@@ -2677,6 +2685,17 @@ document.addEventListener('mousedown', function(e) {
 });
 
 // Update when ward changes
+function _ddWardChange(ward) {
+  var hid = _getDoctorHid();
+  var inp = _getDoctorTxt();
+  if (hid) hid.value = '';
+  if (inp) inp.value = '';
+  _closeDD();
+}
+
+function syncDoctorDropdowns() {}
+function _updateDatalist(ward) {}
+
 // Fetch doctors without touching Management UI
 function _fetchDoctorsOnly() {
   return fetch(SB_URL + '/rest/v1/doctors?select=*&order=ward,name', {
@@ -2687,19 +2706,13 @@ function _fetchDoctorsOnly() {
 }
 
 function _ddWardChange(ward) {
-  var hid = _getDoctorHid();
-  var inp = _getDoctorTxt();
-  if (hid) hid.value = '';
-  if (inp) inp.value = '';
-  _closeDD();
-  if (!ward) return;
+  var hid = _getDoctorHid(); var inp = _getDoctorTxt();
+  if (hid) hid.value = ''; if (inp) inp.value = '';
+  _closeDD(); if (!ward) return;
   function tryOpen() {
-    var wardDocs = allDoctors.filter(function(d){ return d.ward === ward; });
-    if (wardDocs.length === 0) {
-      if (inp) {
-        inp.placeholder = '⚠️ ک្មានគ្រូពេត្យ​ក្នុង ' + ward;
-        setTimeout(function(){ inp.placeholder = '🔍 ស្វ័ងរក...'; }, 2500);
-      }
+    var wd = allDoctors.filter(function(d){ return d.ward === ward; });
+    if (!wd.length) {
+      if (inp) { inp.placeholder = '⚠️ គ្មានគ្រូពេទ្យក្នុង ' + ward; setTimeout(function(){ inp.placeholder = '🔍 ស្វែងរក...'; }, 2500); }
       return;
     }
     _openDD();
@@ -2715,47 +2728,35 @@ function _onDoctorInput(q) {
 }
 
 // ── EDIT MODAL DOCTOR DROPDOWN ──
-var _editDdOpen = false;
-
-function _editGetDD() { return document.getElementById('edit-doctor-dd'); }
+function _editGetDD()  { return document.getElementById('edit-doctor-dd'); }
 function _editGetTxt() { return document.getElementById('edit_doctor_req_txt'); }
 function _editGetHid() { return document.getElementById('edit_doctor_req_hid'); }
 
 function _editPosDD() {
-  var inp = _editGetTxt();
-  var dd  = _editGetDD();
+  var inp = _editGetTxt(); var dd = _editGetDD();
   if (!inp || !dd) return;
-  var wrap = inp.closest('div') || inp.parentElement;
+  var wrap = inp.closest('[style*="display:flex"]') || inp.parentElement;
   var r = wrap ? wrap.getBoundingClientRect() : inp.getBoundingClientRect();
-  dd.style.position = 'fixed';
-  dd.style.top  = (r.bottom + 2) + 'px';
-  dd.style.left = r.left + 'px';
-  dd.style.width = r.width + 'px';
-  dd.style.zIndex = '999999';
+  dd.style.position = 'fixed'; dd.style.top = (r.bottom + 2) + 'px';
+  dd.style.left = r.left + 'px'; dd.style.width = r.width + 'px'; dd.style.zIndex = '999999';
 }
 
 function _editRenderDD(q) {
-  var dd = _editGetDD();
-  if (!dd) return;
+  var dd = _editGetDD(); if (!dd) return;
   var wardSel = document.querySelector('#editBody [data-key="ward_from"]');
   var ward = wardSel ? wardSel.value : '';
   var base = ward ? allDoctors.filter(function(d){ return d.ward === ward; }) : allDoctors;
   var list = q ? base.filter(function(d){ return d.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; }) : base;
-
   if (!list.length) {
     var msg = ward ? '⚠️ គ្មានគ្រូពេទ្យក្នុងផ្នែក ' + ward : (allDoctors.length ? '🔍 គ្មានឈ្មោះត្រូវគ្នា' : '⏳ Loading...');
     dd.innerHTML = '<div style="padding:12px 16px;color:#9CA3AF;font-size:13px;text-align:center">' + msg + '</div>';
     return;
   }
-
   dd.innerHTML = list.map(function(d) {
-    return '<div class="edit-ddi" data-val="វេជ្ជ-' + d.name + '" data-txt="' + d.name + '"' +
-      ' style="padding:11px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid #F3F4F6;transition:background .1s">' +
+    return '<div class="edit-ddi" data-val="វេជ្ជ-' + d.name + '" data-txt="' + d.name + '" style="padding:11px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid #F3F4F6;transition:background .1s">' +
       '<span style="font-weight:700;font-family:Noto Sans Khmer,sans-serif">វេជ្ជ-' + d.name + '</span>' +
-      '<span style="color:#9CA3AF;font-size:12px;margin-left:8px">(' + d.ward + ')</span>' +
-    '</div>';
+      '<span style="color:#9CA3AF;font-size:12px;margin-left:8px">(' + d.ward + ')</span></div>';
   }).join('');
-
   dd.querySelectorAll('.edit-ddi').forEach(function(el) {
     el.addEventListener('mouseenter', function(){ el.style.background = '#FEF2F2'; });
     el.addEventListener('mouseleave', function(){ el.style.background = 'white'; });
@@ -2772,21 +2773,15 @@ function _editRenderDD(q) {
 function _editOpenDD() {
   var dd = _editGetDD();
   if (!dd) {
-    dd = document.createElement('div');
-    dd.id = 'edit-doctor-dd';
+    dd = document.createElement('div'); dd.id = 'edit-doctor-dd';
     dd.style.cssText = 'display:none;background:white;border:2px solid var(--red);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);max-height:260px;overflow-y:auto';
     document.body.appendChild(dd);
   }
-  _editPosDD();
-  dd.style.display = 'block';
-  _editDdOpen = true;
-  _editRenderDD('');
+  _editPosDD(); dd.style.display = 'block'; _editRenderDD('');
 }
 
 function _editCloseDD() {
-  var dd = _editGetDD();
-  if (dd) dd.style.display = 'none';
-  _editDdOpen = false;
+  var dd = _editGetDD(); if (dd) dd.style.display = 'none';
 }
 
 function _editOnDoctorInput(q) {
@@ -2797,17 +2792,12 @@ function _editOnDoctorInput(q) {
 
 function _editDdWardChange(ward) {
   var hid = _editGetHid(); var txt = _editGetTxt();
-  if (hid) hid.value = '';
-  if (txt) txt.value = '';
-  _editCloseDD();
-  if (!ward) return;
+  if (hid) hid.value = ''; if (txt) txt.value = '';
+  _editCloseDD(); if (!ward) return;
   function tryOpen() {
-    var wardDocs = allDoctors.filter(function(d){ return d.ward === ward; });
-    if (wardDocs.length === 0) {
-      if (txt) {
-        txt.placeholder = '⚠️ គ្មានគ្រូពេទ្យក្នុង ' + ward;
-        setTimeout(function(){ txt.placeholder = '🔍 ស្វែងរក...'; }, 2500);
-      }
+    var wd = allDoctors.filter(function(d){ return d.ward === ward; });
+    if (!wd.length) {
+      if (txt) { txt.placeholder = '⚠️ គ្មានគ្រូពេទ្យក្នុង ' + ward; setTimeout(function(){ txt.placeholder = '🔍 ស្វែងរក...'; }, 2500); }
       return;
     }
     _editOpenDD();
@@ -2816,14 +2806,10 @@ function _editDdWardChange(ward) {
   else { _fetchDoctorsOnly().then(function(){ setTimeout(tryOpen, 50); }); }
 }
 
-// Close edit DD on outside click
 document.addEventListener('mousedown', function(e) {
-  var dd  = _editGetDD();
-  var txt = _editGetTxt();
+  var dd = _editGetDD(); var txt = _editGetTxt();
   if (!dd || !txt) return;
-  if (!dd.contains(e.target) && e.target !== txt && !txt.parentElement.contains(e.target)) {
-    _editCloseDD();
-  }
+  if (!dd.contains(e.target) && !txt.parentElement.contains(e.target)) _editCloseDD();
 });
 
 // ── MANAGEMENT ──
