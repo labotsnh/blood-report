@@ -2167,7 +2167,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         <div class="fld cs2"><label>រោគវិនិច្ឆ័យ</label>
 <div style="position:relative">
   <input type="text" id="f_diagnosis" autocomplete="off" placeholder="Diagnosis / Anemia..."
-    oninput="_diagInput(this.value)" onfocus="_diagInput(this.value)" onblur="setTimeout(_diagClose,180)"
+    oninput="_diagInput(this.value)" onfocus="_diagInput(this.value)"
     style="width:100%">
   <div id="diag-dd" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:2px solid var(--red);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;z-index:9999"></div>
 </div></div>
@@ -2705,7 +2705,7 @@ function _updateDatalist(ward) {}
 var allDiagnoses = [];
 
 function _loadDiagnoses() {
-  fetch(SB_URL + '/rest/v1/blood_records?select=diagnosis&diagnosis=not.is.null&diagnosis=not.eq.', {
+  return fetch(SB_URL + '/rest/v1/blood_records?select=diagnosis&limit=2000', {
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
   }).then(function(r){ return r.json(); }).then(function(rows){
     var seen = {};
@@ -2722,16 +2722,28 @@ function _loadDiagnoses() {
 function _diagInput(q) {
   var dd = document.getElementById('diag-dd');
   if (!dd) return;
-  var list = q
+
+  // If diagnoses not loaded yet — fetch then retry
+  if (!allDiagnoses.length) {
+    _loadDiagnoses().then(function(){
+      if (allDiagnoses.length) _diagInput(q || '');
+    });
+    return;
+  }
+
+  var list = (q && q.trim())
     ? allDiagnoses.filter(function(d){ return d.toLowerCase().indexOf(q.toLowerCase()) >= 0; })
-    : allDiagnoses.slice(0, 30);
+    : allDiagnoses.slice(0, 40);
+
   if (!list.length) { dd.style.display = 'none'; return; }
+
   dd.innerHTML = list.map(function(d){
-    var hl = d.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi'),
-      '<strong style="color:var(--red)">$1</strong>');
+    var safe = (q && q.trim()) ? q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') : '';
+    var hl = safe ? d.replace(new RegExp('(' + safe + ')', 'gi'), '<strong style="color:var(--red)">$1</strong>') : d;
     return '<div class="diag-item" data-val="' + d.replace(/"/g,'&quot;') + '" ' +
       'style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #F3F4F6;transition:background .1s">' + hl + '</div>';
   }).join('');
+
   dd.querySelectorAll('.diag-item').forEach(function(el){
     el.addEventListener('mouseenter', function(){ el.style.background = '#FEF2F2'; });
     el.addEventListener('mouseleave', function(){ el.style.background = 'white'; });
@@ -2748,6 +2760,14 @@ function _diagClose() {
   var dd = document.getElementById('diag-dd');
   if (dd) dd.style.display = 'none';
 }
+
+// Close diagnosis DD on outside click (not on mousedown inside DD)
+document.addEventListener('mousedown', function(e) {
+  var dd = document.getElementById('diag-dd');
+  var inp = document.getElementById('f_diagnosis');
+  if (!dd || dd.style.display === 'none') return;
+  if (!dd.contains(e.target) && e.target !== inp) _diagClose();
+});
 
 // ── DOCTOR DROPDOWN (Data Entry) ──
 function _fetchDoctorsOnly() {
