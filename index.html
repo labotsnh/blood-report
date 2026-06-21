@@ -47,15 +47,16 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 .setup-err{color:#F87171;font-size:12px;margin-top:10px;text-align:center;display:none}
 
 /* ── TOPBAR ── */
-.topbar{background:var(--dark);position:sticky;top:0;z-index:200;border-bottom:1px solid rgba(255,255,255,.06)}
+.topbar{background:linear-gradient(135deg,#0C4A6E 0%,#075985 50%,#0369A1 100%);position:sticky;top:0;z-index:200;border-bottom:1px solid rgba(56,189,248,.15)}
 .topbar-inner{display:flex;align-items:center;gap:12px;padding:11px 24px;max-width:1600px;margin:0 auto}
 .logo{width:34px;height:34px;background:var(--red);border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:pulse 2.5s infinite}
 .logo span{transform:rotate(45deg);font-size:15px}
 .topbar-title h1{font-size:15px;font-weight:700;color:white}
 .topbar-title p{font-size:10px;color:rgba(255,255,255,.35);font-family:JetBrains Mono,monospace;letter-spacing:.8px;text-transform:uppercase}
 .nav-tabs{display:flex;gap:3px;margin-left:auto}
-.nav-tab{padding:7px 15px;border-radius:8px;border:none;background:transparent;color:rgba(255,255,255,.45);cursor:pointer;font-size:12px;font-weight:600;transition:all .18s;font-family:Noto Sans Khmer,sans-serif}
-.nav-tab:hover{background:rgba(255,255,255,.07);color:rgba(255,255,255,.8)}
+.nav-tab{padding:7px 15px;border-radius:8px;border:none;background:transparent;color:rgba(186,230,253,.6);cursor:pointer;font-size:12px;font-weight:600;transition:all .18s;font-family:Noto Sans Khmer,sans-serif}
+.nav-tab:hover{background:rgba(255,255,255,.12);color:white}
+.nav-tab.active{background:rgba(255,255,255,.18);color:white;border:1px solid rgba(255,255,255,.25)}
 .nav-tab.active{background:var(--red);color:white}
 .db-badge{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:5px 12px;font-size:11px;font-family:JetBrains Mono,monospace;color:rgba(255,255,255,.5);cursor:pointer;transition:all .2s}
 .db-badge:hover{border-color:rgba(255,255,255,.2)}
@@ -146,8 +147,8 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 /* ── TABLE ── */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12px;min-width:1100px}
-thead tr{background:linear-gradient(135deg,var(--dark) 0%,#1F2937 100%)}
-thead th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap;letter-spacing:.4px;border-right:1px solid rgba(255,255,255,.05)}
+thead tr{background:linear-gradient(135deg,#0C4A6E 0%,#075985 50%,#0369A1 100%)}
+thead th{padding:10px 12px;text-align:left;font-size:10px;font-weight:600;color:rgba(186,230,253,.9);white-space:nowrap;letter-spacing:.4px;border-right:1px solid rgba(56,189,248,.15)}
 thead th:first-child{width:44px;text-align:center}
 tbody tr{border-bottom:1px solid rgba(221,227,236,.6);transition:background .1s}
 tbody tr:hover{background:rgba(185,28,28,.025)}
@@ -1191,7 +1192,9 @@ function buildEditForm(r) {
       .map(o=>`<option value="${o}" ${o===(v||'')?'selected':''}>${o||'-- ជ្រើស --'}</option>`).join('');
   }
   function wardOpts(v) {
-    return ['','ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES']
+    var custom = (typeof allWards !== 'undefined' && allWards.length) ? allWards.map(function(w){ return w.name; }) : [];
+    var list = ['ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES'].concat(custom);
+    return ['',].concat(list)
       .map(o=>`<option value="${o}" ${o===(v||'')?'selected':''}>${o||'-- ជ្រើស --'}</option>`).join('');
   }
   function typeOpts(v) {
@@ -2036,6 +2039,7 @@ setDbStatus(true);
 loadRecords();
 _fetchDoctorsOnly();
 _loadDiagnoses();
+loadWards();
 document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
 
 // Auto-select current month
@@ -2912,7 +2916,121 @@ document.addEventListener('mousedown', function(e) {
 });
 
 // ── MANAGEMENT ──
-function loadDoctors() {
+// ── WARD MANAGEMENT ──
+var allWards = [];
+var editWardId = null;
+var DEFAULT_WARDS = ['ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES'];
+
+function _appendCustomWardOptions() {
+  var ids = ['f_ward_from', 'f_ward_to'];
+  ids.forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    // remove previously injected custom options first (data-custom-ward)
+    sel.querySelectorAll('option[data-custom-ward]').forEach(function(o){ o.remove(); });
+    allWards.forEach(function(w) {
+      if (!w.name) return;
+      var exists = Array.from(sel.options).some(function(o){ return o.value === w.name; });
+      if (exists) return;
+      var opt = document.createElement('option');
+      opt.value = w.name; opt.textContent = w.name;
+      opt.setAttribute('data-custom-ward', '1');
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function loadWards() {
+  fetch(SB_URL + '/rest/v1/wards?select=*&order=name', {
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+  }).then(function(r){ return r.json(); }).then(function(rows){
+    allWards = Array.isArray(rows) ? rows : [];
+    renderWardList();
+    _appendCustomWardOptions();
+  }).catch(function(e){ console.error('loadWards:', e); allWards = []; renderWardList(); });
+}
+
+function renderWardList() {
+  var wrap = document.getElementById('ward-list-wrap');
+  if (!wrap) return;
+
+  // Combine default wards (hardcoded in dropdowns) with custom wards from Supabase
+  var customNames = allWards.map(function(w){ return w.name; });
+  var html = '';
+
+  DEFAULT_WARDS.forEach(function(name){
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#F3F4F6;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:700;font-family:JetBrains Mono,monospace">' +
+      '🏥 ' + name + ' <span style="color:var(--muted);font-size:10px;font-weight:500">(default)</span></div>';
+  });
+
+  allWards.forEach(function(w){
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px 8px 14px;background:white;border:1.5px solid var(--blue);border-radius:9px;font-size:13px;font-weight:700;font-family:JetBrains Mono,monospace">' +
+      '🏥 ' + (w.name||'') +
+      '<button onclick="delWard(' + w.id + ',\'' + (w.name||'').replace(/'/g,"\\'") + '\')" style="margin-left:4px;background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;padding:2px 4px" title="លុប">🗑</button>' +
+    '</div>';
+  });
+
+  if (!DEFAULT_WARDS.length && !allWards.length) {
+    html = '<div style="color:var(--muted);font-size:13px">មិនទាន់មាន Ward</div>';
+  }
+  wrap.innerHTML = html;
+}
+
+function openWardModal() {
+  var inp = document.getElementById('ward-name-input');
+  if (inp) inp.value = '';
+  var ov = document.getElementById('wardOverlay');
+  if (ov) ov.classList.add('open');
+  setTimeout(function(){ if (inp) inp.focus(); }, 100);
+}
+
+function closeWardModal() {
+  var ov = document.getElementById('wardOverlay');
+  if (ov) ov.classList.remove('open');
+}
+
+function saveWard() {
+  var inp = document.getElementById('ward-name-input');
+  var name = inp ? inp.value.trim().toUpperCase() : '';
+  if (!name) { showToast('⚠️ សូមបញ្ចូលឈ្មោះ Ward', 'err'); return; }
+
+  var allNames = DEFAULT_WARDS.concat(allWards.map(function(w){ return w.name; }));
+  if (allNames.indexOf(name) >= 0) { showToast('⚠️ Ward នេះមានរួចហើយ', 'err'); return; }
+
+  fetch(SB_URL + '/rest/v1/wards', {
+    method: 'POST',
+    headers: {
+      'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json', 'Prefer': 'return=representation'
+    },
+    body: JSON.stringify({ name: name })
+  }).then(function(r){
+    if (!r.ok) return r.json().then(function(e){ throw new Error(e.message || 'Insert failed'); });
+    return r.json();
+  }).then(function(){
+    showToast('✅ បានបន្ថែម Ward: ' + name, 'ok');
+    closeWardModal();
+    loadWards();
+  }).catch(function(e){
+    showToast('❌ Error: ' + e.message, 'err');
+  });
+}
+
+function delWard(id, name) {
+  if (!confirm('លុប Ward "' + name + '" ?')) return;
+  fetch(SB_URL + '/rest/v1/wards?id=eq.' + id, {
+    method: 'DELETE',
+    headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
+  }).then(function(r){
+    if (!r.ok) throw new Error('Delete failed');
+    showToast('✅ បានលុប Ward: ' + name, 'ok');
+    loadWards();
+  }).catch(function(e){
+    showToast('❌ Error: ' + e.message, 'err');
+  });
+}
+
+
   fetch(SB_URL + '/rest/v1/doctors?select=*&order=ward,name', {
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
   }).then(function(r){ return r.json(); }).then(function(docs) {
