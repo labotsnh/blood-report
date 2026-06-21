@@ -245,6 +245,7 @@ mark{background:rgba(217,119,6,.25);border-radius:3px;padding:0 2px}
 .filter-btn.active-gold{background:var(--gold);color:white;border-color:var(--gold);box-shadow:0 4px 12px rgba(217,119,6,.3)}
 .filter-btn.active-red{background:var(--red);color:white;border-color:var(--red);box-shadow:0 4px 12px rgba(185,28,28,.3)}
 .filter-btn.active-orange{background:#EA580C;color:white;border-color:#EA580C;box-shadow:0 4px 12px rgba(234,88,12,.3)}
+.filter-btn.active-green{background:#059669;color:white;border-color:#059669;box-shadow:0 4px 12px rgba(5,150,105,.3)}
 
 /* ── NUMBER INPUT BIGGER ── */
 input[type=number] {
@@ -974,18 +975,22 @@ function buildChips(sheets) {
 var activeSpecial = ''; // 'sent' | 'jamphak' | 'notret' | ''
 
 function updateSpecialCounts() {
-  const sentCount    = allRecs.filter(r => parseFloat(r.stock_sent)   > 0).length;
-  const jamphakCount = allRecs.filter(r => parseFloat(r.given_count)  > 0).length;
-  const notretCount  = allRecs.filter(r => parseFloat(r.not_returned) > 0).length;
-  var cannotCount = allRecs.filter(function(r){ return r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes'; }).length;
+  const baseRecs = activeDay === 'all' ? allRecs : allRecs.filter(r => r.sheet === activeDay);
+  const sentCount    = baseRecs.filter(r => parseFloat(r.stock_sent)   > 0).length;
+  const jamphakCount = baseRecs.filter(r => parseFloat(r.given_count)  > 0).length;
+  const notretCount  = baseRecs.filter(r => parseFloat(r.not_returned) > 0).length;
+  var cannotCount = baseRecs.filter(function(r){ return r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes'; }).length;
+  var usedCount = baseRecs.filter(function(r){ return parseFloat(r.qty_used) > 0; }).length;
   var cs = document.getElementById('cnt-sent');
   var cj = document.getElementById('cnt-jamphak');
   var cn = document.getElementById('cnt-notret');
   var cc = document.getElementById('cnt-cannot');
+  var cu = document.getElementById('cnt-used');
   if (cs) cs.textContent = sentCount;
   if (cj) cj.textContent = jamphakCount;
   if (cn) cn.textContent = notretCount;
   if (cc) cc.textContent = cannotCount;
+  if (cu) cu.textContent = usedCount;
 }
 
 function filterSpecial(type) {
@@ -993,7 +998,7 @@ function filterSpecial(type) {
   if (activeSpecial === type) { activeSpecial = ''; }
   else { activeSpecial = type; }
   // Update button styles
-  ['sent','jamphak','notret','cannot'].forEach(t => {
+  ['sent','jamphak','notret','cannot','used'].forEach(t => {
     const btn = document.getElementById('btn-filter-' + t);
     if (!btn) return;
     btn.className = 'filter-btn';
@@ -1002,6 +1007,7 @@ function filterSpecial(type) {
       if (t === 'jamphak') btn.classList.add('active-orange');
       if (t === 'notret')  btn.classList.add('active-red');
       if (t === 'cannot')  btn.classList.add('active-red');
+      if (t === 'used')    btn.classList.add('active-green');
     }
   });
   applyFilter();
@@ -1009,7 +1015,7 @@ function filterSpecial(type) {
 
 function clearSpecialFilter() {
   activeSpecial = '';
-  ['sent','jamphak','notret','cannot'].forEach(t => {
+  ['sent','jamphak','notret','cannot','used'].forEach(t => {
     const btn = document.getElementById('btn-filter-' + t);
     if (btn) btn.className = 'filter-btn';
   });
@@ -1030,6 +1036,7 @@ function applyFilter() {
     if (activeSpecial === 'jamphak' && !(parseFloat(r.given_count)  > 0)) return false;
     if (activeSpecial === 'notret'  && !(parseFloat(r.not_returned) > 0)) return false;
     if (activeSpecial === 'cannot' && !(r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes')) return false;
+    if (activeSpecial === 'used'   && !(parseFloat(r.qty_used) > 0)) return false;
     return true;
   });
   document.getElementById('st-filt').textContent = filtered.length;
@@ -2483,6 +2490,9 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <button class="filter-btn" id="btn-filter-cannot" onclick="filterSpecial('cannot')">
         ⛔ ពុំអាចសង <span id="cnt-cannot" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
       </button>
+      <button class="filter-btn" id="btn-filter-used" onclick="filterSpecial('used')">
+        ✅ យកប្រើ <span id="cnt-used" style="background:rgba(0,0,0,.08);border-radius:10px;padding:1px 7px;font-size:11px">0</span>
+      </button>
       <button class="filter-btn" style="margin-left:auto" onclick="clearSpecialFilter()">✕ Clear Filter</button>
     </div>
     <div class="day-bar" id="dayBar"><span style="color:var(--light);font-size:11px">Loading...</span></div>
@@ -2926,7 +2936,7 @@ var editWardId = null;
 var DEFAULT_WARDS = ['ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES'];
 
 function _appendCustomWardOptions() {
-  var ids = ['f_ward_from', 'f_ward_to'];
+  var ids = ['f_ward_from', 'f_ward_to', 'doctor-ward'];
   ids.forEach(function(id) {
     var sel = document.getElementById(id);
     if (!sel) return;
