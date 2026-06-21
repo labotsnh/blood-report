@@ -1023,7 +1023,7 @@ function applyFilter() {
   filtered = allRecs.filter(r => {
     if (activeDay !== 'all' && r.sheet !== activeDay) return false;
     if (hn && !String(r.hn        || '').toLowerCase().includes(hn)) return false;
-    if (wd && !String(r.ward_from || '').toLowerCase().includes(wd)) return false;
+    if (wd && !(String(r.ward_from || '').toLowerCase().includes(wd) || String(r.ward_to || '').toLowerCase().includes(wd))) return false;
     if (dt && !String(r.date      || '').includes(dt)) return false;
     // Special filters
     if (activeSpecial === 'sent'    && !(parseFloat(r.stock_sent)   > 0)) return false;
@@ -1089,7 +1089,7 @@ function renderTable() {
       hn: r.hn ? (hn ? hl(r.hn, hn) : r.hn) : '-',
       name: r.name || '-', age: r.age || '-', gender: gnB,
       ward_from: r.ward_from ? (wd ? hl(r.ward_from, wd) : r.ward_from) : '-',
-      ward_to: r.ward_to || '-', doctor_req: r.doctor_req ? `<span style="background:#FFF7ED;color:#C2410C;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;font-family:Noto Sans Khmer,sans-serif">${r.doctor_req}</span>` : '-',
+      ward_to: r.ward_to ? (wd ? hl(r.ward_to, wd) : r.ward_to) : '-', doctor_req: r.doctor_req ? `<span style="background:#FFF7ED;color:#C2410C;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;font-family:Noto Sans Khmer,sans-serif">${r.doctor_req}</span>` : '-',
       diagnosis: r.diagnosis || '-', hb: r.hb || '-',
       grp: gB, blood_type: r.blood_type || '-',
       xmatch: r.xmatch || '-', s25: okB(r.s25),
@@ -1796,10 +1796,14 @@ function closeModal() { document.getElementById('editModal').classList.remove('o
 // ═══════════════════════════════════════════
 const ua = document.getElementById('uploadArea');
 const fi = document.getElementById('fileInput');
-ua.addEventListener('dragover', e => { e.preventDefault(); ua.classList.add('drag'); });
-ua.addEventListener('dragleave', () => ua.classList.remove('drag'));
-ua.addEventListener('drop', e => { e.preventDefault(); ua.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
-fi.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+if (ua) {
+  ua.addEventListener('dragover', e => { e.preventDefault(); ua.classList.add('drag'); });
+  ua.addEventListener('dragleave', () => ua.classList.remove('drag'));
+  ua.addEventListener('drop', e => { e.preventDefault(); ua.classList.remove('drag'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+}
+if (fi) {
+  fi.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+}
 
 function handleFile(file) {
   if (!file.name.match(/\.(xlsx|xlsm|xls)$/i)) { showToast('⚠️ Excel files only', 'err'); return; }
@@ -2940,14 +2944,23 @@ function _appendCustomWardOptions() {
   });
 }
 
-function loadWards() {
+function loadWards(retryCount) {
+  retryCount = retryCount || 0;
   fetch(SB_URL + '/rest/v1/wards?select=*&order=name', {
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
   }).then(function(r){ return r.json(); }).then(function(rows){
     allWards = Array.isArray(rows) ? rows : [];
     renderWardList();
     _appendCustomWardOptions();
-  }).catch(function(e){ console.error('loadWards:', e); allWards = []; renderWardList(); });
+  }).catch(function(e){
+    console.error('loadWards:', e);
+    if (retryCount < 3) {
+      setTimeout(function(){ loadWards(retryCount + 1); }, 1000);
+    } else {
+      allWards = [];
+      renderWardList();
+    }
+  });
 }
 
 function renderWardList() {
@@ -3031,6 +3044,7 @@ function delWard(id, name) {
 }
 
 
+function loadDoctors() {
   fetch(SB_URL + '/rest/v1/doctors?select=*&order=ward,name', {
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
   }).then(function(r){ return r.json(); }).then(function(docs) {
