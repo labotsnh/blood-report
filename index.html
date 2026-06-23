@@ -479,12 +479,20 @@ function addBagRow() {
   // Add back_fields div INSIDE this bag
   const bfDiv = document.createElement('div');
   bfDiv.id = 'back_fields' + sfx;
-  bfDiv.style.cssText = 'display:none;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
+  bfDiv.style.cssText = 'display:none;grid-template-columns:0.8fr 1fr 1.3fr 0.7fr 1.8fr;gap:12px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
   bfDiv.innerHTML = `
     <div class="fld">
-      <label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
-      <input type="text" id="f_back_giver${sfx}" placeholder="ឈ្មោះ..."
-        style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:Noto Sans Khmer,sans-serif;width:100%;outline:none;background:white">
+      <label style="color:var(--red)">🏥 ផ្នែក</label>
+      <select id="f_back_ward${sfx}" onchange="_backDdWardChange('${sfx}')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white">${_globalWardOpts('')}</select>
+    </div>
+    <div class="fld">
+      <label style="color:var(--red)">👨‍⚕️ គ្រូពេទ្យ</label>
+      <div style="position:relative">
+        <input type="text" id="f_back_doctor_txt${sfx}" autocomplete="off" placeholder="🔍 ស្វែងរក..."
+          onclick="_backOpenDD('${sfx}')" oninput="_backOnDoctorInput('${sfx}', this.value)"
+          style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white">
+        <input type="hidden" id="f_back_giver${sfx}">
+      </div>
     </div>
     <div class="fld">
       <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
@@ -499,8 +507,25 @@ function addBagRow() {
     </div>
     <div class="fld">
       <label style="color:var(--red)">📝 មូលហេតុ</label>
-      <input type="text" id="f_back_reason${sfx}" placeholder="មូលហេតុ..."
-        style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:Noto Sans Khmer,sans-serif;width:100%;outline:none;background:white">
+      <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:white;border:2px solid var(--red);border-radius:9px">
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+          <input type="radio" name="f_back_reason_r${sfx}" value="គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)" onchange="document.getElementById('f_back_reason${sfx}').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+          <span>✂️ គ្រូពេទ្យអោយកាត់ចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(ឈាមរបស់អ្នកជំងឺ)</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+          <input type="radio" name="f_back_reason_r${sfx}" value="គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)" onchange="document.getElementById('f_back_reason${sfx}').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+          <span>🔄 គ្រូពេទ្យអោយវិលចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(មូលហេតុទៅផ្តល់ឈាមអត់បាន)</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+          <input type="radio" name="f_back_reason_r${sfx}" value="LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)" onchange="document.getElementById('f_back_reason${sfx}').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+          <span>🧪 LABO វិលចូលស្តុកខ្លួនឯង <span style="color:#9CA3AF;font-weight:500">(មូលហេតុទៅផ្តល់ឈាមអត់បាន)</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+          <input type="radio" name="f_back_reason_r${sfx}" value="គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)" onchange="document.getElementById('f_back_reason${sfx}').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+          <span>↩️ គ្រូពេទ្យអោយកាត់ចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(ឈាមខ្ចី ហើយអត់យកប្រើ)</span></span>
+        </label>
+      </div>
+      <input type="hidden" id="f_back_reason${sfx}">
     </div>`;
   // Insert back_fields INSIDE the bag div
   div.appendChild(bfDiv);
@@ -601,6 +626,102 @@ function dataEntryCannotChange(chk) {
 }
 
 // ── Bag Back Stock Change ──
+function _globalWardOpts(v) {
+  var custom = (typeof allWards !== 'undefined' && allWards.length) ? allWards.map(function(w){ return w.name; }) : [];
+  var list = ['ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES'].concat(custom);
+  return ['',].concat(list)
+    .map(function(o){ return '<option value="' + o + '" ' + (o===(v||'')?'selected':'') + '>' + (o||'-- ជ្រើស --') + '</option>'; }).join('');
+}
+
+// ── BAG BACK GIVER (ward + doctor) DROPDOWN ──
+function _backGetDD(sfx)  { return document.getElementById('back-doctor-dd' + sfx); }
+function _backGetTxt(sfx) { return document.getElementById('f_back_doctor_txt' + sfx); }
+function _backGetHid(sfx) { return document.getElementById('f_back_giver' + sfx); }
+
+function _backPosDD(sfx) {
+  var inp = _backGetTxt(sfx); var dd = _backGetDD(sfx);
+  if (!inp || !dd) return;
+  var r = inp.getBoundingClientRect();
+  dd.style.position = 'fixed'; dd.style.top = (r.bottom + 2) + 'px';
+  dd.style.left = r.left + 'px'; dd.style.width = r.width + 'px'; dd.style.zIndex = '999999';
+}
+
+function _backRenderDD(sfx, q) {
+  var dd = _backGetDD(sfx); if (!dd) return;
+  var wardSel = document.getElementById('f_back_ward' + sfx);
+  var ward = wardSel ? wardSel.value : '';
+  var base = ward ? allDoctors.filter(function(d){ return d.ward === ward; }) : allDoctors;
+  var list = q ? base.filter(function(d){ return d.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; }) : base;
+  if (!list.length) {
+    var msg = ward ? '⚠️ គ្មានគ្រូពេទ្យក្នុងផ្នែក ' + ward : (allDoctors.length ? '🔍 គ្មានឈ្មោះត្រូវគ្នា' : '⏳ Loading...');
+    dd.innerHTML = '<div style="padding:12px 16px;color:#9CA3AF;font-size:13px;text-align:center">' + msg + '</div>';
+    return;
+  }
+  dd.innerHTML = list.map(function(d) {
+    return '<div class="back-ddi" data-val="វេជ្ជ-' + d.name + '" data-txt="' + d.name + '" style="padding:11px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid #F3F4F6">' +
+      '<span style="font-weight:700;font-family:Noto Sans Khmer,sans-serif">វេជ្ជ-' + d.name + '</span>' +
+      '<span style="color:#9CA3AF;font-size:12px;margin-left:8px">(' + d.ward + ')</span></div>';
+  }).join('');
+  dd.querySelectorAll('.back-ddi').forEach(function(el) {
+    el.addEventListener('mouseenter', function(){ el.style.background = '#FEF2F2'; });
+    el.addEventListener('mouseleave', function(){ el.style.background = 'white'; });
+    el.addEventListener('mousedown', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      var hid = _backGetHid(sfx); var txt = _backGetTxt(sfx);
+      if (hid) hid.value = el.dataset.val;
+      if (txt) txt.value = el.dataset.txt;
+      _backCloseDD(sfx);
+    });
+  });
+}
+
+function _backOpenDD(sfx) {
+  var dd = _backGetDD(sfx);
+  if (!dd) {
+    dd = document.createElement('div'); dd.id = 'back-doctor-dd' + sfx;
+    dd.style.cssText = 'display:none;background:white;border:2px solid var(--red);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);max-height:240px;overflow-y:auto';
+    document.body.appendChild(dd);
+  }
+  _backPosDD(sfx); dd.style.display = 'block'; _backRenderDD(sfx, '');
+}
+
+function _backCloseDD(sfx) {
+  var dd = _backGetDD(sfx); if (dd) dd.style.display = 'none';
+}
+
+function _backOnDoctorInput(sfx, q) {
+  var dd = _backGetDD(sfx);
+  if (!dd || dd.style.display === 'none') _backOpenDD(sfx);
+  _backRenderDD(sfx, q);
+}
+
+function _backDdWardChange(sfx) {
+  var hid = _backGetHid(sfx); var txt = _backGetTxt(sfx);
+  if (hid) hid.value = ''; if (txt) txt.value = '';
+  _backCloseDD(sfx);
+  var wardEl = document.getElementById('f_back_ward' + sfx);
+  var ward = wardEl ? wardEl.value : '';
+  if (!ward) return;
+  function tryOpen() {
+    var wd = allDoctors.filter(function(d){ return d.ward === ward; });
+    if (!wd.length) {
+      if (txt) { txt.placeholder = '⚠️ គ្មានគ្រូពេទ្យក្នុង ' + ward; setTimeout(function(){ txt.placeholder = '🔍 ស្វែងរក...'; }, 2500); }
+      return;
+    }
+    _backOpenDD(sfx);
+  }
+  if (allDoctors.length > 0) { setTimeout(tryOpen, 80); }
+  else { _fetchDoctorsOnly().then(function(){ setTimeout(tryOpen, 50); }); }
+}
+
+document.addEventListener('mousedown', function(e) {
+  ['', '_2', '_3', '_4', '_5', '_6', '_7'].forEach(function(sfx) {
+    var dd = _backGetDD(sfx); var txt = _backGetTxt(sfx);
+    if (!dd || !txt || dd.style.display === 'none') return;
+    if (!dd.contains(e.target) && e.target !== txt) _backCloseDD(sfx);
+  });
+});
+
 function bagBackChange(chk, sfx) {
   const lbl    = document.getElementById('lbl_back'    + sfx);
   const span   = document.getElementById('span_back'   + sfx);
@@ -623,7 +744,7 @@ function bagBackChange(chk, sfx) {
     const bkEl = document.getElementById('f_back_stock');
     if (bkEl) { bkEl.value = (parseFloat(bkEl.value)||0) + 1; calc(); }
     // Focus on first field
-    setTimeout(() => { document.getElementById('f_back_giver'+sfx)?.focus(); }, 100);
+    setTimeout(() => { document.getElementById('f_back_ward'+sfx)?.focus(); }, 100);
   } else {
     if (lbl)    { lbl.style.borderColor='var(--border)'; lbl.style.background='white'; }
     if (span)   { span.textContent='វិលស្តុក'; span.style.color='inherit'; }
@@ -742,36 +863,43 @@ function readForm() {
     hb:            v('f_hb'), ht: v('f_ht'), blood_code: v('f_blood_code'),
     bag_used:   document.getElementById('f_bag_used')?.checked  ? 'yes' : '',
     bag_back:        document.getElementById('f_bag_back')?.checked   ? 'yes' : '',
+    bag_back_ward:   (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_ward')?.value||'') : '') || null,
     bag_back_giver:  (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_giver')?.value||'') : '') || null,
     bag_back_dt:     (document.getElementById('f_bag_back')?.checked ? ((document.getElementById('f_back_date')?.value||'') + ' ' + (document.getElementById('f_back_time')?.value||'')) : '') || null,
     bag_back_lab:    (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_lab')?.value||'') : '') || null,
     bag_back_reason: (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_reason')?.value||'') : '') || null,
     bag_back_2: document.getElementById('f_bag_back_2')?.checked ? 'yes' : '',
+    bag_back_ward_2:   (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_ward_2')?.value||'') : '') || null,
     bag_back_giver_2:  (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_giver_2')?.value||'') : '') || null,
     bag_back_dt_2:     (document.getElementById('f_bag_back_2')?.checked ? ((document.getElementById('f_back_date_2')?.value||'') + ' ' + (document.getElementById('f_back_time_2')?.value||'')) : '') || null,
     bag_back_lab_2:    (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_lab_2')?.value||'') : '') || null,
     bag_back_reason_2: (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_reason_2')?.value||'') : '') || null,
     bag_back_3: document.getElementById('f_bag_back_3')?.checked ? 'yes' : '',
+    bag_back_ward_3:   (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_ward_3')?.value||'') : '') || null,
     bag_back_giver_3:  (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_giver_3')?.value||'') : '') || null,
     bag_back_dt_3:     (document.getElementById('f_bag_back_3')?.checked ? ((document.getElementById('f_back_date_3')?.value||'') + ' ' + (document.getElementById('f_back_time_3')?.value||'')) : '') || null,
     bag_back_lab_3:    (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_lab_3')?.value||'') : '') || null,
     bag_back_reason_3: (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_reason_3')?.value||'') : '') || null,
     bag_back_4: document.getElementById('f_bag_back_4')?.checked ? 'yes' : '',
+    bag_back_ward_4:   (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_ward_4')?.value||'') : '') || null,
     bag_back_giver_4:  (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_giver_4')?.value||'') : '') || null,
     bag_back_dt_4:     (document.getElementById('f_bag_back_4')?.checked ? ((document.getElementById('f_back_date_4')?.value||'') + ' ' + (document.getElementById('f_back_time_4')?.value||'')) : '') || null,
     bag_back_lab_4:    (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_lab_4')?.value||'') : '') || null,
     bag_back_reason_4: (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_reason_4')?.value||'') : '') || null,
     bag_back_5: document.getElementById('f_bag_back_5')?.checked ? 'yes' : '',
+    bag_back_ward_5:   (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_ward_5')?.value||'') : '') || null,
     bag_back_giver_5:  (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_giver_5')?.value||'') : '') || null,
     bag_back_dt_5:     (document.getElementById('f_bag_back_5')?.checked ? ((document.getElementById('f_back_date_5')?.value||'') + ' ' + (document.getElementById('f_back_time_5')?.value||'')) : '') || null,
     bag_back_lab_5:    (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_lab_5')?.value||'') : '') || null,
     bag_back_reason_5: (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_reason_5')?.value||'') : '') || null,
     bag_back_6: document.getElementById('f_bag_back_6')?.checked ? 'yes' : '',
+    bag_back_ward_6:   (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_ward_6')?.value||'') : '') || null,
     bag_back_giver_6:  (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_giver_6')?.value||'') : '') || null,
     bag_back_dt_6:     (document.getElementById('f_bag_back_6')?.checked ? ((document.getElementById('f_back_date_6')?.value||'') + ' ' + (document.getElementById('f_back_time_6')?.value||'')) : '') || null,
     bag_back_lab_6:    (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_lab_6')?.value||'') : '') || null,
     bag_back_reason_6: (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_reason_6')?.value||'') : '') || null,
     bag_back_7: document.getElementById('f_bag_back_7')?.checked ? 'yes' : '',
+    bag_back_ward_7:   (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_ward_7')?.value||'') : '') || null,
     bag_back_giver_7:  (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_giver_7')?.value||'') : '') || null,
     bag_back_dt_7:     (document.getElementById('f_bag_back_7')?.checked ? ((document.getElementById('f_back_date_7')?.value||'') + ' ' + (document.getElementById('f_back_time_7')?.value||'')) : '') || null,
     bag_back_lab_7:    (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_lab_7')?.value||'') : '') || null,
@@ -900,6 +1028,44 @@ function clearForm() {
 async function saveRecord() {
   const rec = readForm();
   if (!rec.hn && !rec.name) { showToast('⚠️ សូមបញ្ចូល HN ឬ ឈ្មោះ', 'err'); return false; }
+
+  // Required fields validation
+  function flagErr(el, msg) {
+    if (el) {
+      var target = el.closest('.iu') || el;
+      target.style.borderColor = 'var(--red)';
+      target.style.boxShadow = '0 0 0 3px rgba(185,28,28,.12)';
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => el.focus(), 300);
+    }
+    showToast('⚠️ ' + msg, 'err');
+  }
+
+  const ageEl = document.getElementById('f_age');
+  if (!ageEl?.value?.trim()) { flagErr(ageEl, 'សូមបញ្ចូល អាយុ'); return false; }
+
+  const genderChecked = document.querySelector('input[name="gender"]:checked');
+  if (!genderChecked) { showToast('⚠️ សូមជ្រើស ភេទ', 'err'); return false; }
+
+  const wardEl = document.getElementById('f_ward_from');
+  if (!wardEl?.value) { flagErr(wardEl, 'សូមជ្រើស ផ្នែកស្នើ'); return false; }
+
+  const docHid = document.getElementById('f_doctor_req');
+  const docTxt = document.getElementById('f_doctor_req_txt');
+  if (!docHid?.value?.trim()) { flagErr(docTxt, 'សូមជ្រើស គ្រូពេទ្យ ស្នើ'); return false; }
+
+  const diagEl = document.getElementById('f_diagnosis');
+  if (!diagEl?.value?.trim()) { flagErr(diagEl, 'សូមបញ្ចូល រោគវិនិច្ឆ័យ'); return false; }
+
+  const hbEl = document.getElementById('f_hb');
+  if (!hbEl?.value?.trim()) { flagErr(hbEl, 'សូមបញ្ចូល Hb (g/dL)'); return false; }
+
+  const htEl = document.getElementById('f_ht');
+  if (!htEl?.value?.trim()) { flagErr(htEl, 'សូមបញ្ចូល Ht (%)'); return false; }
+
+  const xmEl = document.getElementById('f_xmatch');
+  if (!xmEl?.value?.trim()) { flagErr(xmEl, 'សូមបញ្ចូល X-MATCH (BAG)'); return false; }
+
   // Validate: cannot_return requires reason
   if (document.getElementById('f_cannot_return')?.checked && !rec.reason?.trim()) {
     const r = document.getElementById('f_reason');
@@ -914,6 +1080,7 @@ async function saveRecord() {
     await sbInsert(rec);
     showToast('✅ Saved to Supabase!', 'ok');
     _loadDiagnoses(); // refresh diagnosis list
+    if (document.getElementById('pg-report')?.classList.contains('active')) buildReport();
     return true;
   } catch(e) {
     showToast('❌ Error: ' + e.message, 'err'); return false;
@@ -1161,6 +1328,13 @@ function openEdit(i) {
   document.getElementById('editModal').classList.add('open');
   // Recalc auto fields after modal opens
   setTimeout(() => editCalc(), 50);
+  // Re-trigger bag_back panel display for bags already checked (HTML checked attr doesn't fire onchange)
+  setTimeout(() => {
+    ['', '_2', '_3', '_4', '_5', '_6', '_7'].forEach(sfx => {
+      const cb = document.getElementById('edit_bag_back' + sfx);
+      if (cb && cb.checked) editBagBackChange(cb, sfx, true);
+    });
+  }, 150);
 }
 
 function ef(k, l, t, val) {
@@ -1636,7 +1810,7 @@ function editRemoveBag(sfx) {
 }
 
 // Edit modal: bag back change
-function editBagBackChange(chk, sfx) {
+function editBagBackChange(chk, sfx, skipAutoCalc) {
   const lbl  = document.getElementById('edit_lbl_back'  + sfx);
   const span = document.getElementById('edit_span_back' + sfx);
   const row  = document.getElementById('edit_bagrow'    + sfx);
@@ -1650,17 +1824,27 @@ function editBagBackChange(chk, sfx) {
     // Uncheck used
     const usedCb = document.getElementById('edit_bag_used' + sfx);
     if (usedCb && usedCb.checked) { usedCb.checked=false; editBagUsedChange(usedCb, sfx); }
-    // Auto +1 to back_stock in edit modal
-    const bkEl = document.querySelector('#editBody [data-key="back_stock"]');
-    if (bkEl) { bkEl.value = (parseFloat(bkEl.value)||0) + 1; editCalc(); }
+    // Auto +1 to back_stock in edit modal (skip when re-triggering on modal open for already-checked bags)
+    if (!skipAutoCalc) {
+      const bkEl = document.querySelector('#editBody [data-key="back_stock"]');
+      if (bkEl) { bkEl.value = (parseFloat(bkEl.value)||0) + 1; editCalc(); }
+    }
     // Show back fields - create if not exists
     if (!bf) {
+      var _r = filtered.find(function(x){ return x.id === editId; }) || {};
       bf = document.createElement('div');
       bf.id = bfId;
       bf.style.cssText = 'margin-top:12px;padding:14px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
-      bf.innerHTML = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
-        <div class="fld"><label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
-          <input type="text" data-key="bag_back_giver${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none;background:white" placeholder="ឈ្មោះ..."></div>
+      bf.innerHTML = `<div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.7fr 1.8fr;gap:12px">
+        <div class="fld"><label style="color:var(--red)">🏥 ផ្នែក</label>
+          <select id="edit_back_ward${sfx}" data-key="bag_back_ward${sfx}" onchange="_editBackDdWardChange('${sfx}')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white">${_globalWardOpts(_r['bag_back_ward'+sfx]||'')}</select></div>
+        <div class="fld"><label style="color:var(--red)">👨‍⚕️ គ្រូពេទ្យ</label>
+          <div style="position:relative">
+            <input type="text" id="edit_back_doctor_txt${sfx}" autocomplete="off" placeholder="🔍 ស្វែងរក..." value="${eH(String(_r['bag_back_giver'+sfx]||'').replace(/^វេជ្ជ[-\\s]*/u,''))}"
+              onclick="_editBackOpenDD('${sfx}')" oninput="_editBackOnDoctorInput('${sfx}', this.value)"
+              style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white">
+            <input type="hidden" id="edit_back_giver_hid${sfx}" data-key="bag_back_giver${sfx}" value="${eH(_r['bag_back_giver'+sfx]||'')}">
+          </div></div>
         <div class="fld"><label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
           <div style="display:flex;gap:6px">
             <input type="date" data-key="bag_back_date${sfx}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
@@ -1669,7 +1853,26 @@ function editBagBackChange(chk, sfx) {
         <div class="fld"><label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
           <select data-key="bag_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:JetBrains Mono,monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select></div>
         <div class="fld"><label style="color:var(--red)">📝 មូលហេតុ</label>
-          <input type="text" data-key="bag_back_reason${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none;background:white" placeholder="មូលហេតុ..."></div>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:white;border:2px solid var(--red);border-radius:9px">
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+              <input type="radio" name="edit_back_reason_r${sfx}" value="គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)" ${_r['bag_back_reason'+sfx]==='គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)'?'checked':''} onchange="document.querySelector('#editBody [data-key=\\'bag_back_reason${sfx}\\']').value=this.value" style="accent-color:var(--red);width:14px;height:14px;margin-top:1px;flex-shrink:0">
+              <span>✂️ គ្រូពេទ្យអោយកាត់ចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(ឈាមរបស់អ្នកជំងឺ)</span></span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+              <input type="radio" name="edit_back_reason_r${sfx}" value="គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)" ${_r['bag_back_reason'+sfx]==='គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)'?'checked':''} onchange="document.querySelector('#editBody [data-key=\\'bag_back_reason${sfx}\\']').value=this.value" style="accent-color:var(--red);width:14px;height:14px;margin-top:1px;flex-shrink:0">
+              <span>🔄 គ្រូពេទ្យអោយវិលចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(មូលហេតុទៅផ្តល់ឈាមអត់បាន)</span></span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+              <input type="radio" name="edit_back_reason_r${sfx}" value="LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)" ${_r['bag_back_reason'+sfx]==='LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)'?'checked':''} onchange="document.querySelector('#editBody [data-key=\\'bag_back_reason${sfx}\\']').value=this.value" style="accent-color:var(--red);width:14px;height:14px;margin-top:1px;flex-shrink:0">
+              <span>🧪 LABO វិលចូលស្តុកខ្លួនឯង <span style="color:#9CA3AF;font-weight:500">(មូលហេតុទៅផ្តល់ឈាមអត់បាន)</span></span>
+            </label>
+            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+              <input type="radio" name="edit_back_reason_r${sfx}" value="គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)" ${_r['bag_back_reason'+sfx]==='គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)'?'checked':''} onchange="document.querySelector('#editBody [data-key=\\'bag_back_reason${sfx}\\']').value=this.value" style="accent-color:var(--red);width:14px;height:14px;margin-top:1px;flex-shrink:0">
+              <span>↩️ គ្រូពេទ្យអោយកាត់ចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(ឈាមខ្ចី ហើយអត់យកប្រើ)</span></span>
+            </label>
+          </div>
+          <input type="hidden" data-key="bag_back_reason${sfx}" value="${eH(_r['bag_back_reason'+sfx]||'')}">
+        </div>
       </div>`;
       const rowEl = document.getElementById('edit_bagrow' + sfx);
       if (rowEl) rowEl.appendChild(bf);
@@ -1792,6 +1995,7 @@ async function saveEdit() {
     closeModal(); showToast('✅ Updated in Supabase!', 'ok');
     _loadDiagnoses(); // refresh diagnosis list
     await loadRecords();
+    if (document.getElementById('pg-report')?.classList.contains('active')) buildReport();
   } catch(e) { showToast('❌ ' + e.message, 'err'); }
   finally { btn.innerHTML = btn._orig; btn.disabled = false; }
 }
@@ -2284,11 +2488,19 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
 
         <!-- Back fields INSIDE Bag 1 -->
         <div id="back_fields" style="display:none;margin-top:14px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease">
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.7fr 1.8fr;gap:12px">
             <div class="fld">
-              <label style="color:var(--red)">👤 អ្នកអោយកាត់</label>
-              <input type="text" id="f_back_giver" placeholder="ឈ្មោះ..."
-                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:Noto Sans Khmer,sans-serif;width:100%;outline:none;background:white">
+              <label style="color:var(--red)">🏥 ផ្នែក</label>
+              <select id="f_back_ward" onchange="_backDdWardChange('')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select>
+            </div>
+            <div class="fld">
+              <label style="color:var(--red)">👨‍⚕️ គ្រូពេទ្យ</label>
+              <div style="position:relative">
+                <input type="text" id="f_back_doctor_txt" autocomplete="off" placeholder="🔍 ស្វែងរក..."
+                  onclick="_backOpenDD('')" oninput="_backOnDoctorInput('', this.value)"
+                  style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white">
+                <input type="hidden" id="f_back_giver">
+              </div>
             </div>
             <div class="fld">
               <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
@@ -2305,8 +2517,25 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
             </div>
             <div class="fld">
               <label style="color:var(--red)">📝 មូលហេតុ</label>
-              <input type="text" id="f_back_reason" placeholder="មូលហេតុ..."
-                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:Noto Sans Khmer,sans-serif;width:100%;outline:none;background:white">
+              <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:white;border:2px solid var(--red);border-radius:9px">
+                <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+                  <input type="radio" name="f_back_reason_r" value="គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)" onchange="document.getElementById('f_back_reason').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+                  <span>✂️ គ្រូពេទ្យអោយកាត់ចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(ឈាមរបស់អ្នកជំងឺ)</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+                  <input type="radio" name="f_back_reason_r" value="គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)" onchange="document.getElementById('f_back_reason').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+                  <span>🔄 គ្រូពេទ្យអោយវិលចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(មូលហេតុទៅផ្តល់ឈាមអត់បាន)</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+                  <input type="radio" name="f_back_reason_r" value="LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)" onchange="document.getElementById('f_back_reason').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+                  <span>🧪 LABO វិលចូលស្តុកខ្លួនឯង <span style="color:#9CA3AF;font-weight:500">(មូលហេតុទៅផ្តល់ឈាមអត់បាន)</span></span>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12.5px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
+                  <input type="radio" name="f_back_reason_r" value="គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)" onchange="document.getElementById('f_back_reason').value=this.value" style="accent-color:var(--red);width:15px;height:15px;margin-top:1px;flex-shrink:0">
+                  <span>↩️ គ្រូពេទ្យអោយកាត់ចូលស្តុក <span style="color:#9CA3AF;font-weight:500">(ឈាមខ្ចី ហើយអត់យកប្រើ)</span></span>
+                </label>
+              </div>
+              <input type="hidden" id="f_back_reason">
             </div>
           </div>
         </div>
@@ -2845,6 +3074,95 @@ function _onDoctorInput(q) {
 }
 
 // ── EDIT MODAL DOCTOR DROPDOWN ──
+// ── EDIT MODAL: BAG BACK GIVER (ward + doctor) DROPDOWN ──
+function _editBackGetDD(sfx)  { return document.getElementById('edit-back-doctor-dd' + sfx); }
+function _editBackGetTxt(sfx) { return document.getElementById('edit_back_doctor_txt' + sfx); }
+function _editBackGetHid(sfx) { return document.getElementById('edit_back_giver_hid' + sfx); }
+
+function _editBackPosDD(sfx) {
+  var inp = _editBackGetTxt(sfx); var dd = _editBackGetDD(sfx);
+  if (!inp || !dd) return;
+  var r = inp.getBoundingClientRect();
+  dd.style.position = 'fixed'; dd.style.top = (r.bottom + 2) + 'px';
+  dd.style.left = r.left + 'px'; dd.style.width = r.width + 'px'; dd.style.zIndex = '999999';
+}
+
+function _editBackRenderDD(sfx, q) {
+  var dd = _editBackGetDD(sfx); if (!dd) return;
+  var wardSel = document.getElementById('edit_back_ward' + sfx);
+  var ward = wardSel ? wardSel.value : '';
+  var base = ward ? allDoctors.filter(function(d){ return d.ward === ward; }) : allDoctors;
+  var list = q ? base.filter(function(d){ return d.name.toLowerCase().indexOf(q.toLowerCase()) >= 0; }) : base;
+  if (!list.length) {
+    var msg = ward ? '⚠️ គ្មានគ្រូពេទ្យក្នុងផ្នែក ' + ward : (allDoctors.length ? '🔍 គ្មានឈ្មោះត្រូវគ្នា' : '⏳ Loading...');
+    dd.innerHTML = '<div style="padding:12px 16px;color:#9CA3AF;font-size:13px;text-align:center">' + msg + '</div>';
+    return;
+  }
+  dd.innerHTML = list.map(function(d) {
+    return '<div class="editback-ddi" data-val="វេជ្ជ-' + d.name + '" data-txt="' + d.name + '" style="padding:11px 16px;cursor:pointer;font-size:14px;border-bottom:1px solid #F3F4F6">' +
+      '<span style="font-weight:700;font-family:Noto Sans Khmer,sans-serif">វេជ្ជ-' + d.name + '</span>' +
+      '<span style="color:#9CA3AF;font-size:12px;margin-left:8px">(' + d.ward + ')</span></div>';
+  }).join('');
+  dd.querySelectorAll('.editback-ddi').forEach(function(el) {
+    el.addEventListener('mouseenter', function(){ el.style.background = '#FEF2F2'; });
+    el.addEventListener('mouseleave', function(){ el.style.background = 'white'; });
+    el.addEventListener('mousedown', function(e) {
+      e.preventDefault(); e.stopPropagation();
+      var hid = _editBackGetHid(sfx); var txt = _editBackGetTxt(sfx);
+      if (hid) hid.value = el.dataset.val;
+      if (txt) txt.value = el.dataset.txt;
+      _editBackCloseDD(sfx);
+    });
+  });
+}
+
+function _editBackOpenDD(sfx) {
+  var dd = _editBackGetDD(sfx);
+  if (!dd) {
+    dd = document.createElement('div'); dd.id = 'edit-back-doctor-dd' + sfx;
+    dd.style.cssText = 'display:none;background:white;border:2px solid var(--red);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.15);max-height:240px;overflow-y:auto';
+    document.body.appendChild(dd);
+  }
+  _editBackPosDD(sfx); dd.style.display = 'block'; _editBackRenderDD(sfx, '');
+}
+
+function _editBackCloseDD(sfx) {
+  var dd = _editBackGetDD(sfx); if (dd) dd.style.display = 'none';
+}
+
+function _editBackOnDoctorInput(sfx, q) {
+  var dd = _editBackGetDD(sfx);
+  if (!dd || dd.style.display === 'none') _editBackOpenDD(sfx);
+  _editBackRenderDD(sfx, q);
+}
+
+function _editBackDdWardChange(sfx) {
+  var hid = _editBackGetHid(sfx); var txt = _editBackGetTxt(sfx);
+  if (hid) hid.value = ''; if (txt) txt.value = '';
+  _editBackCloseDD(sfx);
+  var wardEl = document.getElementById('edit_back_ward' + sfx);
+  var ward = wardEl ? wardEl.value : '';
+  if (!ward) return;
+  function tryOpen() {
+    var wd = allDoctors.filter(function(d){ return d.ward === ward; });
+    if (!wd.length) {
+      if (txt) { txt.placeholder = '⚠️ គ្មានគ្រូពេទ្យក្នុង ' + ward; setTimeout(function(){ txt.placeholder = '🔍 ស្វែងរក...'; }, 2500); }
+      return;
+    }
+    _editBackOpenDD(sfx);
+  }
+  if (allDoctors.length > 0) { setTimeout(tryOpen, 80); }
+  else { _fetchDoctorsOnly().then(function(){ setTimeout(tryOpen, 50); }); }
+}
+
+document.addEventListener('mousedown', function(e) {
+  ['', '_2', '_3', '_4', '_5', '_6', '_7'].forEach(function(sfx) {
+    var dd = _editBackGetDD(sfx); var txt = _editBackGetTxt(sfx);
+    if (!dd || !txt || dd.style.display === 'none') return;
+    if (!dd.contains(e.target) && e.target !== txt) _editBackCloseDD(sfx);
+  });
+});
+
 function _editGetDD()  { return document.getElementById('edit-doctor-dd'); }
 function _editGetTxt() { return document.getElementById('edit_doctor_req_txt'); }
 function _editGetHid() { return document.getElementById('edit_doctor_req_hid'); }
@@ -2936,7 +3254,7 @@ var editWardId = null;
 var DEFAULT_WARDS = ['ED','DMID','MICU','OBGY','SICU','SUR','PED','ANES'];
 
 function _appendCustomWardOptions() {
-  var ids = ['f_ward_from', 'f_ward_to', 'doctor-ward'];
+  var ids = ['f_ward_from', 'f_ward_to', 'doctor-ward', 'f_back_ward'];
   ids.forEach(function(id) {
     var sel = document.getElementById(id);
     if (!sel) return;
@@ -3253,6 +3571,20 @@ function deleteDoctor(id, name) {
     <!-- Ward Tables -->
     <div id="rpt-ward-tables"></div>
 
+    <!-- Bag Back Reason Report -->
+    <div class="card" style="margin-top:24px;padding:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+        <h3 style="font-size:15px;font-weight:800;margin:0">🔄 របាយការណ៍ មូលហេតុ វិលចូលស្តុក</h3>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <input type="date" id="rpt-reason-from" onchange="_buildReasonReport(_rptReasonData())" style="border:2px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;outline:none;cursor:pointer">
+          <span style="color:var(--muted);font-size:12px">ដល់</span>
+          <input type="date" id="rpt-reason-to" onchange="_buildReasonReport(_rptReasonData())" style="border:2px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;outline:none;cursor:pointer">
+          <button onclick="document.getElementById('rpt-reason-from').value='';document.getElementById('rpt-reason-to').value='';_buildReasonReport(_rptReasonData())" style="background:#F3F4F6;border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)">✕ Clear</button>
+        </div>
+      </div>
+      <div id="rpt-reason-table"></div>
+    </div>
+
   </div>
 </div>
 
@@ -3277,6 +3609,74 @@ function buildReport() {
   _buildSummary(recs);
   _buildChart(recs);
   _buildWardTables(recs);
+  _buildReasonReport(_rptReasonData());
+}
+
+function _rptReasonData() {
+  var from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
+  var to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
+  if (!from && !to) return allRecs;
+  return allRecs.filter(function(r) {
+    if (!r.date) return false;
+    var d = r.date.slice(0, 10); // YYYY-MM-DD
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  });
+}
+
+function _buildReasonReport(recs) {
+  var REASONS = [
+    { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)', icon: '✂️', color: '#0369A1', bg: '#F0F9FF' },
+    { key: 'គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)', icon: '🔄', color: '#7C3AED', bg: '#EDE9FE' },
+    { key: 'LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)', icon: '🧪', color: '#B45309', bg: '#FEF3C7' },
+    { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)', icon: '↩️', color: '#059669', bg: '#DCFCE7' }
+  ];
+
+  // Count occurrences across bag_back_reason, bag_back_reason_2..._7
+  var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
+  var counts = REASONS.map(function(){ return 0; });
+  var total = 0;
+
+  recs.forEach(function(r) {
+    sfxs.forEach(function(sfx) {
+      var val = r['bag_back_reason' + sfx];
+      if (!val) return;
+      var idx = REASONS.findIndex(function(rs){ return rs.key === val; });
+      if (idx >= 0) { counts[idx]++; total++; }
+    });
+  });
+
+  var rows = REASONS.map(function(rs, i) {
+    var pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0;
+    return '<tr style="border-bottom:1px solid var(--border)">' +
+      '<td style="padding:14px 18px;font-size:13px;font-weight:700;color:' + rs.color + ';white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:unset!important;line-height:1.6;text-align:left">' + rs.icon + '&nbsp;&nbsp;' + rs.key + '</td>' +
+      '<td style="padding:12px 14px;text-align:center;white-space:nowrap"><span style="background:' + rs.bg + ';color:' + rs.color + ';padding:4px 14px;border-radius:20px;font-size:14px;font-weight:900">' + counts[i] + '</span></td>' +
+      '<td style="padding:12px 14px;text-align:center;font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap">' + pct + '%</td>' +
+    '</tr>';
+  }).join('');
+
+  var html = '<div style="overflow-x:auto">' +
+    '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+      '<colgroup><col style="width:60%"><col style="width:20%"><col style="width:20%"></colgroup>' +
+      '<thead><tr style="background:linear-gradient(135deg,#0C4A6E 0%,#075985 50%,#0369A1 100%)">' +
+        '<th style="padding:11px 14px;text-align:left;font-size:11px;font-weight:700;color:white">មូលហេតុ</th>' +
+        '<th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:white">ចំនួន</th>' +
+        '<th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:white">%</th>' +
+      '</tr></thead>' +
+      '<tbody>' + rows +
+      '<tr><td style="padding:12px 14px;font-size:13px;font-weight:900">សរុប</td>' +
+      '<td style="padding:12px 14px;text-align:center;font-size:14px;font-weight:900">' + total + '</td>' +
+      '<td style="padding:12px 14px;text-align:center;font-size:13px;font-weight:700;color:var(--muted)">100%</td></tr>' +
+      '</tbody>' +
+    '</table>' +
+  '</div>';
+
+  if (total === 0) {
+    html = '<div style="text-align:center;padding:40px;color:var(--muted)">គ្មានទិន្នន័យ មូលហេតុ វិលចូលស្តុក</div>';
+  }
+
+  document.getElementById('rpt-reason-table').innerHTML = html;
 }
 
 function _buildSummary(recs) {
