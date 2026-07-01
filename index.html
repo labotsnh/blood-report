@@ -80,7 +80,7 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 /* ── FORM ── */
 .fg{display:grid;gap:14px}
 .g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}
-.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
 .g6{grid-template-columns:repeat(6,1fr)}
 @media(max-width:1100px){.g5,.g6{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:700px){.g2,.g3,.g4,.g5,.g6{grid-template-columns:1fr}}
@@ -100,8 +100,8 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 .iu input{border:none!important;box-shadow:none!important;border-radius:0!important;flex:1;min-width:0}
 .iu .unit{background:#F1F5F9;border-left:1.5px solid var(--border);padding:11px 12px;font-size:12px;font-weight:700;color:var(--slate);white-space:nowrap;font-family:JetBrains Mono,monospace;display:flex;align-items:center}
 
-.radio-g{display:flex;gap:8px;flex-wrap:wrap}
-.radio-g label{display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 16px;cursor:pointer;transition:all .15s;font-size:14px;font-weight:700;background:white;color:var(--text)}
+.radio-g{display:flex;gap:8px}
+.radio-g label{display:flex;align-items:center;justify-content:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 12px;cursor:pointer;transition:all .15s;font-size:14px;font-weight:700;background:white;color:var(--text);flex:1;white-space:nowrap;min-width:0}
 .radio-g label:hover{border-color:var(--red);background:var(--red4)}
 .radio-g input[type=radio]{display:none}
 .radio-g label:has(input:checked){border-color:var(--red);background:var(--red3);color:var(--red)}
@@ -111,6 +111,8 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 .chk-g label:hover{border-color:var(--blue);background:var(--blue2)}
 .chk-g input[type=checkbox]{accent-color:var(--green);width:16px;height:16px}
 .chk-g label:has(input:checked){border-color:var(--green);background:var(--green2);color:var(--green)}
+.chk-connected:hover{background:var(--blue2)}
+.chk-connected:has(input:checked){background:var(--green2);color:var(--green)}
 
 /* ── BUTTONS ── */
 .btn{padding:11px 20px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:all .18s;font-family:Noto Sans Khmer,sans-serif;white-space:nowrap}
@@ -479,7 +481,7 @@ function addBagRow() {
   // Add back_fields div INSIDE this bag
   const bfDiv = document.createElement('div');
   bfDiv.id = 'back_fields' + sfx;
-  bfDiv.style.cssText = 'display:none;grid-template-columns:0.8fr 1fr 1.3fr 0.7fr 1.8fr;gap:12px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
+  bfDiv.style.cssText = 'display:none;grid-template-columns:0.8fr 1fr 1.3fr 0.5fr 2fr;gap:12px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
   bfDiv.innerHTML = `
     <div class="fld">
       <label style="color:var(--red)">🏥 ផ្នែក</label>
@@ -799,6 +801,31 @@ function formatSN(input) {
     input.closest('.fld').appendChild(preview);
   }
   preview.textContent = val ? '→ SN-' + val : '';
+
+  // Duplicate SN check (warning only, doesn't block)
+  const wrap = input.closest('.iu');
+  let warn = document.getElementById('sn_dup_warn');
+  if (!warn) {
+    warn = document.createElement('div');
+    warn.id = 'sn_dup_warn';
+    warn.style.cssText = 'font-size:11.5px;font-weight:700;color:#B45309;margin-top:4px;display:none;align-items:center;gap:4px';
+    input.closest('.fld').appendChild(warn);
+  }
+  if (!val) {
+    if (wrap) { wrap.style.borderColor = ''; wrap.style.boxShadow = ''; }
+    warn.style.display = 'none';
+    return;
+  }
+  const fullSN = 'SN-' + val;
+  const dup = (typeof allRecs !== 'undefined' ? allRecs : []).filter(r => (r.sn_code || '') === fullSN);
+  if (dup.length > 0) {
+    if (wrap) { wrap.style.borderColor = '#D97706'; wrap.style.boxShadow = '0 0 0 3px rgba(217,119,6,.12)'; }
+    warn.innerHTML = '⚠️ SN-' + val + ' មានរួចហើយ (' + (dup[0].name || dup[0].hn || 'HN: ' + (dup[0].hn||'-')) + ')';
+    warn.style.display = 'flex';
+  } else {
+    if (wrap) { wrap.style.borderColor = ''; wrap.style.boxShadow = ''; }
+    warn.style.display = 'none';
+  }
 }
 
 // Get formatted SN value
@@ -1065,6 +1092,51 @@ async function saveRecord() {
 
   const xmEl = document.getElementById('f_xmatch');
   if (!xmEl?.value?.trim()) { flagErr(xmEl, 'សូមបញ្ចូល X-MATCH (BAG)'); return false; }
+
+  const newEl = document.getElementById('f_new');
+  if (!newEl?.value?.trim()) { flagErr(newEl, 'សូមបញ្ចូល ចំនួន ថ្មី'); return false; }
+
+  const borrowEl = document.getElementById('f_borrow');
+  if (!borrowEl?.value?.trim()) { flagErr(borrowEl, 'សូមបញ្ចូល ចំនួន ខ្ចី'); return false; }
+
+  // Validate: bag_back fields required based on selected reason
+  var BACK_SFXS = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
+  var LABO_REASON = 'LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)';
+  for (var _bi = 0; _bi < BACK_SFXS.length; _bi++) {
+    var _sfx = BACK_SFXS[_bi];
+    var _cb = document.getElementById('f_bag_back' + _sfx);
+    if (!_cb || !_cb.checked) continue;
+    var _bagNum = _sfx ? _sfx.replace('_','') : '1';
+    var _reason = (document.getElementById('f_back_reason' + _sfx) || {}).value || '';
+    var _isLabo = (_reason === LABO_REASON);
+
+    // All options: Lab required
+    var _labEl = document.getElementById('f_back_lab' + _sfx);
+    if (!_labEl || !_labEl.value) {
+      if (_labEl) { _labEl.style.borderColor='var(--red)'; _labEl.style.boxShadow='0 0 0 3px rgba(185,28,28,.12)'; _labEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+      showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស បុគ្គលិក Lab', 'err'); return false;
+    }
+
+    // Option 1,2,4: also require ផ្នែក + គ្រូពេទ្យ + ថ្ងៃ
+    if (!_isLabo) {
+      var _wardEl = document.getElementById('f_back_ward' + _sfx);
+      if (!_wardEl || !_wardEl.value) {
+        if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស ផ្នែក', 'err'); return false;
+      }
+      var _givEl = document.getElementById('f_back_giver' + _sfx);
+      if (!_givEl || !_givEl.value) {
+        var _txtEl = document.getElementById('f_back_doctor_txt' + _sfx);
+        if (_txtEl) { _txtEl.style.borderColor='var(--red)'; _txtEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស គ្រូពេទ្យ', 'err'); return false;
+      }
+      var _dateEl = document.getElementById('f_back_date' + _sfx);
+      if (!_dateEl || !_dateEl.value) {
+        if (_dateEl) { _dateEl.style.borderColor='var(--red)'; _dateEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Bag ' + _bagNum + ': សូមបញ្ចូល ថ្ងៃ ម៉ោង វិល', 'err'); return false;
+      }
+    }
+  }
 
   // Validate: cannot_return requires reason
   if (document.getElementById('f_cannot_return')?.checked && !rec.reason?.trim()) {
@@ -1835,7 +1907,7 @@ function editBagBackChange(chk, sfx, skipAutoCalc) {
       bf = document.createElement('div');
       bf.id = bfId;
       bf.style.cssText = 'margin-top:12px;padding:14px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
-      bf.innerHTML = `<div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.7fr 1.8fr;gap:12px">
+      bf.innerHTML = `<div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.5fr 2fr;gap:12px">
         <div class="fld"><label style="color:var(--red)">🏥 ផ្នែក</label>
           <select id="edit_back_ward${sfx}" data-key="bag_back_ward${sfx}" onchange="_editBackDdWardChange('${sfx}')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white">${_globalWardOpts(_r['bag_back_ward'+sfx]||'')}</select></div>
         <div class="fld"><label style="color:var(--red)">👨‍⚕️ គ្រូពេទ្យ</label>
@@ -1919,6 +1991,46 @@ function editCalc() {
 }
 
 async function saveEdit() {
+  // Validate: bag_back fields required based on selected reason (Edit Record)
+  var BACK_SFXS_E = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
+  var LABO_REASON_E = 'LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)';
+  for (var _bi = 0; _bi < BACK_SFXS_E.length; _bi++) {
+    var _sfx = BACK_SFXS_E[_bi];
+    var _cb = document.querySelector('#editBody [data-key="bag_back' + _sfx + '"]');
+    if (!_cb || !_cb.checked) continue;
+    var _bagNum = _sfx ? _sfx.replace('_','') : '1';
+    var _reasonHid = document.querySelector('#editBody [data-key="bag_back_reason' + _sfx + '"]');
+    var _reason = _reasonHid ? _reasonHid.value : '';
+    var _isLabo = (_reason === LABO_REASON_E);
+
+    // All: Lab required
+    var _labEl = document.querySelector('#editBody [data-key="bag_back_lab' + _sfx + '"]');
+    if (!_labEl || !_labEl.value) {
+      if (_labEl) { _labEl.style.borderColor='var(--red)'; _labEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+      showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស បុគ្គលិក Lab', 'err'); return;
+    }
+
+    // Option 1,2,4: also require ផ្នែក + គ្រូពេទ្យ + ថ្ងៃ
+    if (!_isLabo) {
+      var _wardEl = document.querySelector('#editBody [data-key="bag_back_ward' + _sfx + '"]');
+      if (!_wardEl || !_wardEl.value) {
+        if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស ផ្នែក', 'err'); return;
+      }
+      var _givEl = document.querySelector('#editBody [data-key="bag_back_giver' + _sfx + '"]');
+      if (!_givEl || !_givEl.value) {
+        var _txtEl = document.getElementById('edit_back_doctor_txt' + _sfx);
+        if (_txtEl) { _txtEl.style.borderColor='var(--red)'; _txtEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស គ្រូពេទ្យ', 'err'); return;
+      }
+      var _dateEl = document.querySelector('#editBody [data-key="bag_back_date' + _sfx + '"]');
+      if (!_dateEl || !_dateEl.value) {
+        if (_dateEl) { _dateEl.style.borderColor='var(--red)'; _dateEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+        showToast('⚠️ Bag ' + _bagNum + ': សូមបញ្ចូល ថ្ងៃ ម៉ោង វិល', 'err'); return;
+      }
+    }
+  }
+
   // Validate: if cannot_return checked, reason must be filled
   const cannotCb = document.getElementById('edit_cannot_return_cb');
   const reasonEl = document.getElementById('edit_reason_input');
@@ -2380,7 +2492,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         <span class="sec-lbl" style="background:var(--dark)">🏥 ព័ត៌មានអ្នកជំងឺ</span>
         <div class="sec-line"></div>
       </div>
-      <div class="fg g6">
+      <div class="fg" style="display:grid;grid-template-columns:1fr 0.9fr 1fr 1.4fr 0.7fr 1.3fr;gap:16px">
         <div class="fld">
           <label>🏷️ SN ប៉ុងឈាម</label>
           <div class="iu">
@@ -2392,14 +2504,13 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         </div>
         <div class="fld"><label>ថ្ងៃខែឆ្នាំ <span class="req">*</span></label><input type="date" id="f_date"></div>
         <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX"></div>
-        <div class="fld cs2"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
-        <div class="fld"><label>អាយុ</label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none"><span class="unit">ឆ្នាំ</span></div></div>
-      </div>
-      <div class="fg g5" style="margin-top:11px">
+        <div class="fld"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
+        <div class="fld"><label>អាយុ</label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ឆ្នាំ</span></div></div>
         <div class="fld"><label>ភេទ</label><div class="radio-g"><label><input type="radio" name="gender" value="ប" checked><span>👨 ប្រុស</span></label><label><input type="radio" name="gender" value="ស"><span>👩 ស្រី</span></label></div></div>
+      </div>
+      <div class="fg g3" style="margin-top:11px">
         <div class="fld"><label>ផ្នែកស្នើ</label><select id="f_ward_from" onchange="_ddWardChange(this.value)" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
         <div class="fld"><label>បញ្ជូន ទៅផ្នែក</label><select id="f_ward_to" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
-        <div class="fld"><label>លេខទូរសព្ទ</label><input type="text" id="f_phone" placeholder="0XX XXX XXX"></div>
         <div class="fld">
           <label>👨‍⚕️ គ្រូពេទ្យ ស្នើ</label>
           <div class="iu" style="border-color:var(--border)">
@@ -2488,7 +2599,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
 
         <!-- Back fields INSIDE Bag 1 -->
         <div id="back_fields" style="display:none;margin-top:14px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease">
-          <div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.7fr 1.8fr;gap:12px">
+          <div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.5fr 2fr;gap:12px">
             <div class="fld">
               <label style="color:var(--red)">🏥 ផ្នែក</label>
               <select id="f_back_ward" onchange="_backDdWardChange('')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select>
@@ -2555,8 +2666,8 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         </button>
       </div>
 
-      <!-- X-Match + Saline checks row -->
-      <div class="fg g5" style="margin-top:4px">
+      <!-- X-Match row -->
+      <div class="fg" style="display:grid;grid-template-columns:1fr 3fr;gap:16px;margin-top:4px">
         <div class="fld">
           <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">⚗️ X-MATCH (BAG)</label>
           <div class="iu" style="border:2.5px solid var(--red);border-radius:10px;background:#FFF5F5">
@@ -2565,10 +2676,27 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
             <span class="unit" style="background:#FECACA;border-color:var(--red);color:var(--red);font-weight:900;font-size:14px">Bag</span>
           </div>
         </div>
-        <div class="fld"><label>🔬 Saline IGM T.25C</label><div class="chk-g"><label><input type="checkbox" id="f_s25"><span>✓ ok</span></label></div></div>
-        <div class="fld"><label>🔬 Saline IGM T.37C</label><div class="chk-g"><label><input type="checkbox" id="f_s37"><span>✓ ok</span></label></div></div>
-        <div class="fld"><label>🔬 Anti. Human IGG</label><div class="chk-g"><label><input type="checkbox" id="f_anti"><span>✓ ok</span></label></div></div>
-        <div class="fld"><label>🔬 Come Check Cell</label><div class="chk-g"><label><input type="checkbox" id="f_come"><span>✓ ok</span></label></div></div>
+        <div class="fld">
+          <label>🔬 Saline / Anti.IGG / Come Check</label>
+          <div style="display:flex;border:2px solid var(--border);border-radius:10px;overflow:hidden">
+            <label style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 6px;cursor:pointer;border-right:1px solid var(--border);transition:background .15s" class="chk-connected">
+              <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.3px">25C</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700"><input type="checkbox" id="f_s25" style="width:15px;height:15px;accent-color:var(--red)">✓ ok</span>
+            </label>
+            <label style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 6px;cursor:pointer;border-right:1px solid var(--border);transition:background .15s" class="chk-connected">
+              <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.3px">37C</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700"><input type="checkbox" id="f_s37" style="width:15px;height:15px;accent-color:var(--red)">✓ ok</span>
+            </label>
+            <label style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 6px;cursor:pointer;border-right:1px solid var(--border);transition:background .15s" class="chk-connected">
+              <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.3px">Anti.IGG</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700"><input type="checkbox" id="f_anti" style="width:15px;height:15px;accent-color:var(--red)">✓ ok</span>
+            </label>
+            <label style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 6px;cursor:pointer;transition:background .15s" class="chk-connected">
+              <span style="font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.3px">Come Chk</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700"><input type="checkbox" id="f_come" style="width:15px;height:15px;accent-color:var(--red)">✓ ok</span>
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- X-Match Staff + DateTime + NBTC row -->
@@ -2608,8 +2736,8 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       </div>
       <!-- Row 1: ថ្មី ខ្ចី សង ស្តុកផ្ញើ យកប្រើ វិលចូលស្តុក -->
       <div class="fg g6">
-        <div class="fld"><label>ថ្មី</label><div class="iu"><input type="number" id="f_new" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
-        <div class="fld"><label>ខ្ចី</label><div class="iu"><input type="number" id="f_borrow" placeholder="0" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>ថ្មី</label><div class="iu"><input type="number" id="f_new" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
+        <div class="fld"><label>ខ្ចី</label><div class="iu"><input type="number" id="f_borrow" min="0" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
         <div class="fld"><label>សង</label><div class="iu"><input type="number" id="f_return" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
         <div class="fld"><label style="color:var(--gold)">ស្តុកផ្ញើ 🔢 (auto)</label><div class="iu" style="border-color:var(--gold);background:var(--gold2)"><input type="number" id="f_stock_sent" readonly style="border:none!important;outline:none;background:transparent;color:var(--gold);font-weight:700"><span class="unit" style="border-color:var(--gold)">auto</span></div></div>
         <div class="fld"><label>យកប្រើ</label><div class="iu"><input type="number" id="f_used" placeholder="0" min="0" oninput="calc()" style="border:none!important;outline:none"><span class="unit">Bag</span></div></div>
@@ -3575,6 +3703,9 @@ function deleteDoctor(id, name) {
     <div class="card" style="margin-top:24px;padding:24px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
         <h3 style="font-size:15px;font-weight:800;margin:0">🔄 របាយការណ៍ មូលហេតុ វិលចូលស្តុក</h3>
+        <button onclick="_exportReasonExcel()" style="background:linear-gradient(135deg,#059669,#047857);color:white;border:none;border-radius:9px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+          ⬇️ Export Excel
+        </button>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <input type="date" id="rpt-reason-from" onchange="_buildReasonReport(_rptReasonData())" style="border:2px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;outline:none;cursor:pointer">
           <span style="color:var(--muted);font-size:12px">ដល់</span>
@@ -3616,12 +3747,18 @@ function _rptReasonData() {
   var from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
   var to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
   if (!from && !to) return allRecs;
+  var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
+  // Keep record if ANY bag_back_dt falls within range
   return allRecs.filter(function(r) {
-    if (!r.date) return false;
-    var d = r.date.slice(0, 10); // YYYY-MM-DD
-    if (from && d < from) return false;
-    if (to && d > to) return false;
-    return true;
+    return sfxs.some(function(sfx) {
+      var val = r['bag_back_reason' + sfx];
+      if (!val) return false;
+      var dt = (r['bag_back_dt' + sfx] || '').slice(0, 10);
+      if (!dt) return false;
+      if (from && dt < from) return false;
+      if (to && dt > to) return false;
+      return true;
+    });
   });
 }
 
@@ -3633,41 +3770,80 @@ function _buildReasonReport(recs) {
     { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)', icon: '↩️', color: '#059669', bg: '#DCFCE7' }
   ];
 
-  // Count occurrences across bag_back_reason, bag_back_reason_2..._7
   var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
   var counts = REASONS.map(function(){ return 0; });
+  // For each reason: collect ward, doctor, date, lab
+  var details = REASONS.map(function(){ return { ward:{}, doctor:{}, date:[], lab:{} }; });
   var total = 0;
+
+  var _from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
+  var _to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
 
   recs.forEach(function(r) {
     sfxs.forEach(function(sfx) {
       var val = r['bag_back_reason' + sfx];
       if (!val) return;
       var idx = REASONS.findIndex(function(rs){ return rs.key === val; });
-      if (idx >= 0) { counts[idx]++; total++; }
+      if (idx < 0) return;
+      var dt = (r['bag_back_dt' + sfx] || '').slice(0,10);
+      // Filter by bag_back_dt date range
+      if (_from && dt && dt < _from) return;
+      if (_to   && dt && dt > _to)   return;
+      counts[idx]++; total++;
+      var d = details[idx];
+      var ward = r['bag_back_ward' + sfx] || '';
+      var doc  = (r['bag_back_giver' + sfx] || '').replace(/^វេជ្ជ[-\s]*/u, '');
+      var lab  = r['bag_back_lab' + sfx] || '';
+      if (ward) d.ward[ward] = (d.ward[ward]||0) + 1;
+      if (doc)  d.doctor[doc]  = (d.doctor[doc]||0)  + 1;
+      if (dt)   { if (d.date.indexOf(dt) < 0) d.date.push(dt); }
+      if (lab)  d.lab[lab]  = (d.lab[lab]||0)  + 1;
     });
   });
 
+  function _tags(obj, color) {
+    return Object.keys(obj).sort().map(function(k){
+      return '<span style="display:inline-block;background:' + color + '22;color:' + color + ';border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:1px">' + k + ' <span style="opacity:.7">(' + obj[k] + ')</span></span>';
+    }).join('');
+  }
+
+  function _dates(arr) {
+    return arr.sort().slice(-3).map(function(d){
+      return '<span style="display:inline-block;background:#F1F5F9;color:#475569;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:600;margin:1px">' + d + '</span>';
+    }).join('') + (arr.length > 3 ? '<span style="font-size:11px;color:var(--muted)"> +' + (arr.length-3) + '</span>' : '');
+  }
+
   var rows = REASONS.map(function(rs, i) {
     var pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0;
+    var d = details[i];
     return '<tr style="border-bottom:1px solid var(--border)">' +
-      '<td style="padding:14px 18px;font-size:13px;font-weight:700;color:' + rs.color + ';white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:unset!important;line-height:1.6;text-align:left">' + rs.icon + '&nbsp;&nbsp;' + rs.key + '</td>' +
-      '<td style="padding:12px 14px;text-align:center;white-space:nowrap"><span style="background:' + rs.bg + ';color:' + rs.color + ';padding:4px 14px;border-radius:20px;font-size:14px;font-weight:900">' + counts[i] + '</span></td>' +
-      '<td style="padding:12px 14px;text-align:center;font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap">' + pct + '%</td>' +
+      '<td style="padding:12px 14px;font-size:13px;font-weight:700;color:' + rs.color + ';white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:unset!important;line-height:1.6">' + rs.icon + '&nbsp;' + rs.key + '</td>' +
+      '<td style="padding:8px 10px;text-align:center;white-space:nowrap"><span style="background:' + rs.bg + ';color:' + rs.color + ';padding:4px 12px;border-radius:20px;font-size:14px;font-weight:900">' + counts[i] + '</span></td>' +
+      '<td style="padding:8px 10px;text-align:center;font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap">' + pct + '%</td>' +
+      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.ward,'#0369A1')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
+      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.doctor,'#7C3AED')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
+      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (d.date.length ? _dates(d.date) : '<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
+      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.lab,'#059669')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
     '</tr>';
   }).join('');
 
+  var thStyle = 'padding:11px 10px;text-align:left;font-size:10px;font-weight:700;color:white;white-space:nowrap';
   var html = '<div style="overflow-x:auto">' +
-    '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-      '<colgroup><col style="width:60%"><col style="width:20%"><col style="width:20%"></colgroup>' +
+    '<table style="width:100%;border-collapse:collapse;min-width:900px">' +
       '<thead><tr style="background:linear-gradient(135deg,#0C4A6E 0%,#075985 50%,#0369A1 100%)">' +
-        '<th style="padding:11px 14px;text-align:left;font-size:11px;font-weight:700;color:white">មូលហេតុ</th>' +
-        '<th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:white">ចំនួន</th>' +
-        '<th style="padding:11px 14px;text-align:center;font-size:11px;font-weight:700;color:white">%</th>' +
+        '<th style="' + thStyle + ';width:30%">មូលហេតុ</th>' +
+        '<th style="' + thStyle + ';text-align:center;width:8%">ចំនួន</th>' +
+        '<th style="' + thStyle + ';text-align:center;width:6%">%</th>' +
+        '<th style="' + thStyle + ';width:12%">🏥 ផ្នែក</th>' +
+        '<th style="' + thStyle + ';width:14%">👨‍⚕️ គ្រូពេទ្យ</th>' +
+        '<th style="' + thStyle + ';width:16%">🕐 ថ្ងៃ ម៉ោង វិល</th>' +
+        '<th style="' + thStyle + ';width:14%">🧑‍⚕️ Lab</th>' +
       '</tr></thead>' +
       '<tbody>' + rows +
-      '<tr><td style="padding:12px 14px;font-size:13px;font-weight:900">សរុប</td>' +
-      '<td style="padding:12px 14px;text-align:center;font-size:14px;font-weight:900">' + total + '</td>' +
-      '<td style="padding:12px 14px;text-align:center;font-size:13px;font-weight:700;color:var(--muted)">100%</td></tr>' +
+      '<tr style="background:#F8FAFC"><td style="padding:12px 14px;font-size:13px;font-weight:900">សរុប</td>' +
+      '<td style="padding:12px 10px;text-align:center;font-size:14px;font-weight:900">' + total + '</td>' +
+      '<td style="padding:12px 10px;text-align:center;font-size:13px;font-weight:700;color:var(--muted)">100%</td>' +
+      '<td colspan="4"></td></tr>' +
       '</tbody>' +
     '</table>' +
   '</div>';
@@ -3677,6 +3853,86 @@ function _buildReasonReport(recs) {
   }
 
   document.getElementById('rpt-reason-table').innerHTML = html;
+}
+
+function _exportReasonExcel() {
+  var REASONS = [
+    { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)', icon: '✂️' },
+    { key: 'គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)', icon: '🔄' },
+    { key: 'LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)', icon: '🧪' },
+    { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)', icon: '↩️' }
+  ];
+  var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
+  var recs = _rptReasonData();
+  var total = 0;
+
+  // Collect per-reason arrays of {ward, doctor, date, lab}
+  var details = REASONS.map(function(){ return []; });
+
+  recs.forEach(function(r) {
+    sfxs.forEach(function(sfx) {
+      var val = r['bag_back_reason' + sfx];
+      if (!val) return;
+      var idx = REASONS.findIndex(function(rs){ return rs.key === val; });
+      if (idx < 0) return;
+      total++;
+      details[idx].push({
+        ward:   r['bag_back_ward'  + sfx] || '',
+        doctor: (r['bag_back_giver'+ sfx] || '').replace(/^វេជ្ជ[-\s]*/u, ''),
+        date:   (r['bag_back_dt'   + sfx] || '').slice(0,10),
+        lab:    r['bag_back_lab'   + sfx] || '',
+        hn:     r.hn   || '',
+        name:   r.name || ''
+      });
+    });
+  });
+
+  var BOM = '\uFEFF';
+  var rows = [['មូលហេតុ','ចំនួនសរុប','%','ផ្នែក','គ្រូពេទ្យ','ថ្ងៃ ម៉ោង វិល','Lab','HN','ឈ្មោះ']];
+
+  REASONS.forEach(function(rs, i) {
+    var cnt = details[i].length;
+    var pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
+    var label = rs.icon + ' ' + rs.key;
+
+    if (cnt === 0) {
+      rows.push([label, 0, '0%', '', '', '', '', '', '']);
+    } else {
+      details[i].forEach(function(item, j) {
+        rows.push([
+          j === 0 ? label : '',       // show reason only on first row
+          j === 0 ? cnt : '',         // show count only on first row
+          j === 0 ? pct + '%' : '',   // show % only on first row
+          item.ward,
+          item.doctor,
+          item.date,
+          item.lab,
+          item.hn,
+          item.name
+        ]);
+      });
+    }
+    // blank separator row between reasons
+    rows.push(['', '', '', '', '', '', '', '', '']);
+  });
+
+  rows.push(['សរុប', total, '100%', '', '', '', '', '', '']);
+
+  var from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
+  var to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
+  var dateLabel = (from || to) ? (from + '_to_' + to) : 'All';
+
+  var csv = BOM + rows.map(function(r){
+    return r.map(function(c){ return '"' + String(c).replace(/"/g,'""') + '"'; }).join(',');
+  }).join('\r\n');
+
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = 'Report_Vil_Chol_Stok_' + dateLabel + '.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('✅ Export Excel រួចហើយ!', 'ok');
 }
 
 function _buildSummary(recs) {
