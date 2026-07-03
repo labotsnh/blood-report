@@ -101,7 +101,7 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 .iu .unit{background:#F1F5F9;border-left:1.5px solid var(--border);padding:11px 12px;font-size:12px;font-weight:700;color:var(--slate);white-space:nowrap;font-family:JetBrains Mono,monospace;display:flex;align-items:center}
 
 .radio-g{display:flex;gap:8px}
-.radio-g label{display:flex;align-items:center;justify-content:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 12px;cursor:pointer;transition:all .15s;font-size:14px;font-weight:700;background:white;color:var(--text);flex:1;white-space:nowrap;min-width:0}
+.radio-g label{display:flex;align-items:center;justify-content:center;gap:4px;border:2px solid var(--border);border-radius:9px;padding:7px 4px;cursor:pointer;transition:all .15s;font-size:11px;font-weight:700;background:white;color:var(--text);flex:1;white-space:nowrap;min-width:0}
 .radio-g label:hover{border-color:var(--red);background:var(--red4)}
 .radio-g input[type=radio]{display:none}
 .radio-g label:has(input:checked){border-color:var(--red);background:var(--red3);color:var(--red)}
@@ -883,7 +883,7 @@ function readForm() {
     sheet:         document.getElementById('daySelect').value,
     sn_code:       getSNValue(),
     date:          document.getElementById('f_date').value || null,
-    hn:            v('f_hn'), name: v('f_name'), age: v('f_age'),
+    hn:            v('f_hn'), name: v('f_name'), age: v('f_age'), age_month: v('f_age_month'), age_day: v('f_age_day'),
     gender:        document.querySelector('input[name="gender"]:checked')?.value || 'ប',
     ward_from:     v('f_ward_from'), ward_to: v('f_ward_to'), phone: v('f_phone'),
     doctor_req:    getDoctorValue(), diagnosis: v('f_diagnosis'),
@@ -992,7 +992,7 @@ function readForm() {
 function v(id) { return document.getElementById(id)?.value?.trim() || null; }
 
 function clearForm() {
-  ['f_sn','f_date','f_hn','f_name','f_age','f_ward_from','f_ward_to','f_phone','f_doctor_req',
+  ['f_sn','f_date','f_hn','f_name','f_age','f_age_month','f_age_day','f_ward_from','f_ward_to','f_phone','f_doctor_req',
    'f_diagnosis','f_hb','f_ht','f_blood_code','f_blood_exp','f_xmatch','f_new',
    'f_borrow','f_return','f_used','f_back_stock','f_doctor_out','f_checkin_dt',
    'f_given_count','f_lab_person','f_ward_recv','f_out_date','f_given_back',
@@ -1596,7 +1596,13 @@ function buildEditForm(r) {
     ${einp('date','📅 ថ្ងៃ','date',r.date)}
     ${einp('hn','🪪 HN ជំងឺ','text',r.hn)}
     ${einp('name','👤 ឈ្មោះ','text',r.name)}
-    ${einp('age','🔢 អាយុ','number',r.age)}
+    <div class="fld"><label>🔢 អាយុ</label>
+      <div style="display:flex;gap:6px">
+        <div class="iu" style="flex:1.5"><input type="number" data-key="age" value="${eH(r.age||'')}" min="0" max="150" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ឆ្នាំ</span></div>
+        <div class="iu" style="flex:1"><input type="number" data-key="age_month" value="${eH(r.age_month||'')}" min="0" max="11" placeholder="0" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ខែ</span></div>
+        <div class="iu" style="flex:1"><input type="number" data-key="age_day" value="${eH(r.age_day||'')}" min="0" max="31" placeholder="0" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ថ្ងៃ</span></div>
+      </div>
+    </div>
     <div class="fld"><label>⚧ ភេទ</label>
       <select data-key="gender" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none">
         <option ${'ប'===r.gender?'selected':''}>ប</option>
@@ -2492,7 +2498,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         <span class="sec-lbl" style="background:var(--dark)">🏥 ព័ត៌មានអ្នកជំងឺ</span>
         <div class="sec-line"></div>
       </div>
-      <div class="fg" style="display:grid;grid-template-columns:1fr 0.9fr 1fr 1.4fr 0.7fr 1.3fr;gap:16px">
+      <div class="fg" style="display:grid;grid-template-columns:1fr 0.9fr 1fr 1.4fr 0.7fr 0.7fr 0.7fr 0.8fr;gap:12px">
         <div class="fld">
           <label>🏷️ SN ប៉ុងឈាម</label>
           <div class="iu">
@@ -2505,8 +2511,10 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         <div class="fld"><label>ថ្ងៃខែឆ្នាំ <span class="req">*</span></label><input type="date" id="f_date"></div>
         <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX"></div>
         <div class="fld"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
-        <div class="fld"><label>អាយុ</label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ឆ្នាំ</span></div></div>
-        <div class="fld"><label>ភេទ</label><div class="radio-g"><label><input type="radio" name="gender" value="ប" checked><span>👨 ប្រុស</span></label><label><input type="radio" name="gender" value="ស"><span>👩 ស្រី</span></label></div></div>
+        <div class="fld"><label>អាយុ <span class="req">*</span></label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ឆ្នាំ</span></div></div>
+        <div class="fld"><label>ខែ</label><div class="iu"><input type="number" id="f_age_month" min="0" max="11" placeholder="0" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ខែ</span></div></div>
+        <div class="fld"><label>ថ្ងៃ</label><div class="iu"><input type="number" id="f_age_day" min="0" max="31" placeholder="0" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ថ្ងៃ</span></div></div>
+        <div class="fld"><label>ភេទ <span class="req">*</span></label><div class="radio-g"><label><input type="radio" name="gender" value="ប" checked><span style="font-size:11px">ប្រុស</span></label><label><input type="radio" name="gender" value="ស"><span style="font-size:11px">ស្រី</span></label></div></div>
       </div>
       <div class="fg g3" style="margin-top:11px">
         <div class="fld"><label>ផ្នែកស្នើ</label><select id="f_ward_from" onchange="_ddWardChange(this.value)" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:500;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'"><option value="">-- ជ្រើស --</option><option value="ED">ED</option><option value="DMID">DMID</option><option value="MICU">MICU</option><option value="OBGY">OBGY</option><option value="SICU">SICU</option><option value="SUR">SUR</option><option value="PED">PED</option><option value="ANES">ANES</option></select></div>
