@@ -481,8 +481,9 @@ function addBagRow() {
   // Add back_fields div INSIDE this bag
   const bfDiv = document.createElement('div');
   bfDiv.id = 'back_fields' + sfx;
-  bfDiv.style.cssText = 'display:none;grid-template-columns:0.8fr 1fr 1.3fr 0.5fr 2fr;gap:12px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
+  bfDiv.style.cssText = 'display:none;gap:10px;margin-top:10px;padding:14px 16px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
   bfDiv.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr 0.6fr;gap:10px">
     <div class="fld">
       <label style="color:var(--red)">🏥 ផ្នែក</label>
       <select id="f_back_ward${sfx}" onchange="_backDdWardChange('${sfx}')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white">${_globalWardOpts('')}</select>
@@ -497,6 +498,11 @@ function addBagRow() {
       </div>
     </div>
     <div class="fld">
+      <label style="color:var(--red)">👩‍⚕️ Nurse</label>
+      <input type="text" id="f_back_nurse${sfx}" placeholder="ឈ្មោះ Nurse..."
+        style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white">
+    </div>
+    <div class="fld">
       <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
       <div style="display:flex;gap:6px">
         <input type="date" id="f_back_date${sfx}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
@@ -506,6 +512,7 @@ function addBagRow() {
     <div class="fld">
       <label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
       <select id="f_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:JetBrains Mono,monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+    </div>
     </div>
     <div class="fld">
       <label style="color:var(--red)">📝 មូលហេតុ</label>
@@ -891,42 +898,49 @@ function readForm() {
     bag_used:   document.getElementById('f_bag_used')?.checked  ? 'yes' : '',
     bag_back:        document.getElementById('f_bag_back')?.checked   ? 'yes' : '',
     bag_back_ward:   (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_ward')?.value||'') : '') || null,
+    bag_back_nurse: (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_nurse')?.value||'') : '') || null,
     bag_back_giver:  (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_giver')?.value||'') : '') || null,
     bag_back_dt:     (document.getElementById('f_bag_back')?.checked ? ((document.getElementById('f_back_date')?.value||'') + ' ' + (document.getElementById('f_back_time')?.value||'')) : '') || null,
     bag_back_lab:    (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_lab')?.value||'') : '') || null,
     bag_back_reason: (document.getElementById('f_bag_back')?.checked ? (document.getElementById('f_back_reason')?.value||'') : '') || null,
     bag_back_2: document.getElementById('f_bag_back_2')?.checked ? 'yes' : '',
     bag_back_ward_2:   (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_ward_2')?.value||'') : '') || null,
+    bag_back_nurse_2: (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_nurse_2')?.value||'') : '') || null,
     bag_back_giver_2:  (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_giver_2')?.value||'') : '') || null,
     bag_back_dt_2:     (document.getElementById('f_bag_back_2')?.checked ? ((document.getElementById('f_back_date_2')?.value||'') + ' ' + (document.getElementById('f_back_time_2')?.value||'')) : '') || null,
     bag_back_lab_2:    (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_lab_2')?.value||'') : '') || null,
     bag_back_reason_2: (document.getElementById('f_bag_back_2')?.checked ? (document.getElementById('f_back_reason_2')?.value||'') : '') || null,
     bag_back_3: document.getElementById('f_bag_back_3')?.checked ? 'yes' : '',
     bag_back_ward_3:   (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_ward_3')?.value||'') : '') || null,
+    bag_back_nurse_3: (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_nurse_3')?.value||'') : '') || null,
     bag_back_giver_3:  (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_giver_3')?.value||'') : '') || null,
     bag_back_dt_3:     (document.getElementById('f_bag_back_3')?.checked ? ((document.getElementById('f_back_date_3')?.value||'') + ' ' + (document.getElementById('f_back_time_3')?.value||'')) : '') || null,
     bag_back_lab_3:    (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_lab_3')?.value||'') : '') || null,
     bag_back_reason_3: (document.getElementById('f_bag_back_3')?.checked ? (document.getElementById('f_back_reason_3')?.value||'') : '') || null,
     bag_back_4: document.getElementById('f_bag_back_4')?.checked ? 'yes' : '',
     bag_back_ward_4:   (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_ward_4')?.value||'') : '') || null,
+    bag_back_nurse_4: (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_nurse_4')?.value||'') : '') || null,
     bag_back_giver_4:  (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_giver_4')?.value||'') : '') || null,
     bag_back_dt_4:     (document.getElementById('f_bag_back_4')?.checked ? ((document.getElementById('f_back_date_4')?.value||'') + ' ' + (document.getElementById('f_back_time_4')?.value||'')) : '') || null,
     bag_back_lab_4:    (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_lab_4')?.value||'') : '') || null,
     bag_back_reason_4: (document.getElementById('f_bag_back_4')?.checked ? (document.getElementById('f_back_reason_4')?.value||'') : '') || null,
     bag_back_5: document.getElementById('f_bag_back_5')?.checked ? 'yes' : '',
     bag_back_ward_5:   (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_ward_5')?.value||'') : '') || null,
+    bag_back_nurse_5: (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_nurse_5')?.value||'') : '') || null,
     bag_back_giver_5:  (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_giver_5')?.value||'') : '') || null,
     bag_back_dt_5:     (document.getElementById('f_bag_back_5')?.checked ? ((document.getElementById('f_back_date_5')?.value||'') + ' ' + (document.getElementById('f_back_time_5')?.value||'')) : '') || null,
     bag_back_lab_5:    (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_lab_5')?.value||'') : '') || null,
     bag_back_reason_5: (document.getElementById('f_bag_back_5')?.checked ? (document.getElementById('f_back_reason_5')?.value||'') : '') || null,
     bag_back_6: document.getElementById('f_bag_back_6')?.checked ? 'yes' : '',
     bag_back_ward_6:   (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_ward_6')?.value||'') : '') || null,
+    bag_back_nurse_6: (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_nurse_6')?.value||'') : '') || null,
     bag_back_giver_6:  (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_giver_6')?.value||'') : '') || null,
     bag_back_dt_6:     (document.getElementById('f_bag_back_6')?.checked ? ((document.getElementById('f_back_date_6')?.value||'') + ' ' + (document.getElementById('f_back_time_6')?.value||'')) : '') || null,
     bag_back_lab_6:    (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_lab_6')?.value||'') : '') || null,
     bag_back_reason_6: (document.getElementById('f_bag_back_6')?.checked ? (document.getElementById('f_back_reason_6')?.value||'') : '') || null,
     bag_back_7: document.getElementById('f_bag_back_7')?.checked ? 'yes' : '',
     bag_back_ward_7:   (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_ward_7')?.value||'') : '') || null,
+    bag_back_nurse_7: (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_nurse_7')?.value||'') : '') || null,
     bag_back_giver_7:  (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_giver_7')?.value||'') : '') || null,
     bag_back_dt_7:     (document.getElementById('f_bag_back_7')?.checked ? ((document.getElementById('f_back_date_7')?.value||'') + ' ' + (document.getElementById('f_back_time_7')?.value||'')) : '') || null,
     bag_back_lab_7:    (document.getElementById('f_bag_back_7')?.checked ? (document.getElementById('f_back_lab_7')?.value||'') : '') || null,
@@ -1040,7 +1054,7 @@ function clearForm() {
     const cb2 = document.getElementById('f_bag_back'+s);
     if (cb2) { cb2.checked = false; bagBackChange(cb2, s); }
     // Clear back fields
-    ['f_back_giver','f_back_date','f_back_time','f_back_lab','f_back_reason'].forEach(fid => {
+    ['f_back_giver','f_back_nurse','f_back_date','f_back_time','f_back_lab','f_back_reason'].forEach(fid => {
       const el = document.getElementById(fid + s); if (el) el.value = '';
     });
   });
@@ -1123,12 +1137,6 @@ async function saveRecord() {
       if (!_wardEl || !_wardEl.value) {
         if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
         showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស ផ្នែក', 'err'); return false;
-      }
-      var _givEl = document.getElementById('f_back_giver' + _sfx);
-      if (!_givEl || !_givEl.value) {
-        var _txtEl = document.getElementById('f_back_doctor_txt' + _sfx);
-        if (_txtEl) { _txtEl.style.borderColor='var(--red)'; _txtEl.scrollIntoView({behavior:'smooth',block:'center'}); }
-        showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស គ្រូពេទ្យ', 'err'); return false;
       }
       var _dateEl = document.getElementById('f_back_date' + _sfx);
       if (!_dateEl || !_dateEl.value) {
@@ -1913,7 +1921,8 @@ function editBagBackChange(chk, sfx, skipAutoCalc) {
       bf = document.createElement('div');
       bf.id = bfId;
       bf.style.cssText = 'margin-top:12px;padding:14px;background:var(--red3);border:1.5px solid var(--red);border-radius:12px;animation:slideDown .2s ease';
-      bf.innerHTML = `<div style="display:grid;grid-template-columns:0.8fr 1fr 1.3fr 0.5fr 2fr;gap:12px">
+      bf.innerHTML = `<div style="gap:10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr 0.6fr;gap:10px;margin-bottom:10px">
         <div class="fld"><label style="color:var(--red)">🏥 ផ្នែក</label>
           <select id="edit_back_ward${sfx}" data-key="bag_back_ward${sfx}" onchange="_editBackDdWardChange('${sfx}')" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;cursor:pointer;background:white">${_globalWardOpts(_r['bag_back_ward'+sfx]||'')}</select></div>
         <div class="fld"><label style="color:var(--red)">👨‍⚕️ គ្រូពេទ្យ</label>
@@ -1923,6 +1932,9 @@ function editBagBackChange(chk, sfx, skipAutoCalc) {
               style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white">
             <input type="hidden" id="edit_back_giver_hid${sfx}" data-key="bag_back_giver${sfx}" value="${eH(_r['bag_back_giver'+sfx]||'')}">
           </div></div>
+        <div class="fld"><label style="color:var(--red)">👩‍⚕️ Nurse</label>
+          <input type="text" data-key="bag_back_nurse${sfx}" value="${eH(_r['bag_back_nurse'+sfx]||'')}" placeholder="ឈ្មោះ Nurse..."
+            style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white"></div>
         <div class="fld"><label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
           <div style="display:flex;gap:6px">
             <input type="date" data-key="bag_back_date${sfx}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
@@ -1930,6 +1942,7 @@ function editBagBackChange(chk, sfx, skipAutoCalc) {
           </div></div>
         <div class="fld"><label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
           <select data-key="bag_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:JetBrains Mono,monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select></div>
+        </div>
         <div class="fld"><label style="color:var(--red)">📝 មូលហេតុ</label>
           <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:white;border:2px solid var(--red);border-radius:9px">
             <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:12px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;color:#374151;line-height:1.4">
@@ -2022,12 +2035,6 @@ async function saveEdit() {
       if (!_wardEl || !_wardEl.value) {
         if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
         showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស ផ្នែក', 'err'); return;
-      }
-      var _givEl = document.querySelector('#editBody [data-key="bag_back_giver' + _sfx + '"]');
-      if (!_givEl || !_givEl.value) {
-        var _txtEl = document.getElementById('edit_back_doctor_txt' + _sfx);
-        if (_txtEl) { _txtEl.style.borderColor='var(--red)'; _txtEl.scrollIntoView({behavior:'smooth',block:'center'}); }
-        showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស គ្រូពេទ្យ', 'err'); return;
       }
       var _dateEl = document.querySelector('#editBody [data-key="bag_back_date' + _sfx + '"]');
       if (!_dateEl || !_dateEl.value) {
@@ -2622,6 +2629,11 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
               </div>
             </div>
             <div class="fld">
+              <label style="color:var(--red)">👩‍⚕️ Nurse</label>
+              <input type="text" id="f_back_nurse" placeholder="ឈ្មោះ Nurse..."
+                style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white">
+            </div>
+            <div class="fld">
               <label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
               <div style="display:flex;gap:6px">
                 <input type="date" id="f_back_date"
@@ -2633,6 +2645,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
             <div class="fld">
               <label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
               <select id="f_back_lab" style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:14px;font-family:JetBrains Mono,monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+            </div>
             </div>
             <div class="fld">
               <label style="color:var(--red)">📝 មូលហេតុ</label>
@@ -3756,13 +3769,13 @@ function _rptReasonData() {
   var to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
   if (!from && !to) return allRecs;
   var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
-  // Keep record if ANY bag_back_dt falls within range
+  // Keep record if ANY bag_back_reason exists with dt in range (or no dt when no filter)
   return allRecs.filter(function(r) {
     return sfxs.some(function(sfx) {
       var val = r['bag_back_reason' + sfx];
       if (!val) return false;
       var dt = (r['bag_back_dt' + sfx] || '').slice(0, 10);
-      if (!dt) return false;
+      if (!dt) return true; // no date recorded — include when no date filter would block
       if (from && dt < from) return false;
       if (to && dt > to) return false;
       return true;
@@ -3781,7 +3794,7 @@ function _buildReasonReport(recs) {
   var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
   var counts = REASONS.map(function(){ return 0; });
   // For each reason: collect ward, doctor, date, lab
-  var details = REASONS.map(function(){ return { ward:{}, doctor:{}, date:[], lab:{} }; });
+  var details = REASONS.map(function(){ return { ward:{}, doctor:{}, nurse:{}, date:[], lab:{} }; });
   var total = 0;
 
   var _from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
@@ -3799,13 +3812,15 @@ function _buildReasonReport(recs) {
       if (_to   && dt && dt > _to)   return;
       counts[idx]++; total++;
       var d = details[idx];
-      var ward = r['bag_back_ward' + sfx] || '';
-      var doc  = (r['bag_back_giver' + sfx] || '').replace(/^វេជ្ជ[-\s]*/u, '');
-      var lab  = r['bag_back_lab' + sfx] || '';
-      if (ward) d.ward[ward] = (d.ward[ward]||0) + 1;
-      if (doc)  d.doctor[doc]  = (d.doctor[doc]||0)  + 1;
-      if (dt)   { if (d.date.indexOf(dt) < 0) d.date.push(dt); }
-      if (lab)  d.lab[lab]  = (d.lab[lab]||0)  + 1;
+      var ward  = r['bag_back_ward' + sfx] || '';
+      var doc   = (r['bag_back_giver' + sfx] || '').replace(/^វេជ្ជ[-\s]*/u, '');
+      var nurse = r['bag_back_nurse' + sfx] || '';
+      var lab   = r['bag_back_lab' + sfx] || '';
+      if (ward)  d.ward[ward]   = (d.ward[ward]||0)   + 1;
+      if (doc)   d.doctor[doc]  = (d.doctor[doc]||0)  + 1;
+      if (nurse) d.nurse[nurse] = (d.nurse[nurse]||0) + 1;
+      if (dt)    { if (d.date.indexOf(dt) < 0) d.date.push(dt); }
+      if (lab)   d.lab[lab]     = (d.lab[lab]||0)     + 1;
     });
   });
 
@@ -3831,6 +3846,7 @@ function _buildReasonReport(recs) {
       '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.ward,'#0369A1')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
       '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.doctor,'#7C3AED')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
       '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (d.date.length ? _dates(d.date) : '<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
+      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.nurse,'#9333EA')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
       '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.lab,'#059669')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
     '</tr>';
   }).join('');
@@ -3845,7 +3861,8 @@ function _buildReasonReport(recs) {
         '<th style="' + thStyle + ';width:12%">🏥 ផ្នែក</th>' +
         '<th style="' + thStyle + ';width:14%">👨‍⚕️ គ្រូពេទ្យ</th>' +
         '<th style="' + thStyle + ';width:16%">🕐 ថ្ងៃ ម៉ោង វិល</th>' +
-        '<th style="' + thStyle + ';width:14%">🧑‍⚕️ Lab</th>' +
+        '<th style="' + thStyle + ';width:11%">👩‍⚕️ Nurse</th>' +
+        '<th style="' + thStyle + ';width:11%">🧑‍⚕️ Lab</th>' +
       '</tr></thead>' +
       '<tbody>' + rows +
       '<tr style="background:#F8FAFC"><td style="padding:12px 14px;font-size:13px;font-weight:900">សរុប</td>' +
@@ -3887,6 +3904,7 @@ function _exportReasonExcel() {
       details[idx].push({
         ward:   r['bag_back_ward'  + sfx] || '',
         doctor: (r['bag_back_giver'+ sfx] || '').replace(/^វេជ្ជ[-\s]*/u, ''),
+        nurse:  r['bag_back_nurse' + sfx] || '',
         date:   (r['bag_back_dt'   + sfx] || '').slice(0,10),
         lab:    r['bag_back_lab'   + sfx] || '',
         hn:     r.hn   || '',
@@ -3896,7 +3914,7 @@ function _exportReasonExcel() {
   });
 
   var BOM = '\uFEFF';
-  var rows = [['មូលហេតុ','ចំនួនសរុប','%','ផ្នែក','គ្រូពេទ្យ','ថ្ងៃ ម៉ោង វិល','Lab','HN','ឈ្មោះ']];
+  var rows = [['មូលហេតុ','ចំនួនសរុប','%','ផ្នែក','គ្រូពេទ្យ','Nurse','ថ្ងៃ ម៉ោង វិល','Lab','HN','ឈ្មោះ']];
 
   REASONS.forEach(function(rs, i) {
     var cnt = details[i].length;
@@ -3913,6 +3931,7 @@ function _exportReasonExcel() {
           j === 0 ? pct + '%' : '',   // show % only on first row
           item.ward,
           item.doctor,
+          item.nurse,
           item.date,
           item.lab,
           item.hn,
