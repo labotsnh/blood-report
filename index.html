@@ -809,7 +809,7 @@ function formatSN(input) {
   }
   preview.textContent = val ? '→ SN-' + val : '';
 
-  // Duplicate SN check (warning only, doesn't block)
+  // Duplicate SN check + auto-fill suggestion
   const wrap = input.closest('.iu');
   let warn = document.getElementById('sn_dup_warn');
   if (!warn) {
@@ -818,20 +818,57 @@ function formatSN(input) {
     warn.style.cssText = 'font-size:11.5px;font-weight:700;color:#B45309;margin-top:4px;display:none;align-items:center;gap:4px';
     input.closest('.fld').appendChild(warn);
   }
+  // Auto-fill suggestion card
+  let sugg = document.getElementById('sn_suggest');
+  if (!sugg) {
+    sugg = document.createElement('div');
+    sugg.id = 'sn_suggest';
+    sugg.style.cssText = 'display:none;margin-top:8px;background:#EFF6FF;border:1.5px solid #3B82F6;border-radius:10px;padding:10px 14px;cursor:pointer;transition:background .15s';
+    sugg.addEventListener('mouseenter', function(){ sugg.style.background='#DBEAFE'; });
+    sugg.addEventListener('mouseleave', function(){ sugg.style.background='#EFF6FF'; });
+    input.closest('.fld').appendChild(sugg);
+  }
+
   if (!val) {
     if (wrap) { wrap.style.borderColor = ''; wrap.style.boxShadow = ''; }
-    warn.style.display = 'none';
+    warn.style.display = 'none'; sugg.style.display = 'none';
     return;
   }
   const fullSN = 'SN-' + val;
   const dup = (typeof allRecs !== 'undefined' ? allRecs : []).filter(r => (r.sn_code || '') === fullSN);
   if (dup.length > 0) {
+    const r = dup[0];
     if (wrap) { wrap.style.borderColor = '#D97706'; wrap.style.boxShadow = '0 0 0 3px rgba(217,119,6,.12)'; }
-    warn.innerHTML = '⚠️ SN-' + val + ' មានរួចហើយ (' + (dup[0].name || dup[0].hn || 'HN: ' + (dup[0].hn||'-')) + ')';
+    warn.innerHTML = '⚠️ SN-' + val + ' មានរួចហើយ (' + (r.name || r.hn || '-') + ')';
     warn.style.display = 'flex';
+
+    // Show suggestion to auto-fill patient info
+    const ageDisp = [r.age ? r.age + ' ឆ្នាំ' : '', r.age_month ? r.age_month + ' ខែ' : '', r.age_day ? r.age_day + ' ថ្ងៃ' : ''].filter(Boolean).join(' ');
+    sugg.innerHTML = '<div style="font-size:11px;color:#1D4ED8;font-weight:700;margin-bottom:4px">👆 ចុចដើម្បីបំពេញ ព័ត៌មានអ្នកជំងឺ</div>' +
+      '<div style="font-size:13px;font-weight:800;color:#1E3A8A">' + (r.name||'-') + '</div>' +
+      '<div style="font-size:11px;color:#64748B;margin-top:2px">HN: ' + (r.hn||'-') + ' · ' + ageDisp + ' · ' + (r.gender||'-') + '</div>';
+    sugg.onclick = function() {
+      // Auto-fill patient fields
+      var nameEl = document.getElementById('f_name');
+      var hnEl   = document.getElementById('f_hn');
+      var ageEl  = document.getElementById('f_age');
+      var ageMonthEl = document.getElementById('f_age_month');
+      var ageDayEl   = document.getElementById('f_age_day');
+      if (nameEl) nameEl.value = r.name || '';
+      if (hnEl)   hnEl.value   = r.hn   || '';
+      if (ageEl)  ageEl.value  = r.age  || '';
+      if (ageMonthEl) ageMonthEl.value = r.age_month || '';
+      if (ageDayEl)   ageDayEl.value   = r.age_day   || '';
+      // Gender
+      var genderInput = document.querySelector('input[name="gender"][value="' + (r.gender||'ប') + '"]');
+      if (genderInput) genderInput.click();
+      sugg.style.display = 'none';
+      showToast('✅ បំពេញ​ ព័ត៌មាន​ ' + (r.name||'') + ' ស្វ័យប្រវត្តិ!', 'ok');
+    };
+    sugg.style.display = 'block';
   } else {
     if (wrap) { wrap.style.borderColor = ''; wrap.style.boxShadow = ''; }
-    warn.style.display = 'none';
+    warn.style.display = 'none'; sugg.style.display = 'none';
   }
 }
 
@@ -1131,8 +1168,8 @@ async function saveRecord() {
       showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស បុគ្គលិក Lab', 'err'); return false;
     }
 
-    // Option 1,2,4: also require ផ្នែក + គ្រូពេទ្យ + ថ្ងៃ
-    if (!_isLabo) {
+    // Option 1,2,4 (only if reason selected): also require ផ្នែក + ថ្ងៃ
+    if (!_isLabo && _reason) {
       var _wardEl = document.getElementById('f_back_ward' + _sfx);
       if (!_wardEl || !_wardEl.value) {
         if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
@@ -1425,6 +1462,11 @@ function esel(k, l, opts, val) {
 }
 function eH(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
+
+function labStaffOpts(v) {
+  var labs = ['SMH', 'SLS', 'NBT', 'SPT', 'SSD', 'HSN', 'CCT', 'HSC', 'KRN', 'TSP', 'HSP', 'SSN', 'EKP', 'VVK', 'SCL', 'PVN', 'YMR', 'NSM', 'THL', 'CSI', 'DOD', 'HCY', 'LST', 'DSP', 'VCN', 'LSN', 'KNT', 'YKN', 'TEL', 'CSR', 'SML', 'ECP'];
+  return '<option value="">' + '-- ជ្រើស --</option>' + labs.map(function(l){ return '<option value="' + l + '"' + (v===l?' selected':'') + '>' + l + '</option>'; }).join('');
+}
 function buildEditForm(r) {
   function einp(key, label, type, val, extra='') {
     return `<div class="fld">
@@ -1564,7 +1606,7 @@ function buildEditForm(r) {
             onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
         </div>
         <div class="fld"><label>🧑‍⚕️ បុគ្គលិក-Lab</label>
-          <select data-key="bag_lab_staff${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:JetBrains Mono,monospace;cursor:pointer;outline:none;transition:border-color .2s"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>
+          <select data-key="bag_lab_staff${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;font-weight:600;width:100%;font-family:JetBrains Mono,monospace;cursor:pointer;outline:none">${labStaffOpts(r['bag_lab_staff'+sfx])}</select>
         </div>
       </div>
     </div>`;
@@ -1870,7 +1912,7 @@ function editAddBag() {
         '<input type="datetime-local" data-key="bag_taken_dt' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">' +
       '</div>' +
       '<div class="fld"><label>🧑‍⚕️ បុគ្គលិក-LAB</label>' +
-        '<select data-key="bag_lab_staff' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:JetBrains Mono,monospace;font-weight:600;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select>' +
+        '<select data-key="bag_lab_staff' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:JetBrains Mono,monospace;font-weight:600;cursor:pointer;outline:none">' + labStaffOpts(r['bag_lab_staff'+sfx]||'') + '</select>' +
       '</div>' +
     '</div>';
   container.appendChild(div);
@@ -1937,11 +1979,11 @@ function editBagBackChange(chk, sfx, skipAutoCalc) {
             style="border:2px solid var(--red);border-radius:9px;padding:10px 13px;font-size:13px;font-family:Noto Sans Khmer,sans-serif;font-weight:600;width:100%;outline:none;background:white"></div>
         <div class="fld"><label style="color:var(--red)">🕐 ថ្ងៃ ម៉ោង វិល</label>
           <div style="display:flex;gap:6px">
-            <input type="date" data-key="bag_back_date${sfx}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
-            <input type="time" data-key="bag_back_time${sfx}" style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:JetBrains Mono,monospace;outline:none;background:white">
+            <input type="date" data-key="bag_back_date${sfx}" value="${eH((_r['bag_back_dt'+sfx]||'').slice(0,10))}" style="flex:1.2;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;outline:none;background:white">
+            <input type="time" data-key="bag_back_time${sfx}" value="${eH((_r['bag_back_dt'+sfx]||'').slice(11,16))}" style="flex:1;border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:12px;font-family:JetBrains Mono,monospace;outline:none;background:white">
           </div></div>
         <div class="fld"><label style="color:var(--red)">🧑‍⚕️ បុគ្គលិក Lab</label>
-          <select data-key="bag_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:JetBrains Mono,monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white"><option value="">-- ជ្រើស --</option><option value="SMH">SMH</option><option value="SLS">SLS</option><option value="NBT">NBT</option><option value="SPT">SPT</option><option value="SSD">SSD</option><option value="HSN">HSN</option><option value="CCT">CCT</option><option value="HSC">HSC</option><option value="KRN">KRN</option><option value="TSP">TSP</option><option value="HSP">HSP</option><option value="SSN">SSN</option><option value="EKP">EKP</option><option value="VVK">VVK</option><option value="SCL">SCL</option><option value="PVN">PVN</option><option value="YMR">YMR</option><option value="NSM">NSM</option><option value="THL">THL</option><option value="CSI">CSI</option><option value="DOD">DOD</option><option value="HCY">HCY</option><option value="LST">LST</option><option value="DSP">DSP</option><option value="VCN">VCN</option><option value="LSN">LSN</option><option value="KNT">KNT</option><option value="YKN">YKN</option><option value="TEL">TEL</option><option value="CSR">CSR</option><option value="SML">SML</option><option value="ECP">ECP</option></select></div>
+          <select data-key="bag_back_lab${sfx}" style="border:2px solid var(--red);border-radius:9px;padding:10px 8px;font-size:13px;font-family:JetBrains Mono,monospace;font-weight:600;width:100%;outline:none;cursor:pointer;background:white">${labStaffOpts(_r['bag_back_lab'+sfx])}</select></div>
         </div>
         <div class="fld"><label style="color:var(--red)">📝 មូលហេតុ</label>
           <div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:white;border:2px solid var(--red);border-radius:9px">
@@ -2029,8 +2071,8 @@ async function saveEdit() {
       showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស បុគ្គលិក Lab', 'err'); return;
     }
 
-    // Option 1,2,4: also require ផ្នែក + គ្រូពេទ្យ + ថ្ងៃ
-    if (!_isLabo) {
+    // Option 1,2,4 (only if reason selected): also require ផ្នែក + ថ្ងៃ
+    if (!_isLabo && _reason) {
       var _wardEl = document.querySelector('#editBody [data-key="bag_back_ward' + _sfx + '"]');
       if (!_wardEl || !_wardEl.value) {
         if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
