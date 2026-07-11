@@ -742,7 +742,7 @@ function bagBackChange(chk, sfx) {
     if (span)   { span.textContent='🔄 វិលរួច'; span.style.color='var(--red)'; }
     if (row)    { row.style.borderColor='var(--red)'; }
     // Show extra fields
-    if (fields) { fields.style.display='grid'; }
+    if (fields) { fields.style.display = sfx ? 'grid' : 'block'; }
     // Uncheck "យកប្រើរួច" if checked
     const usedCb = document.getElementById('f_bag_used' + sfx);
     if (usedCb && usedCb.checked) {
@@ -1175,11 +1175,7 @@ async function saveRecord() {
         if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
         showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស ផ្នែក', 'err'); return false;
       }
-      var _dateEl = document.getElementById('f_back_date' + _sfx);
-      if (!_dateEl || !_dateEl.value) {
-        if (_dateEl) { _dateEl.style.borderColor='var(--red)'; _dateEl.scrollIntoView({behavior:'smooth',block:'center'}); }
-        showToast('⚠️ Bag ' + _bagNum + ': សូមបញ្ចូល ថ្ងៃ ម៉ោង វិល', 'err'); return false;
-      }
+      // Date is optional — no block if empty
     }
   }
 
@@ -1337,8 +1333,8 @@ function clearSearch() {
   applyFilter();
 }
 
-const TCOLS = ['sn_code','date','hn','name','age','gender','ward_from','ward_to','doctor_req',
-               'diagnosis','hb','grp','blood_type','xmatch','s25',
+const TCOLS = ['sn_code','date','hn','name','age','age_month','age_day','gender','ward_from','ward_to','doctor_req',
+               'diagnosis','hb','grp','blood_type','xmatch','xmatch_dt','s25',
                'qty_new','qty_borrow','qty_return','stock_sent','qty_used','given_count',
                'not_returned','lab_person','ward_recv','reason'];
 const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែកស្នើ','ទៅ','គ្រូពេទ្យ','Dx','Hb',
@@ -2078,11 +2074,7 @@ async function saveEdit() {
         if (_wardEl) { _wardEl.style.borderColor='var(--red)'; _wardEl.scrollIntoView({behavior:'smooth',block:'center'}); }
         showToast('⚠️ Bag ' + _bagNum + ': សូមជ្រើស ផ្នែក', 'err'); return;
       }
-      var _dateEl = document.querySelector('#editBody [data-key="bag_back_date' + _sfx + '"]');
-      if (!_dateEl || !_dateEl.value) {
-        if (_dateEl) { _dateEl.style.borderColor='var(--red)'; _dateEl.scrollIntoView({behavior:'smooth',block:'center'}); }
-        showToast('⚠️ Bag ' + _bagNum + ': សូមបញ្ចូល ថ្ងៃ ម៉ោង វិល', 'err'); return;
-      }
+      // Date is optional — no block if empty
     }
   }
 
