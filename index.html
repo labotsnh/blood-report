@@ -872,6 +872,72 @@ function formatSN(input) {
   }
 }
 
+function searchByHN(input) {
+  var val = input.value.trim();
+  var sugg = document.getElementById('hn_suggest');
+  if (!sugg) {
+    sugg = document.createElement('div');
+    sugg.id = 'hn_suggest';
+    sugg.style.cssText = 'display:none;background:white;border:2px solid #3B82F6;border-radius:12px;padding:0;max-height:300px;overflow-y:auto;box-shadow:0 8px 32px rgba(59,130,246,.2);position:fixed;z-index:99999;min-width:380px';
+    document.body.appendChild(sugg);
+  }
+  if (!val || val.length < 2) { sugg.style.display = 'none'; return; }
+
+  var matches = (typeof allRecs !== 'undefined' ? allRecs : [])
+    .filter(function(r){ return (r.hn||'').toLowerCase().indexOf(val.toLowerCase()) >= 0; })
+    .slice(0, 8);
+
+  if (!matches.length) { sugg.style.display = 'none'; return; }
+
+  // Store matches in global map to avoid JSON inline issues
+  window._hnMatches = {};
+  sugg.innerHTML = matches.map(function(r, i) {
+    window._hnMatches[i] = r;
+    var ageDisp = [r.age ? r.age+'ឆ្នាំ' : '', r.age_month ? r.age_month+'ខែ' : ''].filter(Boolean).join(' ');
+    return '<div class="hn-item" style="padding:14px 18px;cursor:pointer;border-bottom:1px solid #EFF6FF;font-size:13px" ' +
+      'onmouseenter="this.style.background=\'#DBEAFE\'" onmouseleave="this.style.background=\'\'" ' +
+      'onmousedown="event.preventDefault();_fillFromHNMap(' + i + ')">' +
+      '<div style="font-weight:900;color:#1D4ED8;font-size:16px;font-family:JetBrains Mono,monospace;letter-spacing:1px">' + (r.hn||'') + '</div>' +
+      '<div style="color:#64748B;font-size:12px;margin-top:3px;font-family:Noto Sans Khmer,sans-serif">' + (r.name||'-') + '&nbsp;·&nbsp;' + ageDisp + '&nbsp;·&nbsp;' + (r.gender||'-') + '</div>' +
+      '</div>';
+  }).join('');
+  // Position below input
+  var rect = input.getBoundingClientRect();
+  sugg.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  sugg.style.left = (rect.left + window.scrollX) + 'px';
+  sugg.style.width = Math.max(380, rect.width) + 'px';
+  sugg.style.display = 'block';
+
+  document.addEventListener('mousedown', function closeHN(e) {
+    if (!sugg.contains(e.target) && e.target !== input) {
+      sugg.style.display = 'none';
+      document.removeEventListener('mousedown', closeHN);
+    }
+  });
+}
+
+function _fillFromHNMap(i) {
+  var r = (window._hnMatches || {})[i];
+  if (!r) return;
+  fillFromHN(r);
+}
+
+function fillFromHN(r) {
+  var sugg = document.getElementById('hn_suggest');
+  if (sugg) sugg.style.display = 'none';
+  document.getElementById('f_hn').value   = r.hn   || '';
+  document.getElementById('f_name').value = r.name || '';
+  var ageEl = document.getElementById('f_age');
+  var ageMonthEl = document.getElementById('f_age_month');
+  var ageDayEl   = document.getElementById('f_age_day');
+  if (ageEl)      ageEl.value      = r.age       || '';
+  if (ageMonthEl) ageMonthEl.value = r.age_month || '';
+  if (ageDayEl)   ageDayEl.value   = r.age_day   || '';
+  var genderInput = document.querySelector('input[name="gender"][value="' + (r.gender||'ប') + '"]');
+  if (genderInput) genderInput.click();
+  showToast('✅ បំពេញ​ ព័ត៌មាន​ ' + (r.name||'') + ' ស្វ័យប្រវត្តិ!', 'ok');
+}
+
 // Get formatted SN value
 function getSNValue() {
   const val = document.getElementById('f_sn')?.value?.trim() || '';
@@ -1337,8 +1403,8 @@ const TCOLS = ['sn_code','date','hn','name','age','age_month','age_day','gender'
                'diagnosis','hb','grp','blood_type','xmatch','xmatch_dt','s25',
                'qty_new','qty_borrow','qty_return','stock_sent','qty_used','given_count',
                'not_returned','lab_person','ward_recv','reason'];
-const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែកស្នើ','ទៅ','គ្រូពេទ្យ','Dx','Hb',
-               'Group','ប្រភេទ','X-Match','25C',
+const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ខែ','ថ្ងៃ','ភេទ','ផ្នែកស្នើ','ទៅ','គ្រូពេទ្យ','Dx','Hb',
+               'Group','ប្រភេទ','X-Match','🕐 X-DT','25C',
                '🆕 ថ្មី','🔄 ខ្ចី','↩️ សង','📦 ស្តុកផ្ញើ','✅ យកប្រើ','⏳ នៅជំពាក់',
                '❗ មិនទាន់សង','Lab','WARD','មូលហេតុ'];
 
@@ -1390,7 +1456,8 @@ function renderTable() {
       lab_person: r.lab_person || '-', ward_recv: r.ward_recv || '-', reason: r.reason || '-'
     };
 
-    h += `<tr><td>${gi + 1}</td>`;
+    const isJamphak = parseFloat(r.not_returned) > 0;
+    h += `<tr style="${isJamphak ? 'background:#FECACA;border-left:3px solid #EF4444;' : ''}" ><td>${gi + 1}</td>`;
     TCOLS.forEach(k => h += `<td title="${String(cv[k]).replace(/<[^>]+>/g,'')||''}">${cv[k] ?? '-'}</td>`);
     h += `<td style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--muted)">${r.sheet}</td>`;
     h += `<td><div class="tbl-act"><button class="ib edit" onclick="openEdit(${gi})" title="Edit">✏️</button><button class="ib del" onclick="delRec(${r.id})" title="Delete">🗑</button></div></td></tr>`;
@@ -2550,7 +2617,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
           </div>
         </div>
         <div class="fld"><label>ថ្ងៃខែឆ្នាំ <span class="req">*</span></label><input type="date" id="f_date"></div>
-        <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX"></div>
+        <div class="fld"><label>HN ជំងឺ <span class="req">*</span></label><input type="text" id="f_hn" placeholder="25-XXXXXX" oninput="searchByHN(this)"></div>
         <div class="fld"><label>ឈ្មោះជំងឺ <span class="req">*</span></label><input type="text" id="f_name" placeholder="ឈ្មោះ..."></div>
         <div class="fld"><label>អាយុ <span class="req">*</span></label><div class="iu"><input type="number" id="f_age" placeholder="0" min="0" max="150" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ឆ្នាំ</span></div></div>
         <div class="fld"><label>ខែ</label><div class="iu"><input type="number" id="f_age_month" min="0" max="11" placeholder="0" style="border:none!important;outline:none;width:100%;min-width:0"><span class="unit">ខែ</span></div></div>
