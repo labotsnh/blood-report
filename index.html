@@ -1676,7 +1676,7 @@ function applyFilter() {
   const dt   = (document.getElementById('s-date')?.value || '').trim();
   filtered = allRecs.filter(r => {
     if (activeDay !== 'all' && r.sheet !== activeDay) return false;
-    if (hn && !String(r.hn        || '').toLowerCase().includes(hn)) return false;
+    if (hn && !(String(r.hn || '').toLowerCase().includes(hn) || String(r.name || '').toLowerCase().includes(hn))) return false;
     if (wd && !(String(r.ward_from || '').toLowerCase().includes(wd) || String(r.ward_to || '').toLowerCase().includes(wd))) return false;
     if (dt && !String(r.date      || '').includes(dt)) return false;
     // Special filters
@@ -3295,9 +3295,9 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px 16px;border-bottom:1px solid var(--border);background:#FAFBFC">
       <!-- Search HN -->
       <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px">
-        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:JetBrains Mono,monospace">🔍 HN ជំងឺ</label>
+        <label style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);font-family:JetBrains Mono,monospace">🔍 HN / ឈ្មោះ</label>
         <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;background:white;transition:border-color .2s" onfocusin="this.style.borderColor='var(--red)'" onfocusout="this.style.borderColor='var(--border)'">
-          <input type="text" id="s-hn" placeholder="HN..." oninput="applyFilter()"
+          <input type="text" id="s-hn" placeholder="HN ឬ ឈ្មោះ..." oninput="applyFilter()"
             style="border:none;outline:none;padding:7px 11px;font-size:12px;font-family:Noto Sans Khmer,sans-serif;flex:1;background:transparent">
         </div>
       </div>
