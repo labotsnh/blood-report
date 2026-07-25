@@ -296,6 +296,7 @@ let filtered = [];
 let curPage  = 1;
 const PER    = 25;
 let activeDay = 'all';
+let _autoMonthDone = false;
 let editId   = null;
 let importWB = null;
 
@@ -322,7 +323,20 @@ async function sbFetch(path, opts = {}) {
 }
 
 async function sbSelect(filter = '') {
-  return sbFetch(`${TABLE}?order=id.asc${filter ? '&' + filter : ''}&limit=10000`);
+  // Supabase PostgREST caps each request at ~1000 rows by default (project "Max Rows" setting).
+  // Paginate with limit/offset query params (no custom headers -> no CORS preflight issues)
+  // so records beyond the first 1000 (by id) are never silently dropped.
+  const PAGE = 1000;
+  let all = [];
+  let offset = 0;
+  let guard = 0;
+  while (guard++ < 200) { // safety cap: 200 * 1000 = 200,000 rows max
+    const page = await sbFetch(`${TABLE}?order=id.asc${filter ? '&' + filter : ''}&limit=${PAGE}&offset=${offset}`);
+    all = all.concat(page);
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
 }
 
 async function sbInsert(row) {
@@ -858,6 +872,9 @@ function updateBagUI() {
   if (label)     label.textContent = 'Bag ' + currentBagCount + ' / ' + MAX_BAGS;
   if (addBtn)    addBtn.style.opacity = currentBagCount >= MAX_BAGS ? '0.4' : '1';
   if (removeBtn) removeBtn.style.display = currentBagCount > 1 ? 'inline-flex' : 'none';
+  // Auto-sync X-MATCH (BAG) count with number of bags
+  const xmEl = document.getElementById('f_xmatch');
+  if (xmEl) { xmEl.value = currentBagCount; if (typeof calc === 'function') calc(); }
 }
 
 // Reset bag rows to 1
@@ -1591,6 +1608,11 @@ async function loadRecords() {
   try {
     allRecs = await sbSelect();
     const sheets = [...new Set(allRecs.map(r => r.sheet))];
+    if (!_autoMonthDone) {
+      _autoMonthDone = true;
+      const curMonthSheet = 'Month ' + (new Date().getMonth() + 1);
+      if (sheets.includes(curMonthSheet)) activeDay = curMonthSheet;
+    }
     document.getElementById('st-total').textContent = allRecs.length;
     document.getElementById('st-days').textContent  = sheets.length;
     buildChips(sheets);
@@ -2806,6 +2828,7 @@ _fetchDoctorsOnly();
 _loadDiagnoses();
 loadWards();
 document.getElementById('f_date').value = new Date().toISOString().split('T')[0];
+updateBagUI();
 
 // Auto-select current month
 (function() {
