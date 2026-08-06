@@ -398,6 +398,10 @@ function setDbStatus(on) {
 }
 
 function resetConnection() {
+  if (!currentUser || currentUser.role !== 'admin') {
+    showToast('🔒 មានតែ Admin ប៉ុណ្ណោះទើបអាច Reset Connection', 'err');
+    return;
+  }
   if (!confirm('Reset Supabase connection?')) return;
   localStorage.removeItem('sb_url'); localStorage.removeItem('sb_key');
   location.reload();
@@ -464,15 +468,21 @@ function startApp() {
   // Show/hide admin features
   var isAdmin = currentUser.role === 'admin';
   document.getElementById('nav-users').style.display = isAdmin ? '' : 'none';
+  var dbBadgeEl = document.querySelector('.db-badge');
+  if (dbBadgeEl) {
+    dbBadgeEl.style.cursor = isAdmin ? 'pointer' : 'default';
+    dbBadgeEl.title = isAdmin ? 'Click to reset connection' : '';
+  }
   // Add user info + logout to navbar
-  var navbar = document.querySelector('.navbar');
-  if (navbar && !document.getElementById('user-info-bar')) {
+  var topbarInner = document.querySelector('.topbar-inner');
+  if (topbarInner && !document.getElementById('user-info-bar')) {
     var bar = document.createElement('div');
     bar.id = 'user-info-bar';
-    bar.style.cssText = 'display:flex;align-items:center;padding:4px 12px;background:rgba(255,255,255,.1);border-radius:20px';
-    bar.innerHTML = '<span style="font-size:12px;color:rgba(255,255,255,.9);font-weight:600">' +
+    bar.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 14px;margin-left:12px;background:rgba(255,255,255,.15);border-radius:20px;white-space:nowrap';
+    bar.innerHTML = '<span style="font-size:13px;color:white;font-weight:700">' +
       (isAdmin ? '👑' : '👤') + ' ' + (currentUser.full_name || currentUser.username) + '</span>';
-    navbar.querySelector('.nav-tabs')?.appendChild(bar) || navbar.appendChild(bar);
+    var dbBadge = topbarInner.querySelector('.db-badge');
+    if (dbBadge) topbarInner.insertBefore(bar, dbBadge); else topbarInner.appendChild(bar);
   }
   // Apply staff restrictions
   if (!isAdmin) applyStaffRestrictions();
@@ -1732,6 +1742,18 @@ const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ'
                '🆕 ថ្មី','🔄 ខ្ចី','↩️ សង','📦 ស្តុកផ្ញើ','✅ យកប្រើ','⏳ នៅជំពាក់',
                '❗ មិនទាន់សង','Lab','WARD','មូលហេតុ'];
 
+function bagTypeSummary(r) {
+  const counts = {};
+  BAG_SFXS.forEach(sfx => {
+    const active = r['blood_code'+sfx] || r['grp'+sfx] || r['blood_type'+sfx] || r['bag_used'+sfx];
+    const t = r['blood_type'+sfx];
+    if (t && active) counts[t] = (counts[t] || 0) + 1;
+  });
+  const keys = Object.keys(counts);
+  if (!keys.length) return '-';
+  return keys.map(k => `(${k}:${counts[k]})`).join('-');
+}
+
 function renderTable() {
   const wrap = document.getElementById('tableWrap');
   const hn = (document.getElementById('s-hn')?.value   || '').trim().toLowerCase();
@@ -1768,7 +1790,7 @@ function renderTable() {
       ward_from: r.ward_from ? (wd ? hl(r.ward_from, wd) : r.ward_from) : '-',
       ward_to: r.ward_to ? (wd ? hl(r.ward_to, wd) : r.ward_to) : '-', doctor_req: r.doctor_req ? `<span style="background:#FFF7ED;color:#C2410C;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;font-family:Noto Sans Khmer,sans-serif">${r.doctor_req}</span>` : '-',
       diagnosis: r.diagnosis || '-', hb: r.hb || '-',
-      grp: gB, blood_type: r.blood_type || '-',
+      grp: gB, blood_type: bagTypeSummary(r),
       xmatch: r.xmatch || '-', s25: okB(r.s25),
       qty_new:    r.qty_new    ? `<span class="td-badge td-blue">${r.qty_new}</span>`   : '-',
       qty_borrow: r.qty_borrow ? `<span class="td-badge td-purple">${r.qty_borrow}</span>` : '-',
@@ -2791,6 +2813,108 @@ function exportExcel() {
 }
 
 // ═══════════════════════════════════════════
+// PRINT / EXPORT — COLUMN SELECTION
+// ═══════════════════════════════════════════
+function openPrintModal() {
+  const grid = document.getElementById('printColsGrid');
+  grid.innerHTML = THDRS.map((h, i) => {
+    const clean = h.replace(/^[^\u1780-\u17FFA-Za-z0-9]+/, '').trim() || h;
+    return `<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:8px">
+      <input type="checkbox" class="print-col-chk" data-idx="${i}" checked style="accent-color:#0369A1;width:15px;height:15px">
+      ${h}
+    </label>`;
+  }).join('');
+  const n = (filtered && filtered.length) ? filtered.length : allRecs.length;
+  document.getElementById('printSub').textContent = 'ជ្រើសរើសជួរឈរដែលចង់បង្ហាញ · ' + n + ' records';
+  document.getElementById('printModal').classList.add('open');
+}
+
+function closePrintModal() {
+  document.getElementById('printModal').classList.remove('open');
+}
+
+function togglePrintCols(on) {
+  document.querySelectorAll('.print-col-chk').forEach(cb => cb.checked = on);
+}
+
+function getSelectedPrintCols() {
+  const idxs = Array.from(document.querySelectorAll('.print-col-chk'))
+    .filter(cb => cb.checked)
+    .map(cb => parseInt(cb.dataset.idx));
+  return idxs;
+}
+
+function getPrintValue(r, col) {
+  if (col === 'blood_type') return bagTypeSummary(r);
+  const v = r[col];
+  if (v === null || v === undefined || v === '') return '-';
+  return v;
+}
+
+function doPrintSelected() {
+  const idxs = getSelectedPrintCols();
+  if (!idxs.length) { showToast('សូមជ្រើសរើសយ៉ាងហោចណាស់ ១ ជួរឈរ', 'err'); return; }
+  const data = (filtered && filtered.length) ? filtered : allRecs;
+  if (!data.length) { showToast('គ្មាន records', 'err'); return; }
+
+  const headers = idxs.map(i => THDRS[i]);
+  const cols    = idxs.map(i => TCOLS[i]);
+
+  let rowsHtml = data.map((r, i) => {
+    const cells = cols.map(c => `<td>${getPrintValue(r, c)}</td>`).join('');
+    return `<tr><td>${i + 1}</td>${cells}</tr>`;
+  }).join('');
+
+  const printHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Blood Report — Print</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Noto Sans Khmer',sans-serif;padding:24px;color:#111}
+  h1{font-size:18px;margin:0 0 4px}
+  p.sub{font-size:11px;color:#666;margin:0 0 16px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{border:1px solid #ccc;padding:5px 7px;text-align:left;white-space:nowrap}
+  th{background:#0C4A6E;color:white}
+  tr:nth-child(even){background:#f7f7f7}
+  @media print { @page { size: landscape; margin:12mm } }
+</style></head><body>
+  <h1>🩸 TSNHL Blood Report Manager — Main File</h1>
+  <p class="sub">Printed ${new Date().toLocaleString()} · ${data.length} records</p>
+  <table><thead><tr><th>#</th>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+  <tbody>${rowsHtml}</tbody></table>
+  <script>window.onload = () => { window.print(); };<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { showToast('សូមអនុញ្ញាត Popup ដើម្បី Print', 'err'); return; }
+  win.document.write(printHtml);
+  win.document.close();
+  closePrintModal();
+}
+
+function doExportSelectedExcel() {
+  const idxs = getSelectedPrintCols();
+  if (!idxs.length) { showToast('សូមជ្រើសរើសយ៉ាងហោចណាស់ ១ ជួរឈរ', 'err'); return; }
+  const data = (filtered && filtered.length) ? filtered : allRecs;
+  if (!data.length) { showToast('គ្មាន records', 'err'); return; }
+
+  const headers = ['#', ...idxs.map(i => THDRS[i])];
+  const cols    = idxs.map(i => TCOLS[i]);
+  const rows = [headers];
+  data.forEach((r, i) => {
+    rows.push([i + 1, ...cols.map(c => { const v = getPrintValue(r, c); return v === '-' ? '' : v; })]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Main File');
+  const fname = 'blood_report_selected_' + new Date().toISOString().slice(0,10) + '.xlsx';
+  XLSX.writeFile(wb, fname);
+  showToast('⬇️ Exported ' + data.length + ' records', 'ok');
+  closePrintModal();
+}
+
+// ═══════════════════════════════════════════
 // UTILS
 // ═══════════════════════════════════════════
 function showProg(on) {
@@ -3303,6 +3427,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     </div>
     <div style="margin-left:auto;display:flex;gap:8px">
       <button class="btn btn-ghost" onclick="loadRecords()">🔄 Refresh</button>
+      <button class="btn" style="background:#0369A1;color:white;box-shadow:0 2px 8px rgba(3,105,161,.25)" onclick="openPrintModal()">🖨️ Print</button>
       <button class="btn btn-green" onclick="exportExcel()">⬇️ Export Excel</button>
     </div>
   </div>
@@ -3408,6 +3533,28 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-red" id="btnEditSave" onclick="saveEdit()">💾 Save to Supabase</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT / EXPORT COLUMN SELECT MODAL -->
+<div class="overlay" id="printModal">
+  <div class="modal" style="max-width:640px;width:100%">
+    <div class="modal-head">
+      <div><h3>🖨️ Print / Export</h3><p id="printSub">ជ្រើសរើសជួរឈរដែលចង់បង្ហាញ</p></div>
+      <button class="close-btn" onclick="closePrintModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-ghost" style="font-size:12px;padding:7px 12px" onclick="togglePrintCols(true)">☑️ ជ្រើសទាំងអស់</button>
+        <button class="btn btn-ghost" style="font-size:12px;padding:7px 12px" onclick="togglePrintCols(false)">☐ លុបទាំងអស់</button>
+      </div>
+      <div id="printColsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closePrintModal()">Cancel</button>
+      <button class="btn btn-green" onclick="doExportSelectedExcel()">⬇️ Export Excel</button>
+      <button class="btn btn-red" onclick="doPrintSelected()">🖨️ Print / PDF</button>
     </div>
   </div>
 </div>
@@ -4183,13 +4330,14 @@ function deleteDoctor(id, name) {
         <h2 style="font-size:22px;font-weight:900;margin:0">📊 Report</h2>
         <p style="color:var(--muted);font-size:13px;margin:4px 0 0">របាយការណ៍សង្ខេប តាម Ward</p>
       </div>
-      <div style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div id="rpt-print-hide" style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:8px;background:white;border:2px solid var(--border);border-radius:9px;padding:6px 12px">
           <input type="date" id="rpt-from" onchange="buildReport()" style="border:none;outline:none;font-size:13px;cursor:pointer">
           <span style="color:var(--muted);font-size:12px">ដល់</span>
           <input type="date" id="rpt-to" onchange="buildReport()" style="border:none;outline:none;font-size:13px;cursor:pointer">
           <button onclick="document.getElementById('rpt-from').value='';document.getElementById('rpt-to').value='';buildReport()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0 4px">✕</button>
         </div>
+        <button onclick="printReportPage()" style="background:#0369A1;color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Print / PDF</button>
         <button onclick="exportReportExcel()" style="background:var(--green);color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">📥 Export Excel</button>
       </div>
     </div>
@@ -4207,13 +4355,16 @@ function deleteDoctor(id, name) {
     <div id="rpt-ward-tables"></div>
 
     <!-- Bag Back Reason Report -->
-    <div class="card" style="margin-top:24px;padding:24px">
+    <div class="card" id="rpt-reason-card" style="margin-top:24px;padding:24px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
         <h3 style="font-size:15px;font-weight:800;margin:0">🔄 របាយការណ៍ មូលហេតុ វិលចូលស្តុក</h3>
+        <button onclick="printReasonReport()" id="rpt-reason-print-btn" style="background:#0369A1;color:white;border:none;border-radius:9px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
+          🖨️ Print / PDF
+        </button>
         <button onclick="_exportReasonExcel()" style="background:linear-gradient(135deg,#059669,#047857);color:white;border:none;border-radius:9px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">
           ⬇️ Export Excel
         </button>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div id="rpt-reason-dates" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <input type="date" id="rpt-reason-from" onchange="_buildReasonReport(_rptReasonData())" style="border:2px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;outline:none;cursor:pointer">
           <span style="color:var(--muted);font-size:12px">ដល់</span>
           <input type="date" id="rpt-reason-to" onchange="_buildReasonReport(_rptReasonData())" style="border:2px solid var(--border);border-radius:9px;padding:7px 10px;font-size:12px;outline:none;cursor:pointer">
@@ -4600,6 +4751,67 @@ function _statCard(icon, label, val, color, bg) {
     '<div style="font-size:22px;font-weight:900;color:' + color + '">' + val + '</div>' +
     '<div style="font-size:11px;color:var(--muted);font-weight:600;margin-top:2px">' + label + '</div>' +
   '</div>';
+}
+
+function _openPrintWindow(titleHtml, bodyHtml) {
+  const mainStyle = document.querySelector('style') ? document.querySelector('style').innerHTML : '';
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Blood Report — Print</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>${mainStyle}</style>
+<style>
+  body{padding:24px;background:white !important}
+  .card{margin-bottom:20px}
+  button, input, .filter-btn, .dchip { display:none !important; }
+  @media print { @page { size: landscape; margin:12mm } }
+</style></head><body>
+  <div style="max-width:1100px;margin:0 auto">
+    ${titleHtml}
+    ${bodyHtml}
+  </div>
+  <script>window.onload = () => { window.print(); };<\/script>
+</body></html>`;
+  const win = window.open('', '_blank');
+  if (!win) { showToast('សូមអនុញ្ញាត Popup ដើម្បី Print', 'err'); return; }
+  win.document.write(html);
+  win.document.close();
+}
+
+function printReportPage() {
+  const summary     = document.getElementById('rpt-summary')?.innerHTML || '';
+  const chart       = document.getElementById('rpt-chart')?.innerHTML || '';
+  const wardTables  = document.getElementById('rpt-ward-tables')?.innerHTML || '';
+  const reasonTable = document.getElementById('rpt-reason-table')?.innerHTML || '';
+  const from = document.getElementById('rpt-from')?.value || '';
+  const to   = document.getElementById('rpt-to')?.value || '';
+  const range = (from || to) ? ` (${from||'…'} — ${to||'…'})` : '';
+
+  const bodyHtml = `
+    <div id="rpt-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:28px">${summary}</div>
+    <div class="card" style="margin-bottom:24px;padding:24px">
+      <h3 style="font-size:15px;font-weight:800;margin:0 0 20px">📊 ចំនួន Bag តាម Ward</h3>
+      <div style="display:flex;align-items:flex-end;gap:12px;height:200px;padding-bottom:30px;overflow-x:auto">${chart}</div>
+    </div>
+    <div>${wardTables}</div>
+    <div class="card" style="margin-top:24px;padding:24px">
+      <h3 style="font-size:15px;font-weight:800;margin:0 0 20px">🔄 របាយការណ៍ មូលហេតុ វិលចូលស្តុក</h3>
+      <div>${reasonTable}</div>
+    </div>`;
+  const titleHtml = `<h1 style="font-size:20px;font-weight:900;margin:0 0 4px">📊 TSNHL Blood Report — Report</h1>
+    <p style="color:#666;font-size:12px;margin:0 0 20px">Printed ${new Date().toLocaleString()}${range}</p>`;
+  _openPrintWindow(titleHtml, bodyHtml);
+}
+
+function printReasonReport() {
+  const reasonTable = document.getElementById('rpt-reason-table')?.innerHTML || '';
+  const from = document.getElementById('rpt-reason-from')?.value || '';
+  const to   = document.getElementById('rpt-reason-to')?.value || '';
+  const range = (from || to) ? ` (${from||'…'} — ${to||'…'})` : '';
+
+  const bodyHtml = `<div class="card" style="padding:24px">${reasonTable}</div>`;
+  const titleHtml = `<h1 style="font-size:20px;font-weight:900;margin:0 0 4px">🔄 របាយការណ៍ មូលហេតុ វិលចូលស្តុក</h1>
+    <p style="color:#666;font-size:12px;margin:0 0 20px">Printed ${new Date().toLocaleString()}${range}</p>`;
+  _openPrintWindow(titleHtml, bodyHtml);
 }
 
 function exportReportExcel() {
