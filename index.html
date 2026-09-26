@@ -598,15 +598,41 @@ async function doLogin() {
   btn.textContent = '⏳ កំពុង​ Login...'; btn.disabled = true;
   try {
     var hash = await sha256(pass);
-    var res = await fetch(SB_CONFIG.url + '/rest/v1/app_users?username=eq.' + encodeURIComponent(user) + '&select=id,username,password_hash,role,full_name,active,permissions', {
-      headers: { 'apikey': SB_CONFIG.key, 'Authorization': 'Bearer ' + SB_CONFIG.key }
-    });
-    var users = await res.json();
-    if (!users.length || users[0].password_hash !== hash) {
-      showLoginErr('⚠️ Username ឬ​ Password មិន​ ត្រឹម​ ត្រូវ'); return;
+
+    // Preferred: server-side verification via RPC — password_hash never leaves the database.
+    var loggedIn = false;
+    try {
+      var rpcRes = await fetch(SB_CONFIG.url + '/rest/v1/rpc/login_check', {
+        method: 'POST',
+        headers: { 'apikey': SB_CONFIG.key, 'Authorization': 'Bearer ' + SB_CONFIG.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_username: user, p_password_hash: hash })
+      });
+      if (rpcRes.ok) {
+        var rows = await rpcRes.json();
+        if (rows && rows.length) {
+          currentUser = rows[0];
+          loggedIn = true;
+        } else {
+          showLoginErr('⚠️ Username ឬ​ Password មិន​ ត្រឹម​ ត្រូវ (ឬ Account ត្រូវបានបិទ)');
+          return;
+        }
+      }
+    } catch (rpcErr) { /* RPC not set up yet — fall back below */ }
+
+    // Fallback (only used until the login_check() SQL migration is run — ask Claude for it)
+    if (!loggedIn) {
+      var res = await fetch(SB_CONFIG.url + '/rest/v1/app_users?username=eq.' + encodeURIComponent(user) + '&select=id,username,password_hash,role,full_name,active,permissions', {
+        headers: { 'apikey': SB_CONFIG.key, 'Authorization': 'Bearer ' + SB_CONFIG.key }
+      });
+      var users = await res.json();
+      if (!users.length || users[0].password_hash !== hash) {
+        showLoginErr('⚠️ Username ឬ​ Password មិន​ ត្រឹម​ ត្រូវ'); return;
+      }
+      if (!users[0].active) { showLoginErr('⚠️ Account នេះ​ ត្រូវ​ បាន​ បិទ'); return; }
+      delete users[0].password_hash;
+      currentUser = users[0];
     }
-    if (!users[0].active) { showLoginErr('⚠️ Account នេះ​ ត្រូវ​ បាន​ បិទ'); return; }
-    currentUser = users[0];
+
     sessionStorage.setItem('tsnhl_user', JSON.stringify(currentUser));
     startApp();
   } catch(e) {
@@ -1734,12 +1760,14 @@ async function saveRecord() {
   const borrowEl = document.getElementById('f_borrow');
   if (!borrowEl?.value?.trim()) { flagErr(borrowEl, 'សូមបញ្ចូល ចំនួន ខ្ចី'); return false; }
 
-  // Validate: bag_used checked → require ថ្ងៃ ម៉ោង យក
+  // Validate: bag_used checked → require 👤 អ្នកយកប្រើ AND 🕐 ថ្ងៃ ម៉ោង យក
   for (var _ui = 0; _ui < BAG_SFXS.length; _ui++) {
     var _usfx = BAG_SFXS[_ui];
     var _usedCb = document.getElementById('f_bag_used' + _usfx);
     if (!_usedCb || !_usedCb.checked) continue;
     var _uBagNum = _usfx ? _usfx.replace('_','') : '1';
+    var _takerEl = document.getElementById('f_bag_taker' + _usfx);
+    if (!_takerEl?.value?.trim()) { flagErr(_takerEl, '👤 Bag ' + _uBagNum + ': សូមបញ្ចូល អ្នកយកប្រើ'); return false; }
     var _takenDtEl = document.getElementById('f_bag_taken_dt' + _usfx);
     if (!_takenDtEl?.value?.trim()) { flagErr(_takenDtEl, '🕐 Bag ' + _uBagNum + ': សូមបញ្ចូល ថ្ងៃ ម៉ោង យក'); return false; }
   }
@@ -2179,7 +2207,7 @@ function openEdit(i) {
   document.getElementById('editBody').innerHTML = buildEditForm(r);
   document.getElementById('editModal').classList.add('open');
   // Recalc auto fields after modal opens
-  setTimeout(() => editCalc(), 50);
+  setTimeout(() => { editCalc(); editUpdateAddBagState(); }, 50);
   // Re-trigger bag_back panel display for bags already checked (HTML checked attr doesn't fire onchange)
   setTimeout(() => {
     ['', '_2', '_3', '_4', '_5', '_6', '_7'].forEach(sfx => {
@@ -2437,7 +2465,7 @@ function buildEditForm(r) {
       <label style="color:var(--red);font-size:13px;font-weight:900;letter-spacing:.5px">⚗️ X-MATCH (BAG)</label>
       <div style="display:flex;border:2.5px solid var(--red);border-radius:10px;overflow:hidden;background:#FFF5F5">
         <input type="number" data-key="xmatch" value="${eH(String(r.xmatch??''))}" 
-          oninput="editCalc()"
+          oninput="editCalc();editUpdateAddBagState()"
           style="border:none;outline:none;flex:1;padding:11px 14px;font-size:18px;font-weight:900;color:var(--red);font-family:JetBrains Mono,monospace;background:transparent">
         <span style="background:#FECACA;border-left:2px solid var(--red);padding:11px 14px;font-size:14px;font-weight:900;color:var(--red);display:flex;align-items:center">Bag</span>
       </div>
@@ -2597,11 +2625,32 @@ function cannotReturnChange(chk) {
 
 // Edit modal: add bag row dynamically
 let editBagCount = 1;
+function editUpdateAddBagState() {
+  const container = document.getElementById('editBagContainer');
+  const btn = document.getElementById('editBtnAddBag');
+  if (!container || !btn) return;
+  const existing = container.querySelectorAll('.bag-row').length;
+  const xmEl = document.querySelector('#editBody [data-key="xmatch"]');
+  const xmLimit = xmEl ? (parseInt(xmEl.value) || 0) : 0;
+  const atLimit = existing >= 7 || (xmLimit > 0 && existing >= xmLimit);
+  btn.style.opacity = atLimit ? '0.4' : '1';
+  btn.title = (xmLimit > 0 && existing >= xmLimit) ? 'ដល់កំរិត X-Match (' + xmLimit + ' Bag) ហើយ' : '';
+}
+
 function editAddBag() {
   const container = document.getElementById('editBagContainer');
   if (!container) return;
   const existing = container.querySelectorAll('.bag-row').length;
   if (existing >= 7) return;
+
+  // X-Match (Bag) sets the max bag count allowed — prevents adding more bags than requested
+  const xmEl = document.querySelector('#editBody [data-key="xmatch"]');
+  const xmLimit = xmEl ? (parseInt(xmEl.value) || 0) : 0;
+  if (xmLimit > 0 && existing >= xmLimit) {
+    showToast('⚠️ X-Match កំណត់ត្រឹម ' + xmLimit + ' Bag ប៉ុណ្ណោះ — សូមបង្កើន X-Match លេខ មុននឹងបន្ថែម Bag ទៀត', 'err');
+    return;
+  }
+
   const n   = existing + 1;
   const sfxList = ['','_2','_3','_4','_5','_6','_7'];
   const sfx = sfxList[existing];
@@ -2647,14 +2696,13 @@ function editAddBag() {
         '<input type="datetime-local" data-key="bag_taken_dt' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">' +
       '</div>' +
       '<div class="fld"><label>🧑‍⚕️ បុគ្គលិក-LAB</label>' +
-        '<select data-key="bag_lab_staff' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:JetBrains Mono,monospace;font-weight:600;cursor:pointer;outline:none">' + labStaffOpts(r['bag_lab_staff'+sfx]||'') + '</select>' +
+        '<select data-key="bag_lab_staff' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:JetBrains Mono,monospace;font-weight:600;cursor:pointer;outline:none">' + labStaffOpts('') + '</select>' +
       '</div>' +
     '</div>';
   container.appendChild(div);
   const lbl = document.getElementById('editBagCountLabel');
   if (lbl) lbl.textContent = 'Bag ' + (existing+1) + ' / 7';
-  const btn = document.getElementById('editBtnAddBag');
-  if (btn && existing+1 >= 7) btn.style.opacity = '0.4';
+  editUpdateAddBagState();
 }
 
 function editRemoveBag(sfx) {
@@ -2667,8 +2715,7 @@ function editRemoveBag(sfx) {
     const cnt = container ? container.querySelectorAll('.bag-row').length : 1;
     const lbl = document.getElementById('editBagCountLabel');
     if (lbl) lbl.textContent = 'Bag ' + cnt + ' / 7';
-    const btn = document.getElementById('editBtnAddBag');
-    if (btn) btn.style.opacity = '1';
+    editUpdateAddBagState();
   }
 }
 
@@ -2787,13 +2834,19 @@ function editCalc() {
 }
 
 async function saveEdit() {
-  // Validate: bag_used checked → require ថ្ងៃ ម៉ោង យក (Edit Record)
+  // Validate: bag_used checked → require 👤 អ្នកយកប្រើ AND 🕐 ថ្ងៃ ម៉ោង យក (Edit Record)
   var USED_SFXS_E = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
   for (var _eui = 0; _eui < USED_SFXS_E.length; _eui++) {
     var _eusfx = USED_SFXS_E[_eui];
     var _eusedCb = document.querySelector('#editBody [data-key="bag_used' + _eusfx + '"]');
     if (!_eusedCb || !_eusedCb.checked) continue;
     var _euBagNum = _eusfx ? _eusfx.replace('_','') : '1';
+    var _etakerEl = document.querySelector('#editBody [data-key="bag_taker' + _eusfx + '"]');
+    if (!_etakerEl?.value?.trim()) {
+      if (_etakerEl) { _etakerEl.style.borderColor='var(--red)'; _etakerEl.style.boxShadow='0 0 0 3px rgba(185,28,28,.12)'; _etakerEl.scrollIntoView({behavior:'smooth',block:'center'}); }
+      showToast('👤 Bag ' + _euBagNum + ': សូមបញ្ចូល អ្នកយកប្រើ', 'err');
+      return;
+    }
     var _etakenDtEl = document.querySelector('#editBody [data-key="bag_taken_dt' + _eusfx + '"]');
     if (!_etakenDtEl?.value?.trim()) {
       if (_etakenDtEl) { _etakenDtEl.style.borderColor='var(--red)'; _etakenDtEl.style.boxShadow='0 0 0 3px rgba(185,28,28,.12)'; _etakenDtEl.scrollIntoView({behavior:'smooth',block:'center'}); }
