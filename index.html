@@ -103,6 +103,9 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 .main{max-width:1600px;margin:0 auto;padding:20px}
 .page{display:none}.page.active{display:block}
 
+.daily-cards{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+@media(max-width:900px){.daily-cards{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:480px){.daily-cards{grid-template-columns:repeat(2,1fr)}}
 .skel-bar{height:12px;border-radius:6px;background:linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 37%,#E5E7EB 63%);background-size:400% 100%;animation:skel-shine 1.4s ease infinite}
 @keyframes skel-shine{0%{background-position:100% 50%}100%{background-position:0 50%}}
 .skel-table{width:100%;border-collapse:collapse}
@@ -396,6 +399,7 @@ async function sbDelete(id) {
 }
 
 async function logAudit(action, recordId, oldData, newData) {
+  _dailyRetKey = '';   // Daily Report: force a fresh read of the audit log
   try {
     await sbFetch('audit_log', {
       method: 'POST',
@@ -581,6 +585,7 @@ async function tryFaceLogin() {
     if (!assertion) throw new Error('Verification failed');
     currentUser = users[0];
     sessionStorage.setItem('tsnhl_user', JSON.stringify(currentUser));
+    logAuditEvent('login', { method: 'face-id' });
     startApp();
   } catch (e) {
     showLoginErr('❌ Face ID / Fingerprint មិនជោគជ័យ: ' + (e.message || 'Cancelled'));
@@ -634,6 +639,7 @@ async function doLogin() {
     }
 
     sessionStorage.setItem('tsnhl_user', JSON.stringify(currentUser));
+    logAuditEvent('login', { method: 'password' });
     startApp();
   } catch(e) {
     showLoginErr('❌ Error: ' + e.message);
@@ -653,6 +659,7 @@ function startApp() {
   var isAdmin = currentUser.role === 'admin';
   document.getElementById('nav-users').style.display = isAdmin ? '' : 'none';
   document.getElementById('nav-trash').style.display = isAdmin ? '' : 'none';
+  document.getElementById('nav-audit').style.display = isAdmin ? '' : 'none';
   var dbBadgeEl = document.querySelector('.db-badge');
   if (dbBadgeEl) {
     dbBadgeEl.style.cursor = isAdmin ? 'pointer' : 'default';
@@ -743,6 +750,7 @@ function applyStaffRestrictions() {
 
 function doLogout() {
   if (!confirm('Logout ចេញ​ ឬ?')) return;
+  logAuditEvent('logout');
   currentUser = null;
   sessionStorage.removeItem('tsnhl_user');
   location.reload();
@@ -946,11 +954,13 @@ function showPage(id) {
   const tabs = document.querySelectorAll('.nav-tab');
   if (id === 'pg-entry')  tabs[0].classList.add('active');
   if (id === 'pg-main')   { tabs[1].classList.add('active'); loadRecords(); }
-  if (id === 'pg-import') tabs[2].classList.add('active');
-  if (id === 'pg-manage') { tabs[3].classList.add('active'); loadDoctors(); loadWards(); }
-  if (id === 'pg-report') { tabs[4].classList.add('active'); buildReport(); }
-  if (id === 'pg-users')  { tabs[5].classList.add('active'); loadUsers(); }
-  if (id === 'pg-trash')  { tabs[6].classList.add('active'); loadTrash(); }
+  if (id === 'pg-daily')  { tabs[2].classList.add('active'); buildDailyReport(); }
+  if (id === 'pg-import') tabs[3].classList.add('active');
+  if (id === 'pg-manage') { tabs[4].classList.add('active'); loadDoctors(); loadWards(); }
+  if (id === 'pg-report') { tabs[5].classList.add('active'); buildReport(); }
+  if (id === 'pg-users')  { tabs[6].classList.add('active'); loadUsers(); }
+  if (id === 'pg-trash')  { tabs[7].classList.add('active'); loadTrash(); }
+  if (id === 'pg-audit')  { tabs[8].classList.add('active'); loadAudit(); }
 }
 
 // ═══════════════════════════════════════════
@@ -1884,6 +1894,235 @@ function renderHistoryEntry(log) {
     <div style="font-size:12px;color:var(--muted);margin-top:4px">👤 ${log.changed_by || 'unknown'}</div>
     ${diffHtml}
   </div>`;
+}
+
+// ═══════════════════════════════════════════
+// AUDIT LOG — who used the system (Admin)
+// ═══════════════════════════════════════════
+// Login / logout are written to audit_log too (table_name 'app_users', no record_id)
+function logAuditEvent(action, extra) {
+  try {
+    if (!currentUser) return;
+    fetch((SB_URL || SB_CONFIG.url) + '/rest/v1/audit_log', {
+      method: 'POST', keepalive: true,
+      headers: { 'apikey': SB_KEY || SB_CONFIG.key, 'Authorization': 'Bearer ' + (SB_KEY || SB_CONFIG.key), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({
+        table_name: 'app_users', record_id: null, action: action,
+        changed_by: currentUser.full_name || currentUser.username || 'unknown',
+        old_data: null,
+        new_data: Object.assign({ username: currentUser.username, ua: String(navigator.userAgent || '').slice(0, 140) }, extra || {})
+      })
+    }).catch(function() {});
+  } catch (e) {}
+}
+
+var _auditRows = [], _auditTrunc = false, _auditLimit = 30, _auditUser = '', _auditErr = '';
+var _AUDIT_ACT = {
+  insert:  { l: '🆕 បញ្ចូល',  c: '#059669', b: '#DCFCE7' },
+  update:  { l: '✏️ កែ',      c: '#1D4ED8', b: '#DBEAFE' },
+  delete:  { l: '🗑 លុប',      c: '#B91C1C', b: '#FEE2E2' },
+  restore: { l: '♻️ Restore', c: '#0F766E', b: '#CCFBF1' },
+  login:   { l: '🔐 Login',   c: '#4338CA', b: '#E0E7FF' },
+  logout:  { l: '🚪 Logout',  c: '#475569', b: '#E2E8F0' }
+};
+function _auditBadge(a) {
+  var m = _AUDIT_ACT[a] || { l: a, c: '#475569', b: '#E2E8F0' };
+  return '<span style="background:' + m.b + ';color:' + m.c + ';padding:2px 9px;border-radius:12px;font-weight:800;font-size:11.5px;white-space:nowrap">' + m.l + '</span>';
+}
+function _auditFmt(d) {
+  var p = function(n) { return String(n).padStart(2, '0'); };
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' <b>' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '</b>';
+}
+
+async function loadAudit() {
+  var box = document.getElementById('audit-events');
+  if (!currentUser || currentUser.role !== 'admin') {
+    box.innerHTML = '<div class="empty"><div class="ei">🔒</div><p>មានតែ Admin ប៉ុណ្ណោះទើបមើល Audit Log បាន</p></div>';
+    return;
+  }
+  box.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  var n = parseInt(document.getElementById('audit-range').value) || 7;
+  var end = new Date(); end.setHours(0, 0, 0, 0);
+  var start = new Date(end); start.setDate(start.getDate() - (n - 1));
+  var endEx = new Date(end); endEx.setDate(endEx.getDate() + 1);
+  var sel = 'id,record_id,action,changed_by,changed_at,name:new_data->>name,o_name:old_data->>name,hn:new_data->>hn,o_hn:old_data->>hn,ward:new_data->>ward_from,o_ward:old_data->>ward_from,method:new_data->>method';
+  var rows = [], PAGE = 1000, MAXP = 5;
+  _auditTrunc = false; _auditErr = '';
+  try {
+    for (var pg = 0; pg < MAXP; pg++) {
+      var q = 'audit_log?select=' + encodeURIComponent(sel) +
+        '&changed_at=gte.' + encodeURIComponent(start.toISOString()) +
+        '&changed_at=lt.' + encodeURIComponent(endEx.toISOString()) +
+        '&order=changed_at.desc&limit=' + PAGE + '&offset=' + (pg * PAGE);
+      var part = await sbFetch(q);
+      rows = rows.concat(part);
+      if (part.length < PAGE) break;
+      if (pg === MAXP - 1) _auditTrunc = true;
+    }
+  } catch (e) {
+    _auditErr = (e && e.message) || String(e);
+    rows = [];
+  }
+  var byId = {}; allRecs.forEach(function(r) { byId[r.id] = r; });
+  _auditRows = rows.map(function(a) {
+    var rec = a.record_id != null ? byId[a.record_id] : null;   // fallback for entries that only carry a few fields
+    return {
+      id: a.id, rid: a.record_id, action: a.action, user: a.changed_by || '-', when: new Date(a.changed_at),
+      name: a.name || a.o_name || (rec && rec.name) || '', hn: a.hn || a.o_hn || (rec && rec.hn) || '',
+      ward: a.ward || a.o_ward || (rec && rec.ward_from) || '', method: a.method || ''
+    };
+  });
+  _auditLimit = 30;
+  renderAudit();
+}
+
+function _auditFiltered(ignoreUser) {
+  var act = document.getElementById('audit-action').value;
+  return _auditRows.filter(function(r) { return (!act || r.action === act) && (ignoreUser || !_auditUser || r.user === _auditUser); });
+}
+
+function auditPickUser(u) { _auditUser = (_auditUser === u) ? '' : u; _auditLimit = 30; renderAudit(); }
+
+function renderAudit() {
+  var noteEl = document.getElementById('audit-note');
+  if (_auditErr) {
+    document.getElementById('audit-stats').innerHTML = '';
+    document.getElementById('audit-users').innerHTML = '';
+    document.getElementById('audit-userchip').innerHTML = '';
+    document.getElementById('audit-events').innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>មិនអាចអាន audit_log បានទេ<br><small>' + eH(_auditErr) + '</small><br><small>សូមប្រាកដថាបាន Run SQL បង្កើត table audit_log</small></p></div>';
+    noteEl.innerHTML = '';
+    return;
+  }
+  var all = _auditFiltered(true);
+  var list = _auditFiltered(false);
+
+  // ── stat chips ──
+  var cnt = {}; all.forEach(function(r) { cnt[r.action] = (cnt[r.action] || 0) + 1; });
+  var users = {}; all.forEach(function(r) { users[r.user] = 1; });
+  var chip = function(label, v, c, b) { return '<div style="background:' + b + ';border-radius:12px;padding:9px 14px;min-width:96px"><div style="font-size:21px;font-weight:900;color:' + c + ';line-height:1">' + v + '</div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-top:3px">' + label + '</div></div>'; };
+  document.getElementById('audit-stats').innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+    chip('សរុប', all.length, '#0F172A', '#F1F5F9') + chip('👥 អ្នកប្រើ', Object.keys(users).length, '#0369A1', '#E0F2FE') +
+    chip('🔐 Login', cnt.login || 0, '#4338CA', '#E0E7FF') + chip('🆕 បញ្ចូល', cnt.insert || 0, '#059669', '#DCFCE7') +
+    chip('✏️ កែ', cnt.update || 0, '#1D4ED8', '#DBEAFE') + chip('🗑 លុប', cnt.delete || 0, '#B91C1C', '#FEE2E2') +
+    chip('♻️ Restore', cnt.restore || 0, '#0F766E', '#CCFBF1') + '</div>';
+
+  // ── per-user summary (click a user to filter the list below) ──
+  var byUser = {};
+  all.forEach(function(r) {
+    var u = byUser[r.user] || (byUser[r.user] = { name: r.user, t: 0, login: 0, insert: 0, update: 0, delete: 0, restore: 0, last: null });
+    u.t++; if (u[r.action] !== undefined) u[r.action]++;
+    if (!u.last || r.when > u.last) u.last = r.when;
+  });
+  var ulist = Object.keys(byUser).map(function(k) { return byUser[k]; }).sort(function(a, b) { return b.t - a.t; });
+  var th = 'padding:9px 12px;white-space:nowrap';
+  var num = function(v, c) { return '<td style="padding:8px 12px;text-align:center;font-weight:800;color:' + (v ? c : '#CBD5E1') + '">' + (v || '—') + '</td>'; };
+  var uh = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0F172A;color:white">' +
+    '<th style="' + th + ';text-align:left">👤 អ្នកប្រើ <span style="font-weight:500;font-size:11px;opacity:.7">(ចុចដើម្បីចម្រាញ់)</span></th><th style="' + th + '">សរុប</th><th style="' + th + '">🔐 Login</th>' +
+    '<th style="' + th + '">🆕 បញ្ចូល</th><th style="' + th + '">✏️ កែ</th><th style="' + th + '">🗑 លុប</th><th style="' + th + '">♻️</th><th style="' + th + ';text-align:left">សកម្មភាពចុងក្រោយ</th></tr></thead><tbody>';
+  ulist.forEach(function(u, i) {
+    var on = _auditUser === u.name;
+    uh += '<tr onclick="auditPickUser(_auditUserList[' + i + '])" style="border-bottom:1px solid var(--border);cursor:pointer;' + (on ? 'background:#EFF6FF;box-shadow:inset 4px 0 0 #0369A1' : (i % 2 ? 'background:#FAFBFC' : '')) + '">' +
+      '<td style="padding:8px 12px;font-weight:800">' + eH(u.name) + '</td>' +
+      '<td style="padding:8px 12px;text-align:center;font-weight:900">' + u.t + '</td>' +
+      num(u.login, '#4338CA') + num(u.insert, '#059669') + num(u.update, '#1D4ED8') + num(u.delete, '#B91C1C') + num(u.restore, '#0F766E') +
+      '<td style="padding:8px 12px;white-space:nowrap;color:var(--muted)">' + _auditFmt(u.last) + '</td></tr>';
+  });
+  uh += '</tbody></table>';
+  _auditUserList = ulist.map(function(u) { return u.name; });
+  document.getElementById('audit-users').innerHTML = ulist.length ? uh : '<div class="empty"><div class="ei">📭</div><p>គ្មានសកម្មភាពក្នុងរយៈពេលនេះទេ</p></div>';
+
+  document.getElementById('audit-userchip').innerHTML = _auditUser
+    ? '<span style="display:inline-flex;align-items:center;gap:8px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:800">👤 ' + eH(_auditUser) + ' — ' + list.length + ' សកម្មភាព <span style="cursor:pointer" onclick="auditPickUser(_auditUser)">✕</span></span>'
+    : '';
+
+  // ── events: one line per action ──
+  var shown = list.slice(0, _auditLimit);
+  var eh = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0F172A;color:white">' +
+    '<th style="' + th + ';text-align:left">🕐 ថ្ងៃ ម៉ោង</th><th style="' + th + ';text-align:left">👤 អ្នកប្រើ</th><th style="' + th + ';text-align:left">សកម្មភាព</th>' +
+    '<th style="' + th + ';text-align:left">អ្នកជំងឺ</th><th style="' + th + ';text-align:left">HN</th><th style="' + th + ';text-align:left">ផ្នែក</th><th style="' + th + '"></th></tr></thead><tbody>';
+  shown.forEach(function(r, i) {
+    var isEvt = (r.action === 'login' || r.action === 'logout');
+    eh += '<tr style="border-bottom:1px solid var(--border);' + (i % 2 ? 'background:#FAFBFC' : '') + '">' +
+      '<td style="padding:8px 12px;white-space:nowrap">' + _auditFmt(r.when) + '</td>' +
+      '<td style="padding:8px 12px;font-weight:800">' + eH(r.user) + '</td>' +
+      '<td style="padding:8px 12px">' + _auditBadge(r.action) + (r.method ? ' <span style="font-size:11px;color:var(--muted)">' + eH(r.method) + '</span>' : '') + '</td>' +
+      '<td style="padding:8px 12px;font-weight:700">' + (r.name ? eH(r.name) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
+      '<td style="padding:8px 12px;font-family:JetBrains Mono,monospace;font-size:11.5px">' + (r.hn ? eH(r.hn) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
+      '<td style="padding:8px 12px">' + (r.ward ? eH(r.ward) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
+      '<td style="padding:6px 12px;text-align:right"><button onclick="auditToggle(' + r.id + ')" style="border:1.5px solid var(--border);background:white;border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit">🔍</button></td></tr>' +
+      '<tr id="audit-det-' + r.id + '" style="display:none;background:#F8FAFC"><td colspan="7" style="padding:10px 16px"><div id="audit-detbody-' + r.id + '"></div></td></tr>';
+  });
+  eh += '</tbody></table>';
+  if (!list.length) eh = '<div class="empty"><div class="ei">📭</div><p>គ្មានសកម្មភាពត្រូវនឹងតម្រង</p></div>';
+  if (list.length > 30) {
+    var btn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
+    eh += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:600">បង្ហាញ ' + shown.length + ' / ' + list.length + '</span>' +
+      (shown.length < list.length ? '<button style="' + btn + '" onclick="_auditLimit+=30;renderAudit()">⬇️ បង្ហាញបន្ថែមទៀត (+30)</button>' : '') +
+      (_auditLimit > 30 ? '<button style="' + btn + ';color:#64748B" onclick="_auditLimit=30;renderAudit()">⬆️ បង្ហាញតិចវិញ</button>' : '') + '</div>';
+  }
+  document.getElementById('audit-events').innerHTML = eh;
+
+  noteEl.innerHTML = (_auditTrunc ? '<span style="color:#B45309;font-weight:700">⚠️ បង្ហាញតែ 5,000 សកម្មភាពថ្មីៗ — សូមរួមតូចរយៈពេល · </span>' : '') +
+    'ចុច <b>🔍</b> ដើម្បីមើលអ្វីដែលបានប្តូរ (មុន/ក្រោយ) · Login/Logout ត្រូវកត់ត្រាចាប់ពីកំណែនេះ · ការបញ្ចូល/កែ/លុប record ត្រូវកត់ត្រាចាប់ពីថ្ងៃបើក Audit Log';
+}
+var _auditUserList = [];
+
+// Detail of one entry (loaded on demand — the old/new JSON can be large)
+async function auditToggle(id) {
+  var det = document.getElementById('audit-det-' + id);
+  if (!det) return;
+  if (det.style.display !== 'none') { det.style.display = 'none'; return; }
+  det.style.display = '';
+  var body = document.getElementById('audit-detbody-' + id);
+  if (body.dataset.loaded) return;
+  body.innerHTML = '<span style="color:var(--muted)">⏳ Loading…</span>';
+  try {
+    var r = await sbFetch('audit_log?id=eq.' + id + '&select=action,old_data,new_data');
+    body.innerHTML = r.length ? _auditDetailHtml(r[0]) : 'គ្មានទិន្នន័យ';
+    body.dataset.loaded = '1';
+  } catch (e) { body.innerHTML = '<span style="color:#B91C1C">❌ ' + eH(e.message || e) + '</span>'; }
+}
+
+function _auditDetailHtml(a) {
+  var FN = {}; TCOLS.forEach(function(k, i) { FN[k] = THDRS[i]; });
+  var lab = function(k) { return FN[k] ? FN[k] : k; };
+  var val = function(v) { var s = (v === null || v === undefined || v === '') ? '' : String(v); return s.length > 120 ? s.slice(0, 120) + '…' : s; };
+  var oD = a.old_data || {}, nD = a.new_data || {};
+  var kv = function(o, skip) {
+    var items = Object.keys(o).filter(function(k) { return k !== 'id' && (!skip || skip.indexOf(k) < 0) && val(o[k]) !== ''; });
+    if (!items.length) return '<span style="color:var(--muted)">—</span>';
+    return '<div style="display:flex;flex-wrap:wrap;gap:6px">' + items.slice(0, 40).map(function(k) {
+      return '<span style="background:white;border:1px solid var(--border);border-radius:7px;padding:2px 8px;font-size:11.5px"><span style="color:var(--muted)">' + eH(lab(k)) + ':</span> <b>' + eH(val(o[k])) + '</b></span>';
+    }).join('') + (items.length > 40 ? '<span style="color:var(--muted);font-size:11.5px">+' + (items.length - 40) + '</span>' : '') + '</div>';
+  };
+  if (a.action === 'update') {
+    var rows = Object.keys(nD).filter(function(k) { return k !== 'id' && val(oD[k]) !== val(nD[k]); });
+    if (!rows.length) return '<span style="color:var(--muted)">គ្មានតម្លៃប្តូរ</span>';
+    return '<table style="border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:3px 10px">Field</th><th style="text-align:left;padding:3px 10px">មុន</th><th style="text-align:left;padding:3px 10px">ក្រោយ</th></tr></thead><tbody>' +
+      rows.map(function(k) {
+        return '<tr><td style="padding:3px 10px;font-weight:700;color:var(--muted)">' + eH(lab(k)) + '</td><td style="padding:3px 10px;color:#B91C1C">' + (eH(val(oD[k])) || '—') + '</td><td style="padding:3px 10px;color:#166534;font-weight:700">' + (eH(val(nD[k])) || '—') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  if (a.action === 'insert') return '<div style="font-size:12px;font-weight:700;margin-bottom:6px">Record ថ្មីដែលបានបញ្ចូល</div>' + kv(nD);
+  if (a.action === 'delete') return '<div style="font-size:12px;font-weight:700;margin-bottom:6px">Record ដែលបានលុប</div>' + kv(oD);
+  if (a.action === 'restore') return '<span style="color:var(--muted)">Restore record ពី Trash</span>';
+  return kv(nD);   // login / logout: username, method, device
+}
+
+function exportAuditExcel() {
+  if (typeof XLSX === 'undefined') { showToast('XLSX library not loaded!', 'err'); return; }
+  var list = _auditFiltered(false);
+  var p = function(n) { return String(n).padStart(2, '0'); };
+  var aoa = [['ថ្ងៃ','ម៉ោង','អ្នកប្រើ','សកម្មភាព','អ្នកជំងឺ','HN','ផ្នែក','Record ID','វិធី']];
+  list.forEach(function(r) {
+    aoa.push([r.when.getFullYear() + '-' + p(r.when.getMonth() + 1) + '-' + p(r.when.getDate()), p(r.when.getHours()) + ':' + p(r.when.getMinutes()) + ':' + p(r.when.getSeconds()),
+      r.user, r.action, r.name, r.hn, r.ward, r.rid == null ? '' : r.rid, r.method]);
+  });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Audit Log');
+  XLSX.writeFile(wb, 'audit_log_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+  showToast('⬇️ Exported ' + list.length + ' សកម្មភាព', 'ok');
 }
 
 // ═══════════════════════════════════════════
@@ -3448,11 +3687,13 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div class="nav-tabs">
       <button class="nav-tab active" onclick="showPage('pg-entry')">📝 Data Entry</button>
       <button class="nav-tab" onclick="showPage('pg-main')">📊 Main File</button>
+      <button class="nav-tab" onclick="showPage('pg-daily')">📅 Daily Report</button>
       <button class="nav-tab" onclick="showPage('pg-import')">📂 Import Excel</button>
       <button class="nav-tab" onclick="showPage('pg-manage')">⚙️ Management</button>
       <button class="nav-tab" onclick="showPage('pg-report')">📊 Report</button>
       <button class="nav-tab" id="nav-users" style="display:none" onclick="showPage('pg-users')">👥 Users</button>
       <button class="nav-tab" id="nav-trash" style="display:none" onclick="showPage('pg-trash')">🗑️ Trash</button>
+      <button class="nav-tab" id="nav-audit" style="display:none" onclick="showPage('pg-audit')">🕵️ Audit Log</button>
       <button onclick="doLogout()" style="background:rgba(220,38,38,.85);color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-left:8px" title="Logout">🚪 Logout</button>
     </div>
     <div class="db-badge" onclick="resetConnection()" title="Click to reset connection">
@@ -3874,6 +4115,108 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div class="day-bar" id="dayBar"><span style="color:var(--light);font-size:11px">Loading...</span></div>
     <div class="tbl-wrap" id="tableWrap"><div class="empty"><div class="ei">⏳</div><p>Loading data...</p></div></div>
     <div class="pag" id="pag"><span></span></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════
+     PAGE — DAILY REPORT
+════════════════════════════════ -->
+<div id="pg-daily" class="page">
+  <div style="max-width:1100px;margin:0 auto;padding:0 4px">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#B91C1C,#DC2626);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px rgba(185,28,28,.3)">📅</div>
+        <div>
+          <h2 style="font-size:22px;font-weight:900;margin:0">Daily Report</h2>
+          <p style="color:var(--muted);font-size:13px;margin:2px 0 0">របាយការណ៍ប្រចាំថ្ងៃ សម្រាប់ Shift Handover</p>
+        </div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap" id="daily-print-hide">
+        <div style="display:flex;align-items:center;gap:8px;background:white;border:2px solid var(--border);border-radius:9px;padding:6px 12px">
+          <span style="font-size:12px;color:var(--muted);font-weight:600">📅 ថ្ងៃ</span>
+          <input type="date" id="daily-date" onchange="buildDailyReport()" style="border:none;outline:none;font-size:13px;cursor:pointer;font-weight:700">
+        </div>
+        <button onclick="printDailyReport()" style="background:#0369A1;color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Print / PDF</button>
+        <button onclick="exportDailyExcel()" style="background:var(--green);color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">📥 Export Excel</button>
+      </div>
+    </div>
+
+    <!-- Section 0: Bag Flow -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <h3 style="font-size:15px;font-weight:800;margin:0">📊 ចលនា Bag — ថ្មី · ខ្ចី · យកប្រើ · សង · នៅសល់</h3>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div id="daily-flow-table" style="overflow-x:auto"></div>
+    </div>
+    <div id="daily-flow-alert" style="margin-bottom:10px"></div>
+    <div style="font-size:11.5px;color:var(--muted);line-height:1.7;margin-bottom:28px;background:#F8FAFC;border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+      <b>នៅសល់</b> = X-Match − យកប្រើ − វិលស្តុក (ដូច "ស្តុកផ្ញើ" ក្នុង Main File) · រាប់ជា <b>ស្ថានភាពបច្ចុប្បន្ន</b><br>
+      <b>ប្រភពនៅសល់</b>៖ សន្មតថា Bag ដែលយកប្រើ/សង គឺជា Bag <b>ថ្មី</b> មុន ដូច្នេះ Bag ដែលសល់ត្រូវរាប់ជា <b>ខ្ចី</b> មុន (ការពារមិនឱ្យខកខានការខ្ចីដែលទុកផ្ញើ)
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <h3 style="font-size:15px;font-weight:800;margin:0">📦 បញ្ជី Bag នៅសល់ (ទុកផ្ញើ)</h3>
+      <span id="daily-rem-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 ករណី</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#0369A1;cursor:pointer;background:white;border:1.5px solid var(--border);border-radius:9px;padding:5px 10px">
+          <input type="checkbox" id="daily-rem-week" onchange="dailyRemAgeToggle('week')" style="accent-color:#0369A1;width:15px;height:15px"> 📅 ផ្ញើ 1 សប្តាហ៍
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#0369A1;cursor:pointer;background:white;border:1.5px solid var(--border);border-radius:9px;padding:5px 10px">
+          <input type="checkbox" id="daily-rem-month" onchange="dailyRemAgeToggle('month')" style="accent-color:#0369A1;width:15px;height:15px"> 🗓️ ផ្ញើ 1 ខែ
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#B91C1C;cursor:pointer;background:white;border:1.5px solid #FECACA;border-radius:9px;padding:5px 10px">
+          <input type="checkbox" id="daily-rem-borrow-only" onchange="buildDailyReport()" style="accent-color:#B91C1C;width:15px;height:15px"> ⚠️ តែពី "ខ្ចី"
+        </label>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
+      <div id="daily-rem-table" style="overflow-x:auto"></div>
+    </div>
+    <datalist id="hold-remark-list">
+      <option value="គ្រូពេទ្យស្នើផ្ញើទុក Surgery"></option>
+      <option value="រង់ចាំវះកាត់"></option>
+      <option value="រង់ចាំយកប្រើ"></option>
+    </datalist>
+
+    <!-- Section R: ឈាមសង — បានពីមជ្ឈមណ្ឌល -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <h3 style="font-size:15px;font-weight:800;margin:0">🏥 ឈាមសង — បានពីមជ្ឈមណ្ឌល</h3>
+      <span id="daily-ret-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--muted);font-weight:600">រយៈពេល</span>
+        <select id="daily-ret-range" onchange="buildDailyReport()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700;color:#0369A1;background:white;cursor:pointer;outline:none;font-family:inherit">
+          <option value="1">ថ្ងៃដែលជ្រើស</option>
+          <option value="7">7 ថ្ងៃចុងក្រោយ</option>
+          <option value="30">30 ថ្ងៃចុងក្រោយ</option>
+        </select>
+      </div>
+    </div>
+    <div id="daily-ret-summary" style="margin-bottom:12px"></div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:8px">
+      <div id="daily-ret-table" style="overflow-x:auto"></div>
+    </div>
+    <div id="daily-ret-note" style="font-size:11.5px;color:var(--muted);line-height:1.7;margin-bottom:32px"></div>
+
+    <!-- Section 1: New Entries Today -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <h3 style="font-size:15px;font-weight:800;margin:0">🆕 ជំងឺថ្មី (បញ្ចូលថ្ងៃនេះ)</h3>
+    </div>
+    <div id="daily-summary" class="daily-cards" style="margin-bottom:12px"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span id="daily-new-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
+      <div id="daily-new-table" style="overflow-x:auto"></div>
+    </div>
+
+    <!-- Section 2: Old Stock Used Today -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <h3 style="font-size:15px;font-weight:800;margin:0">🔄 ជំងឺចាស់ (ឈាមពីថ្ងៃមុន ដែលយកប្រើ/សងថ្ងៃនេះ)</h3>
+      <span id="daily-old-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div id="daily-old-table" style="overflow-x:auto"></div>
+    </div>
   </div>
 </div>
 
@@ -4826,6 +5169,818 @@ function _rptData() {
   });
 }
 
+// ═══════════════════════════════════════════
+// DAILY REPORT
+// ═══════════════════════════════════════════
+function _dailyDate() {
+  var el = document.getElementById('daily-date');
+  if (el && !el.value) el.value = new Date().toISOString().slice(0, 10);
+  return el ? el.value : new Date().toISOString().slice(0, 10);
+}
+
+function _dailyBagCount(r) {
+  var n = 0;
+  BAG_SFXS.forEach(function(sfx) {
+    if (r['blood_code'+sfx] || r['grp'+sfx] || r['blood_type'+sfx] || r['bag_used'+sfx]) n++;
+  });
+  return n || (r.blood_code || r.grp || r.blood_type ? 1 : 0);
+}
+
+function _dailyOldRows(day) {
+  var oldRows = [];
+  allRecs.forEach(function(r) {
+    var entryDay = (r.date || '').slice(0, 10);
+    if (entryDay === day) return; // only "old" stock — entered before today
+    BAG_SFXS.forEach(function(sfx) {
+      var takenDt = r['bag_taken_dt'+sfx];
+      var backDt  = r['bag_back_dt'+sfx];
+      var takenDay = takenDt ? String(takenDt).slice(0, 10) : null;
+      var backDay  = backDt  ? String(backDt).slice(0, 10)  : null;
+      if (takenDay !== day && backDay !== day) return;
+
+      var back = !!r['bag_back'+sfx];
+      var cannotRet = back && (r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes');
+      var backStatus = cannotRet ? 'ពុំអាចសង' : 'សង';
+      var base = {
+        rid: r.id != null ? r.id : (r.name + '|' + entryDay),
+        name: r.name || '-', age: r.age || '-', gender: r.gender || '-',
+        ward: r.ward_from || '-',
+        code: r['blood_code'+sfx] || '-',
+        type: r['blood_type'+sfx] || '-',
+        qty: 1,
+        taker: r['bag_taker'+sfx] || '-'
+      };
+
+      if (takenDay === day && backDay === day) {
+        oldRows.push(Object.assign({}, base, { takenDt: backDt, lab: r['bag_back_lab'+sfx] || r['bag_lab_staff'+sfx] || '-', status: back ? backStatus : 'យកប្រើ' }));
+      } else {
+        if (takenDay === day) {
+          oldRows.push(Object.assign({}, base, { takenDt: takenDt, lab: r['bag_lab_staff'+sfx] || '-', status: 'យកប្រើ' }));
+        }
+        if (back && backDay === day) {
+          oldRows.push(Object.assign({}, base, { takenDt: backDt, lab: r['bag_back_lab'+sfx] || r['bag_lab_staff'+sfx] || '-', status: backStatus }));
+        }
+      }
+    });
+  });
+  oldRows.sort(function(a, b) { return String(a.takenDt).localeCompare(String(b.takenDt)); });
+  return oldRows;
+}
+
+// ═══════════════════════════════════════════
+// ឈាមសង — បានពីមជ្ឈមណ្ឌល
+// Every time staff ADD to the "សង" quantity of a record (new entry OR editing an old record),
+// the increase is captured from the Audit Log: date/time, ward, quantity, and who saved it.
+// ═══════════════════════════════════════════
+var _dailyRetEvents = [], _dailyRetMode = 'audit', _dailyRetErr = '';
+var _dailyRetKey = '', _dailyRetAt = 0, _dailyRetSeq = 0, _dailyRetLimit = 20;
+
+function _localDay(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function _localHM(d)  { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+function _dailyRetRange(day) {
+  var n = parseInt(document.getElementById('daily-ret-range')?.value) || 1;
+  var end = new Date(day + 'T00:00:00');
+  var start = new Date(end); start.setDate(start.getDate() - (n - 1));
+  var endEx = new Date(end); endEx.setDate(endEx.getDate() + 1);
+  return { n: n, start: start, endEx: endEx, startDay: _localDay(start) };
+}
+
+async function _dailyRetFromAudit(rg) {
+  // Only the few JSON fields we need are requested (small payload even for a month)
+  var sel = 'id,record_id,action,changed_by,changed_at,' +
+    'old_qty:old_data->>qty_return,new_qty:new_data->>qty_return,' +
+    'ward:new_data->>ward_from,name:new_data->>name,age:new_data->>age,gender:new_data->>gender,entry:new_data->>date,' +
+    'o_ward:old_data->>ward_from,o_name:old_data->>name,o_age:old_data->>age,o_gender:old_data->>gender,o_entry:old_data->>date';
+  var rows = [], PAGE = 1000;
+  for (var pg = 0; pg < 20; pg++) {
+    var q = 'audit_log?select=' + encodeURIComponent(sel) +
+      '&action=in.(insert,update)' +
+      '&changed_at=gte.' + encodeURIComponent(rg.start.toISOString()) +
+      '&changed_at=lt.'  + encodeURIComponent(rg.endEx.toISOString()) +
+      '&order=changed_at.asc&limit=' + PAGE + '&offset=' + (pg * PAGE);
+    var part = await sbFetch(q);
+    rows = rows.concat(part);
+    if (part.length < PAGE) break;
+  }
+  var ev = [];
+  rows.forEach(function(a) {
+    var delta = _num(a.new_qty) - _num(a.old_qty);   // how many "សង" were ADDED in this save
+    if (delta <= 0) return;
+    var when = new Date(a.changed_at);
+    var entry = String(a.entry || a.o_entry || '').slice(0, 10);
+    ev.push({
+      when: when, approx: false, qty: delta,
+      ward: a.ward || a.o_ward || '-', name: a.name || a.o_name || '-',
+      age: a.age || a.o_age || '-', gender: a.gender || a.o_gender || '-',
+      staff: a.changed_by || '-',
+      group: (entry && entry === _localDay(when)) ? 'ថ្មី' : 'ចាស់'
+    });
+  });
+  return ev;
+}
+
+// Fallback when the audit log is unavailable: records entered in the range that have សង > 0
+function _dailyRetFallback(day, rg) {
+  var ev = [];
+  allRecs.forEach(function(r) {
+    var d = (r.date || '').slice(0, 10);
+    if (!d || d < rg.startDay || d > day) return;
+    var q = _num(r.qty_return);
+    if (q <= 0) return;
+    ev.push({ when: new Date(d + 'T00:00:00'), approx: true, qty: q, ward: r.ward_from || '-', name: r.name || '-',
+      age: r.age || '-', gender: r.gender || '-', staff: r.lab_person || '-', group: 'ថ្មី' });
+  });
+  return ev;
+}
+
+function _retSummaryHtml(events) {
+  var byWard = {}, tot = 0;
+  events.forEach(function(e) { byWard[e.ward] = (byWard[e.ward] || 0) + e.qty; tot += e.qty; });
+  var wards = Object.keys(byWard).sort(function(a, b) { return byWard[b] - byWard[a]; });
+  var chip = 'display:inline-flex;align-items:center;gap:6px;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:700;margin:0 6px 6px 0';
+  return '<div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:6px">ផ្នែកណាខ្លះបានពីមជ្ឈមណ្ឌល</div>' +
+    wards.map(function(w) { return '<span style="' + chip + '">' + eH(w) + ' <b style="font-size:14px;color:#0C4A6E">' + byWard[w] + '</b></span>'; }).join('') +
+    '<span style="' + chip + ';background:#0C4A6E;color:white;border-color:#0C4A6E">សរុប <b style="font-size:14px">' + tot + '</b> Bag</span>';
+}
+
+function _retTableHtml(display, all) {
+  var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ថ្ងៃខែឆ្នាំ ម៉ោង</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">ឈ្មោះអ្នកជំងឺ</th>' +
+    '<th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ក្រុម</th>' +
+    '<th style="' + th + ';text-align:right">ចំនួនសង</th><th style="' + th + '">បុគ្គលិក</th></tr></thead><tbody>';
+  display.forEach(function(e, i) {
+    var badge = e.group === 'ថ្មី'
+      ? '<span style="background:#CFFAFE;color:#0E7490;padding:2px 8px;border-radius:10px;font-weight:800;font-size:11px">ថ្មី</span>'
+      : '<span style="background:#E2E8F0;color:#475569;padding:2px 8px;border-radius:10px;font-weight:800;font-size:11px">ចាស់</span>';
+    h += '<tr style="border-bottom:1px solid var(--border)' + (i % 2 ? ';background:#FAFBFC' : '') + '">' +
+      '<td style="padding:9px 12px">' + (i + 1) + '</td>' +
+      '<td style="padding:9px 12px;white-space:nowrap">' + _localDay(e.when) + (e.approx ? '' : ' <b>' + _localHM(e.when) + '</b>') + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700">' + eH(e.ward) + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700">' + eH(e.name) + '</td>' +
+      '<td style="padding:9px 12px">' + eH(e.age) + '</td>' +
+      '<td style="padding:9px 12px">' + eH(e.gender) + '</td>' +
+      '<td style="padding:9px 12px">' + badge + '</td>' +
+      '<td style="padding:9px 12px;text-align:right;font-weight:900;color:#7C3AED">' + e.qty + '</td>' +
+      '<td style="padding:9px 12px">' + eH(e.staff) + '</td></tr>';
+  });
+  var tot = 0; all.forEach(function(e) { tot += e.qty; });
+  h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
+    '<td colspan="7" style="padding:10px 12px;text-align:right">សរុប (' + all.length + ' ដង)</td>' +
+    '<td style="padding:10px 12px;text-align:right;color:#7C3AED">' + tot + '</td><td></td></tr></tfoot></table>';
+  return h;
+}
+
+function _renderDailyReturns(day) {
+  var rg = _dailyRetRange(day);
+  var events = _dailyRetEvents.slice().sort(function(a, b) { return rg.n > 1 ? b.when - a.when : a.when - b.when; });
+  var tot = 0; events.forEach(function(e) { tot += e.qty; });
+  document.getElementById('daily-ret-count').textContent = tot + ' Bag · ' + events.length + ' ដង';
+
+  var noteEl = document.getElementById('daily-ret-note');
+  noteEl.innerHTML = _dailyRetMode === 'audit'
+    ? 'រាល់ពេលបុគ្គលិកបញ្ចូល ឬកែចំនួន <b>"សង"</b> ក្នុង record (ថ្ងៃថ្មី ឬ ថ្ងៃចាស់) ចំនួនដែល<b>កើនឡើង</b>ត្រូវបានកត់ត្រា · ថ្ងៃ/ម៉ោង = ពេលបុគ្គលិកចុចរក្សាទុក · រាប់ចាប់ពីថ្ងៃបើក Audit Log'
+    : '<span style="color:#B45309;font-weight:700">⚠️ មិនអាចអាន Audit Log (' + eH(_dailyRetErr) + ')</span> — បង្ហាញតែ record ដែលបញ្ចូលក្នុងរយៈពេលនេះ ហើយមាន "សង" (មិនចាប់ការសងបន្ថែមលើ record ចាស់) · សូម Run SQL audit_log ដើម្បីបើកមុខងារពេញលេញ';
+
+  var sumEl = document.getElementById('daily-ret-summary');
+  var wrap = document.getElementById('daily-ret-table');
+  if (!events.length) {
+    sumEl.innerHTML = '';
+    wrap.innerHTML = '<div class="empty"><div class="ei">📭</div><p>គ្មានការសងក្នុងរយៈពេលនេះទេ</p></div>';
+    return;
+  }
+  sumEl.innerHTML = _retSummaryHtml(events);
+  var shown = events.slice(0, _dailyRetLimit);
+  var html = _retTableHtml(shown, events);
+  if (events.length > 20) {
+    var btn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:600">បង្ហាញ ' + shown.length + ' / ' + events.length + '</span>' +
+      (shown.length < events.length ? '<button style="' + btn + '" onclick="dailyRetMore()">⬇️ បង្ហាញបន្ថែមទៀត (+20)</button>' : '') +
+      (_dailyRetLimit > 20 ? '<button style="' + btn + ';color:#64748B" onclick="dailyRetLess()">⬆️ បង្ហាញតិចវិញ</button>' : '') +
+    '</div>';
+  }
+  wrap.innerHTML = html;
+}
+function dailyRetMore() { _dailyRetLimit += 20; _renderDailyReturns(_dailyDate()); }
+function dailyRetLess() { _dailyRetLimit = 20;  _renderDailyReturns(_dailyDate()); }
+
+async function buildDailyReturns(day) {
+  var rg = _dailyRetRange(day);
+  var key = day + '|' + rg.n;
+  if (key === _dailyRetKey && (Date.now() - _dailyRetAt) < 60000) { _renderDailyReturns(day); return; }  // cached < 60s
+  var seq = ++_dailyRetSeq;
+  document.getElementById('daily-ret-table').innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  var ev, mode = 'audit', err = '';
+  try { ev = await _dailyRetFromAudit(rg); }
+  catch (e) { mode = 'fallback'; err = (e && e.message) || String(e); ev = _dailyRetFallback(day, rg); }
+  if (seq !== _dailyRetSeq) return;   // a newer request replaced this one
+  _dailyRetEvents = ev; _dailyRetMode = mode; _dailyRetErr = err;
+  _dailyRetKey = key; _dailyRetAt = Date.now(); _dailyRetLimit = 20;
+  _renderDailyReturns(day);
+}
+
+function _dailyRetLabel() {
+  var s = document.getElementById('daily-ret-range');
+  return s ? s.options[s.selectedIndex].text : '';
+}
+
+// ═══════════════════════════════════════════
+// BAG FLOW — ថ្មី · ខ្ចី · យកប្រើ · សង · នៅសល់ (ថ្ងៃថ្មី + ថ្ងៃចាស់)
+// ═══════════════════════════════════════════
+function _num(v) { return parseFloat(v) || 0; }
+
+// នៅសល់ = X-Match − យកប្រើ − វិលស្តុក (same formula as "ស្តុកផ្ញើ").
+// Source attribution (record-level): used/returned bags are assumed to be "ថ្មី" first,
+// so the remainder is attributed to "ខ្ចី" first — conservative, never hides a borrowed bag on hold.
+function _remainingInfo(r) {
+  var R = Math.max(0, _num(r.xmatch) - _num(r.qty_used) - _num(r.back_stock));
+  var remBorrow = Math.min(R, _num(r.qty_borrow));
+  var remNew    = Math.min(R - remBorrow, _num(r.qty_new));
+  var remOther  = R - remBorrow - remNew; // source not specified on the record
+  return { total: R, borrow: remBorrow, nw: remNew, other: remOther };
+}
+
+// Bag slots that have a bag but are neither used nor returned
+function _unresolvedBags(r) {
+  var out = [];
+  BAG_SFXS.forEach(function(sfx) {
+    var has = r['blood_code'+sfx] || r['grp'+sfx] || r['blood_type'+sfx];
+    if (!has) return;
+    if (r['bag_used'+sfx] || r['bag_back'+sfx]) return;
+    out.push({ code: r['blood_code'+sfx] || '-', type: r['blood_type'+sfx] || '', grp: r['grp'+sfx] || '' });
+  });
+  return out;
+}
+
+function _dailyFlow(day) {
+  function blank() { return { nw:0, borrow:0, used:0, back:0, cannot:0, remNew:0, remBorrow:0, remOther:0, remTotal:0 }; }
+  var G = { nw: blank(), old: blank() };
+  allRecs.forEach(function(r) {
+    var entryDay = (r.date || '').slice(0, 10);
+    if (!entryDay || entryDay > day) return;
+    var g = (entryDay === day) ? G.nw : G.old;
+    if (entryDay === day) { g.nw += _num(r.qty_new); g.borrow += _num(r.qty_borrow); }
+    var cannotRet = (r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes');
+    BAG_SFXS.forEach(function(sfx) {
+      var takenDt = r['bag_taken_dt'+sfx], backDt = r['bag_back_dt'+sfx];
+      if (r['bag_used'+sfx] && takenDt && String(takenDt).slice(0, 10) === day) g.used++;
+      if (r['bag_back'+sfx] && backDt && String(backDt).slice(0, 10) === day) { if (cannotRet) g.cannot++; else g.back++; }
+    });
+    var ri = _remainingInfo(r);
+    g.remNew += ri.nw; g.remBorrow += ri.borrow; g.remOther += ri.other; g.remTotal += ri.total;
+  });
+  return G;
+}
+
+function _dailyRemainingRows(day) {
+  var rows = [];
+  var dMs = Date.parse(day + 'T00:00:00');
+  allRecs.forEach(function(r) {
+    var entryDay = (r.date || '').slice(0, 10);
+    if (!entryDay || entryDay > day) return;
+    var ri = _remainingInfo(r);
+    if (ri.total <= 0) return;
+    var ageDays = Math.max(0, Math.round((dMs - Date.parse(entryDay + 'T00:00:00')) / 86400000));
+    var bags = _unresolvedBags(r);
+    var tc = {};
+    bags.forEach(function(b) { if (b.type) tc[b.type] = (tc[b.type] || 0) + 1; });
+    var gc = {};
+    bags.forEach(function(b) { if (b.grp) gc[b.grp] = (gc[b.grp] || 0) + 1; });
+    var gk = Object.keys(gc);
+    var grpStr = gk.length === 1 ? gk[0] : gk.map(function(k) { return k + '×' + gc[k]; }).join(' ');
+    rows.push({
+      id: r.id, hn: r.hn || '-', doctor: r.doctor_req || '-', dx: r.diagnosis || '-', hb: (r.hb != null && r.hb !== '') ? r.hb : '-',
+      grp: grpStr || r.grp || '-', remark: r.hold_remark || '',
+      group: entryDay === day ? 'ថ្មី' : 'ចាស់',
+      name: r.name || '-', age: r.age || '-', gender: r.gender || '-', ward: r.ward_from || '-',
+      entryDay: entryDay, ageDays: ageDays,
+      remNew: ri.nw, remBorrow: ri.borrow, remOther: ri.other, total: ri.total,
+      codes: bags.map(function(b) { return b.code; }).join(', ') || '-',
+      types: Object.keys(tc).map(function(t) { return t + '×' + tc[t]; }).join(' ') || '-'
+    });
+  });
+  // borrowed-on-hold first, then oldest first
+  rows.sort(function(a, b) { return ((b.remBorrow > 0) - (a.remBorrow > 0)) || (b.ageDays - a.ageDays); });
+  return rows;
+}
+
+function _ageBadge(d) {
+  var c = d >= 3 ? ['#FEE2E2', '#B91C1C'] : (d >= 1 ? ['#FEF3C7', '#B45309'] : ['#DCFCE7', '#166534']);
+  return '<span style="background:' + c[0] + ';color:' + c[1] + ';padding:2px 9px;border-radius:12px;font-weight:800;font-size:11.5px;white-space:nowrap">' + (d === 0 ? 'ថ្ងៃនេះ' : d + ' ថ្ងៃ') + '</span>';
+}
+
+function _renderDailyFlow(day, remRows) {
+  var G = _dailyFlow(day);
+  var T = {};
+  Object.keys(G.nw).forEach(function(k) { T[k] = G.nw[k] + G.old[k]; });
+  var showOther = T.remOther > 0;
+
+  function num(v, extra) {
+    return '<td style="padding:11px 12px;text-align:center;' + (extra || '') + '">' + (v ? v : '<span style="color:#CBD5E1">—</span>') + '</td>';
+  }
+  function row(label, g, bold) {
+    var bStyle = g.remBorrow > 0 ? 'background:#FEF2F2;color:#B91C1C;font-weight:900' : '';
+    return '<tr style="border-bottom:1px solid var(--border)' + (bold ? ';background:#F1F5F9;font-weight:800' : '') + '">' +
+      '<td style="padding:11px 14px;font-weight:800;white-space:nowrap">' + label + '</td>' +
+      num(g.nw, 'color:#0891B2;font-weight:800') + num(g.borrow, 'color:#B45309;font-weight:800') +
+      num(g.used, 'color:#059669;font-weight:800') + num(g.back, 'color:#7C3AED;font-weight:800') + num(g.cannot, 'color:#B91C1C;font-weight:800') +
+      num(g.remNew, 'border-left:2px solid var(--border);color:#0891B2;font-weight:800') +
+      num(g.remBorrow, bStyle) +
+      (showOther ? num(g.remOther, 'color:#64748B') : '') +
+      num(g.remTotal, 'font-weight:900;background:#F8FAFC') +
+    '</tr>';
+  }
+  var th = 'padding:9px 12px;text-align:center;white-space:nowrap';
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead>' +
+    '<tr style="background:#0C4A6E;color:white">' +
+      '<th rowspan="2" style="' + th + ';text-align:left">ក្រុម</th>' +
+      '<th colspan="5" style="' + th + ';border-bottom:1px solid rgba(255,255,255,.25)">ចលនាថ្ងៃ ' + day + '</th>' +
+      '<th colspan="' + (showOther ? 4 : 3) + '" style="' + th + ';border-left:2px solid rgba(255,255,255,.4);border-bottom:1px solid rgba(255,255,255,.25)">📦 នៅសល់ (បច្ចុប្បន្ន)</th>' +
+    '</tr>' +
+    '<tr style="background:#0F5C87;color:white;font-size:12px">' +
+      '<th style="' + th + '">🆕 ថ្មី</th><th style="' + th + '">📋 ខ្ចី</th><th style="' + th + '">✅ យកប្រើ</th><th style="' + th + '">↩️ សង</th><th style="' + th + '">⛔ ពុំអាចសង</th>' +
+      '<th style="' + th + ';border-left:2px solid rgba(255,255,255,.4)">ពី 🆕 ថ្មី</th>' +
+      '<th style="' + th + ';background:#B91C1C">⚠️ ពី 📋 ខ្ចី</th>' +
+      (showOther ? '<th style="' + th + '">❔ មិនបញ្ជាក់</th>' : '') +
+      '<th style="' + th + '">សរុប</th>' +
+    '</tr></thead><tbody>' +
+    row('🆕 ជំងឺថ្មី <span style="font-weight:500;font-size:11px;color:var(--muted)">(បញ្ចូលថ្ងៃនេះ)</span>', G.nw, false) +
+    row('🔄 ជំងឺចាស់ <span style="font-weight:500;font-size:11px;color:var(--muted)">(ថ្ងៃមុន)</span>', G.old, false) +
+    row('សរុប', T, true) +
+  '</tbody></table>';
+  document.getElementById('daily-flow-table').innerHTML = h;
+
+  // Alert: borrowed bags sitting on hold
+  var bRows = remRows.filter(function(r) { return r.remBorrow > 0; });
+  var alertEl = document.getElementById('daily-flow-alert');
+  if (T.remBorrow > 0) {
+    var oldest = Math.max.apply(null, bRows.map(function(r) { return r.ageDays; }));
+    var over3 = bRows.filter(function(r) { return r.ageDays >= 3; }).length;
+    alertEl.innerHTML = '<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:12px;padding:12px 16px;font-size:13px;color:#991B1B;font-weight:600">' +
+      '⚠️ មាន Bag <b>ខ្ចី ' + T.remBorrow + '</b> ដែលនៅទុកផ្ញើ (មិនទាន់យកប្រើ/សង) — <b>' + bRows.length + '</b> ករណី · ទុកយូរជាងគេ <b>' + oldest + ' ថ្ងៃ</b>' +
+      (over3 ? ' · <b>' + over3 + '</b> ករណីលើស 3 ថ្ងៃ' : '') + '</div>';
+  } else {
+    alertEl.innerHTML = '<div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;font-size:13px;color:#166534;font-weight:600">✅ គ្មាន Bag ខ្ចីដែលនៅទុកផ្ញើទេ</div>';
+  }
+}
+
+var _dailyRemLimit = 20;      // rows shown before "show more"
+var _dailyRemKey = '';        // resets the limit when the day / filter changes
+
+function _remTableHtml(displayRows, allRows, asText) {
+  var showOther = allRows.some(function(r) { return r.remOther > 0; });
+  var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
+  var CUT = 'max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ក្រុម</th><th style="' + th + '">HN</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th>' +
+    '<th style="' + th + '">ផ្នែក</th><th style="' + th + '">គ្រូពេទ្យ</th><th style="' + th + '">Dx</th><th style="' + th + '">Hb</th><th style="' + th + '">Group</th>' +
+    '<th style="' + th + '">ថ្ងៃបញ្ចូល</th><th style="' + th + '">អាយុទុក</th>' +
+    '<th style="' + th + ';text-align:center">ពី ថ្មី</th><th style="' + th + ';text-align:center;background:#B91C1C">⚠️ ពី ខ្ចី</th>' +
+    (showOther ? '<th style="' + th + ';text-align:center">❔</th>' : '') +
+    '<th style="' + th + ';text-align:center">សរុប</th><th style="' + th + '">ប្រភេទ</th>' +
+    '<th style="' + th + ';min-width:220px">📝 Remark</th>' +
+  '</tr></thead><tbody>';
+  displayRows.forEach(function(r, i) {
+    var grpBadge = r.group === 'ថ្មី'
+      ? '<span style="background:#CFFAFE;color:#0E7490;padding:2px 8px;border-radius:10px;font-weight:800;font-size:11px">ថ្មី</span>'
+      : '<span style="background:#E2E8F0;color:#475569;padding:2px 8px;border-radius:10px;font-weight:800;font-size:11px">ចាស់</span>';
+    var remarkCell = asText
+      ? '<span style="white-space:normal">' + (r.remark ? eH(r.remark) : '') + '</span>'
+      : '<input type="text" list="hold-remark-list" value="' + eH(r.remark) + '" placeholder="កំណត់សម្គាល់…" ' +
+        'onchange="saveHoldRemark(' + r.id + ',this)" onkeydown="if(event.key===\'Enter\')this.blur()" ' +
+        'style="width:100%;min-width:200px;border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;font-size:12.5px;font-family:inherit;outline:none;background:white">';
+    h += '<tr style="border-bottom:1px solid var(--border);' + (r.remBorrow > 0 ? 'background:#FFF5F5' : (i % 2 ? 'background:#FAFBFC' : '')) + '">' +
+      '<td style="padding:9px 12px">' + (i + 1) + '</td>' +
+      '<td style="padding:9px 12px">' + grpBadge + '</td>' +
+      '<td style="padding:9px 12px;font-family:JetBrains Mono,monospace;font-size:11.5px;white-space:nowrap">' + eH(r.hn) + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700">' + eH(r.name) + '</td>' +
+      '<td style="padding:9px 12px">' + eH(r.age) + '</td>' +
+      '<td style="padding:9px 12px">' + eH(r.gender) + '</td>' +
+      '<td style="padding:9px 12px">' + eH(r.ward) + '</td>' +
+      '<td style="padding:9px 12px"><div style="' + CUT + '" title="' + eH(r.doctor) + '">' + eH(r.doctor) + '</div></td>' +
+      '<td style="padding:9px 12px"><div style="' + CUT + '" title="' + eH(r.dx) + '">' + eH(r.dx) + '</div></td>' +
+      '<td style="padding:9px 12px">' + eH(r.hb) + '</td>' +
+      '<td style="padding:9px 12px;white-space:nowrap">' + eH(r.grp) + '</td>' +
+      '<td style="padding:9px 12px;white-space:nowrap">' + r.entryDay + '</td>' +
+      '<td style="padding:9px 12px">' + _ageBadge(r.ageDays) + '</td>' +
+      '<td style="padding:9px 12px;text-align:center;color:#0891B2;font-weight:800">' + (r.remNew || '<span style="color:#CBD5E1">—</span>') + '</td>' +
+      '<td style="padding:9px 12px;text-align:center;font-weight:900;color:#B91C1C">' + (r.remBorrow || '<span style="color:#CBD5E1;font-weight:400">—</span>') + '</td>' +
+      (showOther ? '<td style="padding:9px 12px;text-align:center;color:#64748B">' + (r.remOther || '—') + '</td>' : '') +
+      '<td style="padding:9px 12px;text-align:center;font-weight:900">' + r.total + '</td>' +
+      '<td style="padding:9px 12px;white-space:nowrap">' + eH(r.types) + '</td>' +
+      '<td style="padding:6px 12px">' + remarkCell + '</td>' +
+    '</tr>';
+  });
+  // Footer totals always cover ALL rows (not just the ones currently shown)
+  var sNew = 0, sBor = 0, sOth = 0, sTot = 0;
+  allRows.forEach(function(r) { sNew += r.remNew; sBor += r.remBorrow; sOth += r.remOther; sTot += r.total; });
+  h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
+    '<td colspan="13" style="padding:10px 12px;text-align:right">សរុប (' + allRows.length + ' ករណី)</td>' +
+    '<td style="padding:10px 12px;text-align:center;color:#0891B2">' + sNew + '</td>' +
+    '<td style="padding:10px 12px;text-align:center;color:#B91C1C">' + sBor + '</td>' +
+    (showOther ? '<td style="padding:10px 12px;text-align:center">' + sOth + '</td>' : '') +
+    '<td style="padding:10px 12px;text-align:center">' + sTot + '</td>' +
+    '<td colspan="2"></td></tr></tfoot></table>';
+  return h;
+}
+
+// Save a staff remark (e.g. "គ្រូពេទ្យស្នើផ្ញើទុក Surgery") on the record. Needs column blood_records.hold_remark
+async function saveHoldRemark(id, el) {
+  var val = el.value.trim();
+  var rec = allRecs.find(function(r) { return r.id === id; });
+  var old = rec ? (rec.hold_remark || '') : '';
+  if (val === old) return;
+  function flash(ok) {
+    el.style.borderColor = ok ? '#10B981' : '#DC2626';
+    el.style.background  = ok ? '#F0FDF4' : '#FEF2F2';
+    setTimeout(function() { el.style.borderColor = ''; el.style.background = 'white'; }, 1400);
+  }
+  try {
+    await sbUpdate(id, { hold_remark: val || null });
+    if (rec) rec.hold_remark = val || null;
+    logAudit('update', id, { hold_remark: old || null }, { hold_remark: val || null });
+    flash(true);
+    showToast('📝 រក្សាទុក Remark រួចរាល់', 'ok');
+  } catch (e) {
+    flash(false);
+    showToast('❌ មិនអាចរក្សាទុក Remark — សូម Run SQL: ALTER TABLE blood_records ADD COLUMN hold_remark text;', 'err');
+  }
+}
+
+// Age window chosen by the checkboxes: 7 (1 week), 30 (1 month) or Infinity (all)
+function _dailyRemAgeMax() {
+  if (document.getElementById('daily-rem-week')?.checked)  return 7;
+  if (document.getElementById('daily-rem-month')?.checked) return 30;
+  return Infinity;
+}
+
+// Rows for the current filters (age window + checkbox "តែពីខ្ចី")
+function _dailyRemFiltered(remRows) {
+  var onlyBorrow = !!document.getElementById('daily-rem-borrow-only')?.checked;
+  var maxAge = _dailyRemAgeMax();
+  return remRows.filter(function(r) {
+    return r.ageDays <= maxAge && (!onlyBorrow || r.remBorrow > 0);
+  });
+}
+
+function _dailyRemFilterLabel() {
+  var parts = [];
+  var a = _dailyRemAgeMax();
+  if (a === 7) parts.push('ផ្ញើ ≤ 1 សប្តាហ៍'); else if (a === 30) parts.push('ផ្ញើ ≤ 1 ខែ');
+  if (document.getElementById('daily-rem-borrow-only')?.checked) parts.push('តែពីខ្ចី');
+  return parts.join(' · ');
+}
+
+// The two age boxes behave like a choice: ticking one un-ticks the other
+function dailyRemAgeToggle(which) {
+  var w = document.getElementById('daily-rem-week'), m = document.getElementById('daily-rem-month');
+  if (which === 'week' && w.checked) m.checked = false;
+  if (which === 'month' && m.checked) w.checked = false;
+  buildDailyReport();
+}
+
+function _renderDailyRemaining(day, remRows) {
+  var rows = _dailyRemFiltered(remRows);
+  var filterLabel = _dailyRemFilterLabel();
+
+  var key = day + '|' + filterLabel;
+  if (key !== _dailyRemKey) { _dailyRemKey = key; _dailyRemLimit = 20; }
+
+  document.getElementById('daily-rem-count').textContent = rows.length + ' ករណី' + (filterLabel ? ' (ពីសរុប ' + remRows.length + ')' : '');
+  var wrap = document.getElementById('daily-rem-table');
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="empty"><div class="ei">✅</div><p>' + (filterLabel ? 'គ្មាន Bag ត្រូវនឹងតម្រង៖ ' + filterLabel : 'គ្មាន Bag នៅសល់ទេ') + '</p></div>';
+    return;
+  }
+  var shown = rows.slice(0, _dailyRemLimit);
+  var html = _remTableHtml(shown, rows);
+  if (rows.length > 20) {
+    var btn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
+    html += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:600">បង្ហាញ ' + shown.length + ' / ' + rows.length + '</span>' +
+      (shown.length < rows.length ? '<button style="' + btn + '" onclick="dailyRemMore()">⬇️ បង្ហាញបន្ថែមទៀត (+20)</button>' : '') +
+      (shown.length < rows.length && rows.length - shown.length > 20 ? '<button style="' + btn + '" onclick="dailyRemAll()">បង្ហាញទាំងអស់</button>' : '') +
+      (_dailyRemLimit > 20 ? '<button style="' + btn + ';color:#64748B" onclick="dailyRemLess()">⬆️ បង្ហាញតិចវិញ</button>' : '') +
+    '</div>';
+  }
+  wrap.innerHTML = html;
+}
+
+function _dailyRemRerender() {
+  var day = _dailyDate();
+  _renderDailyRemaining(day, _dailyRemainingRows(day));
+}
+function dailyRemMore() { _dailyRemLimit += 20; _dailyRemRerender(); }
+function dailyRemAll()  { _dailyRemLimit = 100000; _dailyRemRerender(); }
+function dailyRemLess() { _dailyRemLimit = 20; _dailyRemRerender(); }
+
+// "09-26 14:05" -> "14:05" (same day as report) otherwise "09-26 14:05"
+function _fmtEvt(dt, day) {
+  if (!dt) return '';
+  var s = String(dt);
+  var m = s.match(/[T ](\d{2}:\d{2})/);
+  var t = m ? m[1] : '';
+  return (s.slice(0, 10) === day) ? (t || s) : (s.slice(5, 10) + ' ' + t).trim();
+}
+
+// One row per PATIENT (name shown once); each bag is stacked on its own line inside the row.
+function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol) {
+  var day = _dailyDate();
+  // group by patient, keeping order of first appearance
+  var groups = [], byId = {};
+  rows.forEach(function(r) {
+    var k = String(r.rid);
+    if (!byId[k]) { byId[k] = { head: r, bags: [] }; groups.push(byId[k]); }
+    byId[k].bags.push(r);
+  });
+  if (countEl) countEl.textContent = rows.length + ' Bag · ' + groups.length + ' នាក់';
+  if (!rows.length) {
+    tblWrap.innerHTML = '<div class="empty"><div class="ei">📭</div><p>' + emptyMsg + '</p></div>';
+    return;
+  }
+  var totQty = rows.length;
+  var totRem    = rows.filter(function(r){ return r.status === 'នៅសល់'; }).length;
+  var totUsed   = rows.filter(function(r){ return r.status === 'យកប្រើ'; }).length;
+  var totBack   = rows.filter(function(r){ return r.status === 'សង'; }).length;
+  var totCannot = rows.filter(function(r){ return r.status === 'ពុំអាចសង'; }).length;
+
+  var LINE = 'min-height:30px;display:flex;align-items:center;white-space:nowrap';
+  function stack(bags, fn, extra) {
+    return bags.map(function(b, i) {
+      return '<div style="' + LINE + (i ? ';border-top:1px dashed #E2E8F0' : '') + (extra ? ';' + extra : '') + '">' + fn(b) + '</div>';
+    }).join('');
+  }
+  var stColor = { 'ពុំអាចសង':'#B91C1C', 'សង':'#7C3AED', 'យកប្រើ':'#059669', 'នៅសល់':'#B45309' };
+  var stIcon  = { 'ពុំអាចសង':'⛔ ', 'សង':'↩️ ', 'យកប្រើ':'✅ ', 'នៅសល់':'📦 ' };
+  var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
+
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ផ្នែក</th>' +
+    '<th style="' + th + '">លេខកូដសាក់</th><th style="' + th + '">ប្រភេទសាក់</th><th style="' + th + ';text-align:right">ចំនួន</th>' +
+    '<th style="' + th + '">ម៉ោង (យក/សង)</th><th style="' + th + '">បុគ្គលិក Lab</th><th style="' + th + '">បុគ្គលិកផ្នែក</th><th style="' + th + '">ស្ថានភាព</th>' +
+  '</tr></thead><tbody>';
+
+  groups.forEach(function(g, gi) {
+    var hd = g.head, bags = g.bags;
+    var td = 'padding:6px 12px;vertical-align:top';
+    h += '<tr style="border-bottom:1px solid var(--border)' + (gi % 2 ? ';background:#FAFBFC' : '') + '">' +
+      '<td style="' + td + ';padding-top:11px">' + (gi + 1) + '</td>' +
+      '<td style="' + td + '"><div style="' + LINE + ';font-weight:700">' + eH(hd.name) + '</div>' +
+        (bags.length > 1 ? '<div style="font-size:11px;color:var(--muted);font-weight:600">' + bags.length + ' Bag</div>' : '') + '</td>' +
+      '<td style="' + td + ';padding-top:11px">' + eH(hd.age) + '</td>' +
+      '<td style="' + td + ';padding-top:11px">' + eH(hd.gender) + '</td>' +
+      '<td style="' + td + ';padding-top:11px">' + eH(hd.ward) + '</td>' +
+      '<td style="' + td + ';font-family:JetBrains Mono,monospace">' + stack(bags, function(b) { return eH(b.code); }) + '</td>' +
+      '<td style="' + td + '">' + stack(bags, function(b) { return eH(b.type); }) + '</td>' +
+      '<td style="' + td + ';text-align:right">' + stack(bags, function(b) { return b.qty; }, 'justify-content:flex-end') + '</td>' +
+      '<td style="' + td + '">' + stack(bags, function(b) {
+          var t = _fmtEvt(b.takenDt, day);
+          return t ? '<b>' + t + '</b>' : '<span style="color:#CBD5E1">—</span>';
+        }) + '</td>' +
+      '<td style="' + td + '">' + stack(bags, function(b) { return eH(b.lab); }) + '</td>' +
+      '<td style="' + td + '">' + stack(bags, function(b) { return eH(b.taker); }) + '</td>' +
+      '<td style="' + td + '">' + stack(bags, function(b) {
+          return '<span style="font-weight:800;color:' + (stColor[b.status] || '#9CA3AF') + '">' + (stIcon[b.status] || '') + b.status + '</span>';
+        }) + '</td>' +
+    '</tr>';
+  });
+
+  h += '</tbody>' +
+    '<tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
+      '<td colspan="7" style="padding:10px 12px;text-align:right">សរុប (' + groups.length + ' នាក់)</td>' +
+      '<td style="padding:10px 12px;text-align:right">' + totQty + '</td>' +
+      '<td colspan="4" style="padding:10px 12px;font-size:11.5px;color:var(--muted)">' +
+        (totRem ? '📦 នៅសល់: ' + totRem + '&nbsp;&nbsp;·&nbsp;&nbsp;' : '') +
+        '✅ យកប្រើ: ' + totUsed + '&nbsp;&nbsp;·&nbsp;&nbsp;↩️ សង: ' + totBack + '&nbsp;&nbsp;·&nbsp;&nbsp;⛔ ពុំអាចសង: ' + totCannot +
+      '</td>' +
+    '</tr></tfoot></table>';
+  tblWrap.innerHTML = h;
+}
+
+function _dailyNewRows(day) {
+  var rows = [];
+  allRecs.forEach(function(r) {
+    var entryDay = (r.date || '').slice(0, 10);
+    if (entryDay !== day) return;
+    BAG_SFXS.forEach(function(sfx) {
+      var hasBag = r['blood_code'+sfx] || r['grp'+sfx] || r['blood_type'+sfx] || r['bag_used'+sfx];
+      if (!hasBag) return;
+      var used = !!r['bag_used'+sfx];
+      var back = !!r['bag_back'+sfx];
+      var cannotRet = back && (r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes');
+      // "នៅសល់" = bag exists but not yet used / returned
+      var status = cannotRet ? 'ពុំអាចសង' : (back ? 'សង' : (used ? 'យកប្រើ' : 'នៅសល់'));
+      var evtDt = back ? r['bag_back_dt'+sfx] : (used ? r['bag_taken_dt'+sfx] : '');
+      rows.push({
+        rid: r.id != null ? r.id : (r.name + '|' + entryDay),
+        name: r.name || '-', age: r.age || '-', gender: r.gender || '-',
+        ward: r.ward_from || '-',
+        code: r['blood_code'+sfx] || '-',
+        type: r['blood_type'+sfx] || '-',
+        qty: 1,
+        takenDt: evtDt || '',
+        lab: (back ? (r['bag_back_lab'+sfx] || r['bag_lab_staff'+sfx]) : r['bag_lab_staff'+sfx]) || '-',
+        taker: r['bag_taker'+sfx] || '-',
+        status: status
+      });
+    });
+  });
+  return rows;
+}
+
+function _dailyNewBagStats(day) {
+  var used = 0, back = 0, cannot = 0;
+  allRecs.forEach(function(r) {
+    var entryDay = (r.date || '').slice(0, 10);
+    if (entryDay !== day) return;
+    BAG_SFXS.forEach(function(sfx) {
+      var takenDt = r['bag_taken_dt'+sfx];
+      var backDt  = r['bag_back_dt'+sfx];
+      var takenDay = takenDt ? String(takenDt).slice(0, 10) : null;
+      var backDay  = backDt  ? String(backDt).slice(0, 10)  : null;
+      var isUsed = !!r['bag_used'+sfx];
+      var isBack = !!r['bag_back'+sfx];
+      var cannotRet = isBack && (r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes');
+
+      if (isUsed && takenDay === day) used++;
+      if (isBack && backDay === day) { if (cannotRet) cannot++; else back++; }
+    });
+  });
+  return { used: used, back: back, cannot: cannot };
+}
+
+function buildDailyReport() {
+  var day = _dailyDate();
+
+  // ── Section 0: Bag Flow + remaining stock list ──
+  var remRows = _dailyRemainingRows(day);
+  _renderDailyFlow(day, remRows);
+  _renderDailyRemaining(day, remRows);
+  buildDailyReturns(day);   // async (reads the audit log)
+
+  // ── Section 1: records entered today ──
+  var todayRecs = allRecs.filter(function(r) { return (r.date || '').slice(0, 10) === day; });
+
+  var totalPatients = todayRecs.length;
+  var totalBags = todayRecs.reduce(function(sum, r) { return sum + _dailyBagCount(r); }, 0);
+  var totalNew    = todayRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_new)    || 0); }, 0);
+  var totalBorrow = todayRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_borrow) || 0); }, 0);
+  // "យកប្រើ"/"សង" counted at the individual-bag level, matched against each bag's own
+  // taken/return date — same approach as the 🔄 ជំងឺចាស់ section, so the two stay consistent.
+  var bagStats1   = _dailyNewBagStats(day);
+  var totalUsed   = bagStats1.used;
+  var totalReturn = bagStats1.back;
+
+  var cards = [
+    { icon:'👥', label:'ប៉ុងឈាម (អ្នកជំងឺ)', val: totalPatients, color:'#2563EB', bg:'linear-gradient(145deg,#EFF6FF,#DBEAFE)' },
+    { icon:'🩸', label:'សាក់ឈាម (Bag)',      val: totalBags,     color:'#B91C1C', bg:'linear-gradient(145deg,#FEF2F2,#FEE2E2)' },
+    { icon:'🆕', label:'ដាក់ថ្មី',            val: totalNew,      color:'#0891B2', bg:'linear-gradient(145deg,#ECFEFF,#CFFAFE)' },
+    { icon:'📋', label:'ខ្ចី',                val: totalBorrow,   color:'#B45309', bg:'linear-gradient(145deg,#FFFBEB,#FEF3C7)' },
+    { icon:'✅', label:'យកប្រើ',             val: totalUsed,     color:'#059669', bg:'linear-gradient(145deg,#ECFDF5,#D1FAE5)' },
+    { icon:'↩️', label:'សង',                 val: totalReturn,   color:'#7C3AED', bg:'linear-gradient(145deg,#F5F3FF,#EDE9FE)' },
+  ];
+  document.getElementById('daily-summary').innerHTML = cards.map(function(c) {
+    return '<div style="background:'+c.bg+';border-radius:12px;padding:9px 12px;display:flex;align-items:center;gap:10px;border:1px solid rgba(0,0,0,.04);min-width:0">' +
+      '<div style="flex:none;width:30px;height:30px;border-radius:9px;background:white;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.07)">'+c.icon+'</div>' +
+      '<div style="min-width:0">' +
+        '<div style="font-size:21px;font-weight:900;color:'+c.color+';line-height:1">'+c.val+'</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:3px;line-height:1.25">'+c.label+'</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  // ── Section 1 table: every bag on records entered today, with its current status ──
+  var newRows = _dailyNewRows(day);
+  _renderDailyBagTable(
+    document.getElementById('daily-new-table'),
+    document.getElementById('daily-new-count'),
+    newRows, 'គ្មាន Bag ត្រូវបានបញ្ចូលថ្ងៃនេះទេ', false
+  );
+
+  // ── Section 2: bags taken/returned today, from records entered on a PREVIOUS day ──
+  // "យកប្រើ" and "សង" are separate events with their own timestamp (bag_taken_dt vs bag_back_dt).
+  // A bag can appear once on the day it was taken, and again (separately) on the day it was returned.
+  var oldRows = _dailyOldRows(day);
+  _renderDailyBagTable(
+    document.getElementById('daily-old-table'),
+    document.getElementById('daily-old-count'),
+    oldRows, 'គ្មាន Bag ចាស់ត្រូវបានយកប្រើ/សង ថ្ងៃនេះទេ', true
+  );
+}
+
+function exportDailyExcel() {
+  if (typeof XLSX === 'undefined') { showToast('XLSX library not loaded!', 'err'); return; }
+  var day = _dailyDate();
+  var todayRecs = allRecs.filter(function(r) { return (r.date || '').slice(0, 10) === day; });
+  var bagStats1 = _dailyNewBagStats(day);
+
+  var summaryRows = [
+    ['Daily Report', day],
+    [],
+    ['ប៉ុងឈាម (អ្នកជំងឺ)', todayRecs.length],
+    ['សាក់ឈាម (Bag)', todayRecs.reduce(function(s,r){ return s + _dailyBagCount(r); }, 0)],
+    ['ដាក់ថ្មី', todayRecs.reduce(function(s,r){ return s + (parseFloat(r.qty_new)||0); }, 0)],
+    ['ខ្ចី', todayRecs.reduce(function(s,r){ return s + (parseFloat(r.qty_borrow)||0); }, 0)],
+    ['យកប្រើ', bagStats1.used],
+    ['សង', bagStats1.back],
+  ];
+  var ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+
+  // ជំងឺថ្មី — every bag on records entered today
+  var newRowsAoa = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
+  var newRows = _dailyNewRows(day);
+  var nNew = 0, nUsed = 0, nBack = 0, nCannot = 0;
+  newRows.forEach(function(row) {
+    if (row.status === 'នៅសល់') nNew++; else if (row.status === 'យកប្រើ') nUsed++; else if (row.status === 'សង') nBack++; else if (row.status === 'ពុំអាចសង') nCannot++;
+    newRowsAoa.push([row.name, row.age, row.gender, row.ward, row.code, row.type, row.qty, row.lab, row.taker, row.status]);
+  });
+  newRowsAoa.push(['','','','','','','','','','']);
+  newRowsAoa.push(['សរុប','','','','','', newRows.length, '', '', 'នៅសល់:'+nNew+' · យកប្រើ:'+nUsed+' · សង:'+nBack+' · ពុំអាចសង:'+nCannot]);
+  var ws0 = XLSX.utils.aoa_to_sheet(newRowsAoa);
+
+  var oldRows = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','ថ្ងៃ ម៉ោង (យក/សង)','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
+  var dailyRows = _dailyOldRows(day);
+  var totUsed = 0, totBack = 0, totCannot = 0, totQty = dailyRows.length;
+  dailyRows.forEach(function(row) {
+    if (row.status === 'យកប្រើ') totUsed++; else if (row.status === 'សង') totBack++; else if (row.status === 'ពុំអាចសង') totCannot++;
+    oldRows.push([row.name, row.age, row.gender, row.ward, row.code, row.type, row.qty, row.takenDt, row.lab, row.taker, row.status]);
+  });
+  oldRows.push(['','','','','','','','','','','']);
+  oldRows.push(['សរុប','','','','','', totQty, '', '', '', 'យកប្រើ:'+totUsed+' · សង:'+totBack+' · ពុំអាចសង:'+totCannot]);
+  var ws2 = XLSX.utils.aoa_to_sheet(oldRows);
+
+  // Bag Flow sheet
+  var G = _dailyFlow(day);
+  function flowRow(label, g) { return [label, g.nw, g.borrow, g.used, g.back, g.cannot, g.remNew, g.remBorrow, g.remOther, g.remTotal]; }
+  var T = {}; Object.keys(G.nw).forEach(function(k) { T[k] = G.nw[k] + G.old[k]; });
+  var flowAoa = [
+    ['Bag Flow', day],
+    ['ក្រុម','ថ្មី','ខ្ចី','យកប្រើ','សង','ពុំអាចសង','នៅសល់ពីថ្មី','នៅសល់ពីខ្ចី','នៅសល់ មិនបញ្ជាក់','នៅសល់សរុប'],
+    flowRow('ជំងឺថ្មី', G.nw), flowRow('ជំងឺចាស់', G.old), flowRow('សរុប', T),
+    [],
+    ['នៅសល់ = X-Match − យកប្រើ − វិលស្តុក (ស្ថានភាពបច្ចុប្បន្ន) · ប្រភពសល់៖ សន្មតថា Bag យកប្រើ/សង ជា Bag ថ្មីមុន ដូច្នេះសល់រាប់ជាខ្ចីមុន']
+  ];
+  var wsFlow = XLSX.utils.aoa_to_sheet(flowAoa);
+
+  // Remaining stock sheet
+  var remAoa = [['ក្រុម','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','គ្រូពេទ្យ','Dx','Hb','Group','ថ្ងៃបញ្ចូល','អាយុទុក (ថ្ងៃ)','សល់ពីថ្មី','សល់ពីខ្ចី','មិនបញ្ជាក់','សរុប','លេខកូដសាក់','ប្រភេទ','Remark']];
+  _dailyRemainingRows(day).forEach(function(r) {
+    remAoa.push([r.group, r.hn, r.name, r.age, r.gender, r.ward, r.doctor, r.dx, r.hb, r.grp, r.entryDay, r.ageDays, r.remNew, r.remBorrow, r.remOther, r.total, r.codes, r.types, r.remark]);
+  });
+  var wsRem = XLSX.utils.aoa_to_sheet(remAoa);
+
+  // ឈាមសង — បានពីមជ្ឈមណ្ឌល (from the last loaded table)
+  var retAoa = [['ថ្ងៃខែឆ្នាំ','ម៉ោង','ផ្នែក','ឈ្មោះអ្នកជំងឺ','អាយុ','ភេទ','ក្រុម','ចំនួនសង','បុគ្គលិក']];
+  var retByWard = {}, retTot = 0;
+  _dailyRetEvents.slice().sort(function(a, b) { return a.when - b.when; }).forEach(function(e) {
+    retAoa.push([_localDay(e.when), e.approx ? '' : _localHM(e.when), e.ward, e.name, e.age, e.gender, e.group, e.qty, e.staff]);
+    retByWard[e.ward] = (retByWard[e.ward] || 0) + e.qty; retTot += e.qty;
+  });
+  retAoa.push([]); retAoa.push(['សរុបតាមផ្នែក (' + _dailyRetLabel() + ')']);
+  Object.keys(retByWard).sort(function(a, b) { return retByWard[b] - retByWard[a]; }).forEach(function(w) { retAoa.push(['', '', w, '', '', '', '', retByWard[w]]); });
+  retAoa.push(['', '', 'សរុប', '', '', '', '', retTot]);
+  var wsRet = XLSX.utils.aoa_to_sheet(retAoa);
+
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+  XLSX.utils.book_append_sheet(wb, wsFlow, 'Bag Flow');
+  XLSX.utils.book_append_sheet(wb, wsRet, 'ឈាមសង-មជ្ឈមណ្ឌល');
+  XLSX.utils.book_append_sheet(wb, wsRem, 'នៅសល់');
+  XLSX.utils.book_append_sheet(wb, ws0, 'ជំងឺថ្មី');
+  XLSX.utils.book_append_sheet(wb, ws2, 'ជំងឺចាស់');
+  XLSX.writeFile(wb, 'daily_report_' + day + '.xlsx');
+  showToast('⬇️ Exported Daily Report', 'ok');
+}
+
+function printDailyReport() {
+  var day = _dailyDate();
+  var summary = document.getElementById('daily-summary')?.innerHTML || '';
+  var newTable = document.getElementById('daily-new-table')?.innerHTML || '';
+  var oldTable = document.getElementById('daily-old-table')?.innerHTML || '';
+  var flowTable = document.getElementById('daily-flow-table')?.innerHTML || '';
+  var flowAlert = document.getElementById('daily-flow-alert')?.innerHTML || '';
+  var _remAll   = _dailyRemFiltered(_dailyRemainingRows(day));
+  var remTable  = _remAll.length ? _remTableHtml(_remAll, _remAll, true) : '<div class="empty"><div class="ei">✅</div><p>គ្មាន Bag នៅសល់ទេ</p></div>';
+  var bodyHtml = `
+    <h3 style="font-size:15px;font-weight:800;margin:0 0 14px">📊 ចលនា Bag — ថ្មី · ខ្ចី · យកប្រើ · សង · នៅសល់</h3>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">${flowTable}</div>
+    <div style="margin-bottom:24px">${flowAlert}</div>
+    <h3 style="font-size:15px;font-weight:800;margin:0 0 14px">📦 បញ្ជី Bag នៅសល់ (ទុកផ្ញើ)${_dailyRemFilterLabel() ? ' <span style="font-size:12px;font-weight:600;color:#64748B">— ' + _dailyRemFilterLabel() + '</span>' : ''}</h3>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:28px">${remTable}</div>
+    <h3 style="font-size:15px;font-weight:800;margin:0 0 10px">🏥 ឈាមសង — បានពីមជ្ឈមណ្ឌល <span style="font-size:12px;font-weight:600;color:#64748B">— ${_dailyRetLabel()}</span></h3>
+    ${_dailyRetEvents.length ? '<div style="margin-bottom:10px">' + _retSummaryHtml(_dailyRetEvents) + '</div><div class="card" style="padding:0;overflow:hidden;margin-bottom:28px">' + _retTableHtml(_dailyRetEvents.slice().sort(function(a,b){return a.when-b.when;}), _dailyRetEvents) + '</div>' : '<p style="color:#64748B;font-size:13px;margin:0 0 28px">គ្មានការសងក្នុងរយៈពេលនេះទេ</p>'}
+    <div class="daily-cards" style="margin-bottom:20px">${summary}</div>
+    <h3 style="font-size:15px;font-weight:800;margin:0 0 14px">🆕 ជំងឺថ្មី (បញ្ចូលថ្ងៃនេះ)</h3>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:28px">${newTable}</div>
+    <h3 style="font-size:15px;font-weight:800;margin:0 0 14px">🔄 ជំងឺចាស់ (ឈាមពីថ្ងៃមុន ដែលយកប្រើ/សងថ្ងៃនេះ)</h3>
+    <div class="card" style="padding:0;overflow:hidden">${oldTable}</div>`;
+  var titleHtml = `<h1 style="font-size:20px;font-weight:900;margin:0 0 4px">📅 TSNHL Blood Report — Daily Report</h1>
+    <p style="color:#666;font-size:12px;margin:0 0 20px">ថ្ងៃទី ${day} · Printed ${new Date().toLocaleString()}</p>`;
+  _openPrintWindow(titleHtml, bodyHtml);
+}
+
 function buildReport() {
   var recs = _rptData();
   _buildSummary(recs);
@@ -4854,102 +6009,174 @@ function _rptReasonData() {
   });
 }
 
-function _buildReasonReport(recs) {
-  var REASONS = [
-    { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)', icon: '✂️', color: '#0369A1', bg: '#F0F9FF' },
-    { key: 'គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)', icon: '🔄', color: '#7C3AED', bg: '#EDE9FE' },
-    { key: 'LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)', icon: '🧪', color: '#B45309', bg: '#FEF3C7' },
-    { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)', icon: '↩️', color: '#059669', bg: '#DCFCE7' }
-  ];
+// ═══════════════════════════════════════════
+// មូលហេតុ វិលចូលស្តុក — summary (click to filter) + one line per bag
+// ═══════════════════════════════════════════
+var _REASONS = [
+  { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមរបស់អ្នកជំងឺ)',            icon: '✂️', color: '#0369A1', bg: '#F0F9FF', short: 'កាត់ចូលស្តុក · ឈាមអ្នកជំងឺ' },
+  { key: 'គ្រូពេទ្យអោយវិលចូលស្តុក (មូលហេតុទៅផ្តល់ឈាមអត់បាន)',      icon: '🔄', color: '#7C3AED', bg: '#EDE9FE', short: 'វិលចូលស្តុក · ផ្តល់ឈាមអត់បាន' },
+  { key: 'LABO វិលចូលស្តុកខ្លួនឯង (មូលហេតុទៅផ្តល់ឈាមអត់បាន)',      icon: '🧪', color: '#B45309', bg: '#FEF3C7', short: 'LABO វិលខ្លួនឯង · ផ្តល់ឈាមអត់បាន' },
+  { key: 'គ្រូពេទ្យអោយកាត់ចូលស្តុក (ឈាមខ្ចី ហើយអត់យកប្រើ)',          icon: '↩️', color: '#059669', bg: '#DCFCE7', short: 'កាត់ចូលស្តុក · ឈាមខ្ចីអត់យកប្រើ' }
+];
+var _reasonFilter = -1, _reasonWard = null, _reasonWardList = [], _reasonLimit = 20, _reasonKey = '';
+function _wardLabel(w) { return w || 'មិនបញ្ជាក់'; }
 
+// One entry per bag that was returned to stock, within the date range
+function _reasonEvents(recs) {
   var sfxs = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
-  var counts = REASONS.map(function(){ return 0; });
-  // For each reason: collect ward, doctor, date, lab
-  var details = REASONS.map(function(){ return { ward:{}, doctor:{}, nurse:{}, date:[], lab:{} }; });
-  var total = 0;
-
-  var _from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
-  var _to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
-
+  var from = document.getElementById('rpt-reason-from') ? document.getElementById('rpt-reason-from').value : '';
+  var to   = document.getElementById('rpt-reason-to')   ? document.getElementById('rpt-reason-to').value   : '';
+  var ev = [];
   recs.forEach(function(r) {
     sfxs.forEach(function(sfx) {
       var val = r['bag_back_reason' + sfx];
       if (!val) return;
-      var idx = REASONS.findIndex(function(rs){ return rs.key === val; });
+      var idx = _REASONS.findIndex(function(rs) { return rs.key === val; });
       if (idx < 0) return;
-      var dt = (r['bag_back_dt' + sfx] || '').slice(0,10);
-      // Filter by bag_back_dt date range
-      if (_from && dt && dt < _from) return;
-      if (_to   && dt && dt > _to)   return;
-      counts[idx]++; total++;
-      var d = details[idx];
-      var ward  = r['bag_back_ward' + sfx] || '';
-      var doc   = (r['bag_back_giver' + sfx] || '').replace(/^វេជ្ជ[-\s]*/u, '');
-      var nurse = r['bag_back_nurse' + sfx] || '';
-      var lab   = r['bag_back_lab' + sfx] || '';
-      if (ward)  d.ward[ward]   = (d.ward[ward]||0)   + 1;
-      if (doc)   d.doctor[doc]  = (d.doctor[doc]||0)  + 1;
-      if (nurse) d.nurse[nurse] = (d.nurse[nurse]||0) + 1;
-      if (dt)    { if (d.date.indexOf(dt) < 0) d.date.push(dt); }
-      if (lab)   d.lab[lab]     = (d.lab[lab]||0)     + 1;
+      var rawDt = String(r['bag_back_dt' + sfx] || '');
+      var dt = rawDt.slice(0, 10);
+      if (from && dt && dt < from) return;
+      if (to   && dt && dt > to)   return;
+      ev.push({
+        idx: idx, dt: rawDt, name: r.name || '-',
+        ward:   r['bag_back_ward' + sfx] || '',
+        doctor: (r['bag_back_giver' + sfx] || '').replace(/^វេជ្ជ[-\s]*/u, ''),
+        nurse:  r['bag_back_nurse' + sfx] || '',
+        lab:    r['bag_back_lab' + sfx] || ''
+      });
     });
   });
-
-  function _tags(obj, color) {
-    return Object.keys(obj).sort().map(function(k){
-      return '<span style="display:inline-block;background:' + color + '22;color:' + color + ';border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;margin:1px">' + k + ' <span style="opacity:.7">(' + obj[k] + ')</span></span>';
-    }).join('');
-  }
-
-  function _dates(arr) {
-    return arr.sort().slice(-3).map(function(d){
-      return '<span style="display:inline-block;background:#F1F5F9;color:#475569;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:600;margin:1px">' + d + '</span>';
-    }).join('') + (arr.length > 3 ? '<span style="font-size:11px;color:var(--muted)"> +' + (arr.length-3) + '</span>' : '');
-  }
-
-  var rows = REASONS.map(function(rs, i) {
-    var pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0;
-    var d = details[i];
-    return '<tr style="border-bottom:1px solid var(--border)">' +
-      '<td style="padding:12px 14px;font-size:13px;font-weight:700;color:' + rs.color + ';white-space:normal!important;max-width:none!important;overflow:visible!important;text-overflow:unset!important;line-height:1.6">' + rs.icon + '&nbsp;' + rs.key + '</td>' +
-      '<td style="padding:8px 10px;text-align:center;white-space:nowrap"><span style="background:' + rs.bg + ';color:' + rs.color + ';padding:4px 12px;border-radius:20px;font-size:14px;font-weight:900">' + counts[i] + '</span></td>' +
-      '<td style="padding:8px 10px;text-align:center;font-size:13px;color:var(--muted);font-weight:600;white-space:nowrap">' + pct + '%</td>' +
-      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.ward,'#0369A1')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
-      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.doctor,'#7C3AED')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
-      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (d.date.length ? _dates(d.date) : '<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
-      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.nurse,'#9333EA')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
-      '<td style="padding:8px 10px;white-space:normal;line-height:1.6">' + (_tags(d.lab,'#059669')||'<span style="color:var(--muted);font-size:11px">-</span>') + '</td>' +
-    '</tr>';
-  }).join('');
-
-  var thStyle = 'padding:11px 10px;text-align:left;font-size:10px;font-weight:700;color:white;white-space:nowrap';
-  var html = '<div style="overflow-x:auto">' +
-    '<table style="width:100%;border-collapse:collapse;min-width:900px">' +
-      '<thead><tr style="background:linear-gradient(135deg,#0C4A6E 0%,#075985 50%,#0369A1 100%)">' +
-        '<th style="' + thStyle + ';width:30%">មូលហេតុ</th>' +
-        '<th style="' + thStyle + ';text-align:center;width:8%">ចំនួន</th>' +
-        '<th style="' + thStyle + ';text-align:center;width:6%">%</th>' +
-        '<th style="' + thStyle + ';width:12%">🏥 ផ្នែក</th>' +
-        '<th style="' + thStyle + ';width:14%">👨‍⚕️ គ្រូពេទ្យ</th>' +
-        '<th style="' + thStyle + ';width:16%">🕐 ថ្ងៃ ម៉ោង វិល</th>' +
-        '<th style="' + thStyle + ';width:11%">👩‍⚕️ Nurse</th>' +
-        '<th style="' + thStyle + ';width:11%">🧑‍⚕️ Lab</th>' +
-      '</tr></thead>' +
-      '<tbody>' + rows +
-      '<tr style="background:#F8FAFC"><td style="padding:12px 14px;font-size:13px;font-weight:900">សរុប</td>' +
-      '<td style="padding:12px 10px;text-align:center;font-size:14px;font-weight:900">' + total + '</td>' +
-      '<td style="padding:12px 10px;text-align:center;font-size:13px;font-weight:700;color:var(--muted)">100%</td>' +
-      '<td colspan="4"></td></tr>' +
-      '</tbody>' +
-    '</table>' +
-  '</div>';
-
-  if (total === 0) {
-    html = '<div style="text-align:center;padding:40px;color:var(--muted)">គ្មានទិន្នន័យ មូលហេតុ វិលចូលស្តុក</div>';
-  }
-
-  document.getElementById('rpt-reason-table').innerHTML = html;
+  ev.sort(function(a, b) { return (a.idx - b.idx) || a.dt.localeCompare(b.dt); });
+  return ev;
 }
+
+// interactive = on screen (clickable matrix + show-more); otherwise print (everything, no controls)
+function _reasonHtml(events, interactive) {
+  var total = events.length;
+  if (!total) return '<div style="text-align:center;padding:40px;color:var(--muted)">គ្មានទិន្នន័យ មូលហេតុ វិលចូលស្តុក</div>';
+  var NR = _REASONS.length;
+  var th = 'padding:9px 12px;text-align:left;white-space:nowrap';
+  var dash = '<span style="color:#CBD5E1;font-weight:500">—</span>';
+
+  // ── 1) MATRIX: ward × reason, numbers big and shaded so the counts are obvious ──
+  var wmap = {};
+  events.forEach(function(ev) {
+    var w = _wardLabel(ev.ward);
+    if (!wmap[w]) wmap[w] = { name: w, c: _REASONS.map(function() { return 0; }), t: 0 };
+    wmap[w].c[ev.idx]++; wmap[w].t++;
+  });
+  var wards = Object.keys(wmap).map(function(k) { return wmap[k]; })
+    .sort(function(a, b) { return (b.t - a.t) || a.name.localeCompare(b.name); });
+  _reasonWardList = wards.map(function(w) { return w.name; });
+  var colTot = _REASONS.map(function(rs, i) { return wards.reduce(function(s, w) { return s + w.c[i]; }, 0); });
+  var maxCell = 1; wards.forEach(function(w) { w.c.forEach(function(v) { if (v > maxCell) maxCell = v; }); });
+
+  function pill(v, rs, on) {
+    if (!v) return dash;
+    var a = Math.round(0x1C + (v / maxCell) * (0x58 - 0x1C)).toString(16).padStart(2, '0');
+    return '<span style="display:inline-block;min-width:38px;padding:3px 8px;border-radius:9px;font-size:15px;font-weight:900;color:' + rs.color +
+      ';background:' + rs.color + a + (on ? ';outline:2.5px solid ' + rs.color : '') + '">' + v + '</span>';
+  }
+  var clickH = function(wi, ri) { return interactive ? ' onclick="reasonPick(' + wi + ',' + ri + ')" style="cursor:pointer;' : ' style="'; };
+
+  var mx = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="' + th + ';vertical-align:middle">🏥 ផ្នែក</th>';
+  _REASONS.forEach(function(rs, i) {
+    var on = interactive && _reasonFilter === i && _reasonWard === null;
+    mx += '<th title="' + eH(rs.key) + '"' + clickH(-1, i) + 'padding:8px 8px;text-align:center;vertical-align:middle;min-width:120px;border-left:1px solid rgba(255,255,255,.18);' + (on ? 'background:' + rs.color : '') + '">' +
+      '<div style="font-size:17px">' + rs.icon + '</div><div style="font-size:11px;font-weight:600;line-height:1.35;white-space:normal">' + rs.short + '</div></th>';
+  });
+  mx += '<th style="' + th + ';text-align:center;vertical-align:middle;border-left:2px solid rgba(255,255,255,.4)">សរុប</th></tr></thead><tbody>';
+
+  wards.forEach(function(w, wi) {
+    var rowOn = interactive && _reasonWard === w.name && _reasonFilter === -1;
+    mx += '<tr style="border-bottom:1px solid var(--border);' + (rowOn ? 'background:#EFF6FF;' : (wi % 2 ? 'background:#FAFBFC;' : '')) + '">' +
+      '<td' + clickH(wi, -1) + 'padding:9px 12px;font-weight:900;font-size:13.5px;white-space:nowrap' + (rowOn ? ';box-shadow:inset 4px 0 0 #0369A1' : '') + '">' + eH(w.name) + '</td>';
+    _REASONS.forEach(function(rs, i) {
+      var cellOn = interactive && _reasonWard === w.name && _reasonFilter === i;
+      mx += '<td' + clickH(wi, i) + 'padding:7px 8px;text-align:center;border-left:1px solid var(--border)">' + pill(w.c[i], rs, cellOn) + '</td>';
+    });
+    mx += '<td style="padding:7px 12px;text-align:center;border-left:2px solid var(--border);font-size:16px;font-weight:900;background:#F8FAFC">' + w.t + '</td></tr>';
+  });
+
+  mx += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:900;border-top:2px solid var(--border)"><td style="padding:10px 12px">សរុប</td>';
+  _REASONS.forEach(function(rs, i) {
+    mx += '<td style="padding:8px;text-align:center;border-left:1px solid var(--border);color:' + rs.color + '"><div style="font-size:16px">' + colTot[i] + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);font-weight:600">' + Math.round(colTot[i] / total * 100) + '%</div></td>';
+  });
+  mx += '<td style="padding:8px 12px;text-align:center;border-left:2px solid var(--border);font-size:17px">' + total + '</td></tr></tfoot></table>';
+
+  // ── 2) DETAIL: one line per bag (filtered by ward and/or reason) ──
+  var list = events;
+  if (interactive) {
+    list = events.filter(function(ev) {
+      return (_reasonFilter < 0 || ev.idx === _reasonFilter) && (_reasonWard === null || _wardLabel(ev.ward) === _reasonWard);
+    });
+  }
+  var shown = interactive ? list.slice(0, _reasonLimit) : list;
+  var det = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="' + th + '">#</th><th style="' + th + '">🕐 ថ្ងៃ ម៉ោង វិល</th><th style="' + th + '">មូលហេតុ</th><th style="' + th + '">ឈ្មោះអ្នកជំងឺ</th>' +
+    '<th style="' + th + '">🏥 ផ្នែក</th><th style="' + th + '">👨‍⚕️ គ្រូពេទ្យ</th><th style="' + th + '">👩‍⚕️ Nurse</th><th style="' + th + '">🧑‍⚕️ Lab</th></tr></thead><tbody>';
+  shown.forEach(function(ev, i) {
+    var rs = _REASONS[ev.idx];
+    var when = ev.dt ? eH(ev.dt.slice(0, 10)) + (ev.dt.length > 10 ? ' <b>' + eH(ev.dt.slice(11, 16)) + '</b>' : '') : dash;
+    det += '<tr style="border-bottom:1px solid var(--border)' + (i % 2 ? ';background:#FAFBFC' : '') + '">' +
+      '<td style="padding:8px 12px">' + (i + 1) + '</td>' +
+      '<td style="padding:8px 12px;white-space:nowrap">' + when + '</td>' +
+      '<td style="padding:8px 12px;white-space:nowrap"><span title="' + eH(rs.key) + '" style="background:' + rs.bg + ';color:' + rs.color + ';padding:2px 9px;border-radius:12px;font-weight:800;font-size:11.5px">' + rs.icon + ' ' + rs.short + '</span></td>' +
+      '<td style="padding:8px 12px;font-weight:700">' + eH(ev.name) + '</td>' +
+      '<td style="padding:8px 12px;font-weight:800;color:#0369A1">' + (ev.ward ? eH(ev.ward) : dash) + '</td>' +
+      '<td style="padding:8px 12px;color:#7C3AED;font-weight:600">' + (ev.doctor ? eH(ev.doctor) : dash) + '</td>' +
+      '<td style="padding:8px 12px">' + (ev.nurse ? eH(ev.nurse) : dash) + '</td>' +
+      '<td style="padding:8px 12px">' + (ev.lab ? eH(ev.lab) : dash) + '</td></tr>';
+  });
+  if (!shown.length) det += '<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--muted)">គ្មានទិន្នន័យ</td></tr>';
+  det += '</tbody></table>';
+
+  var more = '';
+  if (interactive && list.length > 20) {
+    var btn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
+    more = '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:600">បង្ហាញ ' + shown.length + ' / ' + list.length + '</span>' +
+      (shown.length < list.length ? '<button style="' + btn + '" onclick="reasonMore()">⬇️ បង្ហាញបន្ថែមទៀត (+20)</button>' : '') +
+      (_reasonLimit > 20 ? '<button style="' + btn + ';color:#64748B" onclick="reasonLess()">⬆️ បង្ហាញតិចវិញ</button>' : '') +
+    '</div>';
+  }
+
+  var hint, note = '';
+  if (interactive) {
+    var parts = [];
+    if (_reasonWard !== null) parts.push('🏥 ' + eH(_reasonWard));
+    if (_reasonFilter >= 0) parts.push(_REASONS[_reasonFilter].icon + ' ' + _REASONS[_reasonFilter].short);
+    hint = '<div style="padding:8px 12px;font-size:11.5px;color:var(--muted);background:#F8FAFC;border-bottom:1px solid var(--border)">💡 ចុចលើលេខ ឈ្មោះផ្នែក ឬក្បាលជួរ ដើម្បីមើលបន្ទាត់លម្អិតតែផ្នែក/មូលហេតុនោះ</div>';
+    if (parts.length) note = '<div style="padding:9px 12px;background:#EFF6FF;color:#1D4ED8;font-size:12.5px;font-weight:800;border-top:1px solid var(--border)">' +
+      'កំពុងបង្ហាញ៖ ' + parts.join(' · ') + ' — ' + list.length + ' Bag · ចុចលេខដដែលម្តងទៀតដើម្បីបង្ហាញទាំងអស់</div>';
+  } else { hint = ''; }
+
+  return hint + '<div style="overflow-x:auto">' + mx + '</div>' +
+    '<div style="height:14px;background:#F8FAFC;border-top:1px solid var(--border);border-bottom:1px solid var(--border)"></div>' +
+    note + '<div style="overflow-x:auto">' + det + '</div>' + more;
+}
+
+function _buildReasonReport(recs) {
+  var events = _reasonEvents(recs);
+  var key = (document.getElementById('rpt-reason-from')?.value || '') + '|' + (document.getElementById('rpt-reason-to')?.value || '');
+  if (key !== _reasonKey) { _reasonKey = key; _reasonLimit = 20; _reasonFilter = -1; _reasonWard = null; }
+  document.getElementById('rpt-reason-table').innerHTML = _reasonHtml(events, true);
+}
+function _reasonRerender() { _buildReasonReport(_rptReasonData()); }
+// wi = ward index (-1 = any ward), ri = reason index (-1 = any reason). Same pick again clears the filter.
+function reasonPick(wi, ri) {
+  var w = wi >= 0 ? _reasonWardList[wi] : null;
+  if (_reasonWard === w && _reasonFilter === ri) { _reasonWard = null; _reasonFilter = -1; }
+  else { _reasonWard = w; _reasonFilter = ri; }
+  _reasonLimit = 20;
+  _reasonRerender();
+}
+function reasonMore() { _reasonLimit += 20; _reasonRerender(); }
+function reasonLess() { _reasonLimit = 20;  _reasonRerender(); }
+// Print: everything, no controls
+function _reasonPrintHtml() { return _reasonHtml(_reasonEvents(_rptReasonData()), false); }
 
 function _exportReasonExcel() {
   var REASONS = [
@@ -5218,70 +6445,85 @@ function _buildWardTables(recs) {
     wardMap[w].push(r);
   });
 
-  var wards = Object.keys(wardMap).sort();
-  var html  = '';
-
-  wards.forEach(function(w) {
+  // One compact row per ward (largest X-Match first, same order as the bar chart)
+  var rows = Object.keys(wardMap).map(function(w) {
     var wRecs = wardMap[w];
-    var xmT   = wRecs.reduce(function(s,r){ return s+(parseFloat(r.xmatch)||0);    },0);
-    var usedT = wRecs.reduce(function(s,r){ return s+(parseFloat(r.qty_used)||0);  },0);
-    var backT = wRecs.reduce(function(s,r){ return s+(parseFloat(r.back_stock)||0);},0);
-    var cannotT = wRecs.filter(function(r){ return r.cannot_return==='ពុំអាច'||r.cannot_return==='yes'; }).length;
-    var retT  = wRecs.reduce(function(s,r){ return s+(parseFloat(r.qty_return)||0);},0);
-
-    // Group/Blood type stats
-    var grpMap = {};
-    var typeMap = {};
+    var o = { ward: w, pts: wRecs.length, xm: 0, used: 0, back: 0, ret: 0, cannot: 0, grp: {}, type: {} };
     wRecs.forEach(function(r) {
-      if (r.grp) { grpMap[r.grp]=(grpMap[r.grp]||0)+1; }
-      for (var i=1;i<=7;i++) {
-        var sfx = i===1?'':'_'+i;
-        var t = r['blood_type'+sfx];
-        if (t) typeMap[t]=(typeMap[t]||0)+1;
+      o.xm   += parseFloat(r.xmatch)     || 0;
+      o.used += parseFloat(r.qty_used)   || 0;
+      o.back += parseFloat(r.back_stock) || 0;
+      o.ret  += parseFloat(r.qty_return) || 0;
+      if (r.cannot_return === 'ពុំអាច' || r.cannot_return === 'yes') o.cannot++;
+      if (r.grp) o.grp[r.grp] = (o.grp[r.grp] || 0) + 1;
+      for (var i = 1; i <= 7; i++) {
+        var t = r['blood_type' + (i === 1 ? '' : '_' + i)];
+        if (t) o.type[t] = (o.type[t] || 0) + 1;
       }
     });
+    return o;
+  }).sort(function(a, b) { return b.xm - a.xm; });
 
-    html += '<div class="card" style="margin-bottom:20px">' +
-      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">' +
-        '<h3 style="font-size:16px;font-weight:900;margin:0">🏥 ' + w + '</h3>' +
-        '<span style="background:var(--blue2);color:var(--blue);border-radius:6px;padding:3px 10px;font-size:12px;font-weight:700">' + wRecs.length + ' អ្នកជំងឺ</span>' +
-      '</div>' +
+  if (!rows.length) {
+    document.getElementById('rpt-ward-tables').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">គ្មានទិន្នន័យ</div>';
+    return;
+  }
 
-      // Stats row
-      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px">' +
-        _statCard('🩸','X-Match Bag', xmT, 'var(--red)','var(--red3)') +
-        _statCard('✅','យកប្រើ Bag', usedT, 'var(--green)','#DCFCE7') +
-        _statCard('🔄','វិលចូលស្តុក', backT, '#7C3AED','#EDE9FE') +
-        _statCard('↩️','សង Bag', retT, 'var(--blue)','var(--blue2)') +
-        _statCard('⛔','ពុំអាចសង', cannotT, '#B45309','#FEF3C7') +
-      '</div>' +
+  var GC = { A:'#DC2626', B:'#2563EB', AB:'#7C3AED', O:'#059669', m:'#6B7280' };
+  function grpChips(map) {
+    return Object.keys(map).sort().map(function(g) {
+      var k = g.includes('AB') ? 'AB' : g.includes('A') ? 'A' : g.includes('B') ? 'B' : g.includes('O') ? 'O' : 'm';
+      return '<span style="background:' + GC[k] + '1F;color:' + GC[k] + ';border-radius:5px;padding:2px 7px;font-size:11px;font-weight:700;white-space:nowrap">' + g + ' <b>' + map[g] + '</b></span>';
+    }).join('');
+  }
+  function typeChips(map) {
+    return Object.keys(map).sort().map(function(t) {
+      return '<span style="background:#F1F5F9;border:1px solid #CBD5E1;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;color:#475569;white-space:nowrap">' + t + ' <b>' + map[t] + '</b></span>';
+    }).join('');
+  }
+  function num(v, color) {
+    return '<td style="padding:8px 12px;text-align:right;font-weight:800;' + (v ? 'color:' + color : 'color:#CBD5E1;font-weight:500') + '">' + v + '</td>';
+  }
 
-      // Group + Type breakdown
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
-        '<div>' +
-          '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">🩸 Group / Rh</div>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
-          Object.keys(grpMap).sort().map(function(g) {
-            var gc = g.includes('AB')?'AB':g.includes('A')?'A':g.includes('B')?'B':g.includes('O')?'O':'m';
-            var colors2 = {A:'#DC2626',B:'#2563EB',AB:'#7C3AED',O:'#059669',m:'#6B7280'};
-            return '<span style="background:' + (colors2[gc]||'#6B7280') + '22;color:' + (colors2[gc]||'#6B7280') + ';border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700">' + g + ' <b>' + grpMap[g] + '</b></span>';
-          }).join('') +
-          '</div>' +
-        '</div>' +
-        '<div>' +
-          '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">💉 ប្រភេទ Bag</div>' +
-          '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
-          Object.keys(typeMap).sort().map(function(t) {
-            return '<span style="background:#F1F5F9;border:1.5px solid #CBD5E1;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;color:#475569">' + t + ' <b>' + typeMap[t] + '</b></span>';
-          }).join('') +
-          '</div>' +
-        '</div>' +
-      '</div>' +
+  var tot = { pts: 0, xm: 0, used: 0, back: 0, ret: 0, cannot: 0, grp: {}, type: {} };
+  var th = 'padding:9px 12px;white-space:nowrap';
+  var h = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+      '<h3 style="font-size:15px;font-weight:800;margin:0">🏥 សង្ខេបតាមផ្នែក (Ward)</h3>' +
+      '<span style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">' + rows.length + ' ផ្នែក</span>' +
+    '</div>' +
+    '<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">' +
+    '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
+      '<th style="' + th + ';text-align:left">ផ្នែក</th>' +
+      '<th style="' + th + ';text-align:right">👥 អ្នកជំងឺ</th>' +
+      '<th style="' + th + ';text-align:right">🩸 X-Match</th>' +
+      '<th style="' + th + ';text-align:right">✅ យកប្រើ</th>' +
+      '<th style="' + th + ';text-align:right">🔄 វិលស្តុក</th>' +
+      '<th style="' + th + ';text-align:right">↩️ សង</th>' +
+      '<th style="' + th + ';text-align:right">⛔ ពុំអាចសង</th>' +
+      '<th style="' + th + ';text-align:left">Group / Rh</th>' +
+      '<th style="' + th + ';text-align:left">ប្រភេទ Bag</th>' +
+    '</tr></thead><tbody>';
 
-    '</div>';
+  rows.forEach(function(o, i) {
+    ['pts','xm','used','back','ret','cannot'].forEach(function(k) { tot[k] += o[k]; });
+    Object.keys(o.grp).forEach(function(g) { tot.grp[g] = (tot.grp[g] || 0) + o.grp[g]; });
+    Object.keys(o.type).forEach(function(t) { tot.type[t] = (tot.type[t] || 0) + o.type[t]; });
+    h += '<tr style="border-bottom:1px solid var(--border)' + (i % 2 ? ';background:#FAFBFC' : '') + '">' +
+      '<td style="padding:8px 12px;font-weight:900;white-space:nowrap">' + eH(o.ward) + '</td>' +
+      num(o.pts, '#2563EB') + num(o.xm, '#B91C1C') + num(o.used, '#059669') + num(o.back, '#7C3AED') + num(o.ret, '#2563EB') + num(o.cannot, '#B45309') +
+      '<td style="padding:6px 12px"><div style="display:flex;flex-wrap:wrap;gap:4px;min-width:200px">' + grpChips(o.grp) + '</div></td>' +
+      '<td style="padding:6px 12px"><div style="display:flex;flex-wrap:wrap;gap:4px;min-width:130px">' + typeChips(o.type) + '</div></td>' +
+    '</tr>';
   });
 
-  document.getElementById('rpt-ward-tables').innerHTML = html || '<div style="text-align:center;padding:40px;color:var(--muted)">គ្មានទិន្នន័យ</div>';
+  h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:900;border-top:2px solid var(--border)">' +
+      '<td style="padding:9px 12px">សរុប</td>' +
+      num(tot.pts, '#2563EB') + num(tot.xm, '#B91C1C') + num(tot.used, '#059669') + num(tot.back, '#7C3AED') + num(tot.ret, '#2563EB') + num(tot.cannot, '#B45309') +
+      '<td style="padding:6px 12px"><div style="display:flex;flex-wrap:wrap;gap:4px;min-width:200px">' + grpChips(tot.grp) + '</div></td>' +
+      '<td style="padding:6px 12px"><div style="display:flex;flex-wrap:wrap;gap:4px;min-width:130px">' + typeChips(tot.type) + '</div></td>' +
+    '</tr></tfoot></table></div></div>';
+
+  document.getElementById('rpt-ward-tables').innerHTML = h;
 }
 
 function _statCard(icon, label, val, color, bg) {
@@ -5325,7 +6567,7 @@ function printReportPage() {
   const pieGroupImg = (pieGroupEl && pieGroupEl.tagName === 'CANVAS') ? `<img src="${pieGroupEl.toDataURL('image/png')}" style="width:100%;max-width:340px;display:block;margin:0 auto">` : '<p style="text-align:center;color:#999">គ្មានទិន្នន័យ</p>';
   const pieTypeImg  = (pieTypeEl && pieTypeEl.tagName === 'CANVAS') ? `<img src="${pieTypeEl.toDataURL('image/png')}" style="width:100%;max-width:340px;display:block;margin:0 auto">` : '<p style="text-align:center;color:#999">គ្មានទិន្នន័យ</p>';
   const wardTables  = document.getElementById('rpt-ward-tables')?.innerHTML || '';
-  const reasonTable = document.getElementById('rpt-reason-table')?.innerHTML || '';
+  const reasonTable = _reasonPrintHtml();
   const from = document.getElementById('rpt-from')?.value || '';
   const to   = document.getElementById('rpt-to')?.value || '';
   const range = (from || to) ? ` (${from||'…'} — ${to||'…'})` : '';
@@ -5357,7 +6599,7 @@ function printReportPage() {
 }
 
 function printReasonReport() {
-  const reasonTable = document.getElementById('rpt-reason-table')?.innerHTML || '';
+  const reasonTable = _reasonPrintHtml();
   const from = document.getElementById('rpt-reason-from')?.value || '';
   const to   = document.getElementById('rpt-reason-to')?.value || '';
   const range = (from || to) ? ` (${from||'…'} — ${to||'…'})` : '';
@@ -5428,6 +6670,34 @@ function exportReportExcel() {
       <button class="btn btn-ghost" onclick="loadTrash()">🔄 Refresh</button>
     </div>
     <div id="trash-list" style="margin-top:16px"></div>
+  </div>
+</div>
+
+<div id="pg-audit" class="page">
+  <div style="max-width:1100px;margin:0 auto;padding:24px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+      <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#334155,#0F172A);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 14px rgba(15,23,42,.3)">🕵️</div>
+      <div>
+        <h2 style="font-size:20px;font-weight:900;margin:0">Audit Log</h2>
+        <p style="color:var(--muted);font-size:13px;margin:2px 0 0">តាមដានអ្នកប្រើប្រាស់ប្រព័ន្ធ — នរណា Login, បញ្ចូល, កែ, លុប នៅពេលណា (Admin ប៉ុណ្ណោះ)</p>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select id="audit-range" onchange="loadAudit()" style="border:1.5px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12.5px;font-weight:700;color:#0F172A;background:white;cursor:pointer;outline:none;font-family:inherit">
+          <option value="1">ថ្ងៃនេះ</option><option value="7" selected>7 ថ្ងៃចុងក្រោយ</option><option value="30">30 ថ្ងៃចុងក្រោយ</option><option value="90">90 ថ្ងៃចុងក្រោយ</option>
+        </select>
+        <select id="audit-action" onchange="_auditLimit=30;renderAudit()" style="border:1.5px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12.5px;font-weight:700;color:#0F172A;background:white;cursor:pointer;outline:none;font-family:inherit">
+          <option value="">សកម្មភាពទាំងអស់</option><option value="login">🔐 Login</option><option value="logout">🚪 Logout</option>
+          <option value="insert">🆕 បញ្ចូល</option><option value="update">✏️ កែ</option><option value="delete">🗑 លុប</option><option value="restore">♻️ Restore</option>
+        </select>
+        <button class="btn btn-ghost" onclick="loadAudit()">🔄 Refresh</button>
+        <button class="btn btn-green" onclick="exportAuditExcel()">📥 Excel</button>
+      </div>
+    </div>
+    <div id="audit-stats" style="margin-bottom:14px"></div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px"><div id="audit-users" style="overflow-x:auto"></div></div>
+    <div id="audit-userchip" style="margin-bottom:10px"></div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:8px"><div id="audit-events" style="overflow-x:auto"></div></div>
+    <div id="audit-note" style="font-size:11.5px;color:var(--muted);line-height:1.7"></div>
   </div>
 </div>
 
