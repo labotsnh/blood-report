@@ -2349,11 +2349,17 @@ async function applyStockDeltas(oldRec, newRec) {
   return warnings;
 }
 
-// Strip the transient tracking field and any bag_batch_no<sfx> keys (used when the
-// blood_records table hasn't had those columns added yet — see the SQL migration note).
-function _stripStockFields(payload) {
+// _stockApplied is a JS-only bookkeeping field (used by rollbackStockDeltas) — it must NEVER be
+// sent to Supabase, on ANY attempt, since no such column exists even after the SQL migration.
+function _stripTransient(payload) {
   var copy = Object.assign({}, payload);
   delete copy._stockApplied;
+  return copy;
+}
+// Also strips bag_batch_no<sfx> — used only as the fallback when THAT column is the problem
+// (the blood_records table hasn't had it added yet — see the SQL migration note).
+function _stripStockFields(payload) {
+  var copy = _stripTransient(payload);
   BAG_SFXS.forEach(function(sfx) { delete copy['bag_batch_no' + sfx]; });
   return copy;
 }
@@ -2368,7 +2374,7 @@ function _isMissingBatchColumnError(e) {
 // applyStockDeltas already wrote to blood_stock, so the stock count never drifts silently.
 async function _saveWithStockFallback(writeFn, payload) {
   try {
-    return await writeFn(payload);
+    return await writeFn(_stripTransient(payload));
   } catch (e) {
     if (_isMissingBatchColumnError(e)) {
       try {
