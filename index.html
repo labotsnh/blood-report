@@ -979,6 +979,29 @@ function typeOptsHtml() {
   return '<option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option>';
 }
 
+// Suggests Bag codes from 📦 ស្តុក that match the selected Group/Rh + ប្រភេទ, soonest-expiry
+// first (FEFO) — fires on Group/Rh or ប្រភេទ change. Uses a <datalist> so staff can still type
+// any code freely; this only offers suggestions, it never forces a choice. Silently does
+// nothing if stock hasn't loaded yet or no match exists (plain typing still works as before).
+function updateBagCodeSuggestions(grpId, typeId, dlId) {
+  var dl = document.getElementById(dlId);
+  if (!dl) return;
+  var grp = document.getElementById(grpId)?.value;
+  var type = document.getElementById(typeId)?.value;
+  if (!grp || !type || typeof allStock === 'undefined' || !allStock.length) { dl.innerHTML = ''; return; }
+  var cands = allStock.filter(function(b) {
+    return b.status === 'active' && b.grp === grp && b.blood_type === type && b.batch_no && _availableQty(b) > 0;
+  });
+  cands.sort(function(a, b) {
+    var ea = a.expiry_date || '9999-12-31', eb = b.expiry_date || '9999-12-31';
+    return ea < eb ? -1 : (ea > eb ? 1 : 0);
+  });
+  dl.innerHTML = cands.map(function(b) {
+    var hint = b.expiry_date ? (' — ផុត ' + b.expiry_date) : '';
+    return '<option value="' + eH(b.batch_no) + '">' + eH(b.batch_no) + hint + '</option>';
+  }).join('');
+}
+
 function addBagRow() {
   if (currentBagCount >= MAX_BAGS) return;
   currentBagCount++;
@@ -998,7 +1021,7 @@ function addBagRow() {
         style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer">✕</button>
     </div>
     <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
-      <div class="fld"><label>📋 លេខកូដ</label><input type="text" id="f_blood_code${sfx}" placeholder="${ph}"></div>
+      <div class="fld"><label>📋 លេខកូដ</label><input type="text" id="f_blood_code${sfx}" list="f_bagcode_dl${sfx}" placeholder="${ph}"><datalist id="f_bagcode_dl${sfx}"></datalist></div>
       <div class="fld">
         <label style="color:var(--green)">✅ យកប្រើរួច</label>
         <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
@@ -1019,8 +1042,8 @@ function addBagRow() {
           <span id="span_back${sfx}" style="font-size:14px;font-weight:700">វិលស្តុក</span>
         </label>
       </div>
-      <div class="fld"><label>🩸 Group / Rh</label><select id="f_group${sfx}">${grpOptsHtml()}</select></div>
-      <div class="fld"><label>💉 ប្រភេទ</label><select id="f_blood_type${sfx}">${typeOptsHtml()}</select></div>
+      <div class="fld"><label>🩸 Group / Rh</label><select id="f_group${sfx}" onchange="updateBagCodeSuggestions('f_group${sfx}','f_blood_type${sfx}','f_bagcode_dl${sfx}')">${grpOptsHtml()}</select></div>
+      <div class="fld"><label>💉 ប្រភេទ</label><select id="f_blood_type${sfx}" onchange="updateBagCodeSuggestions('f_group${sfx}','f_blood_type${sfx}','f_bagcode_dl${sfx}')">${typeOptsHtml()}</select></div>
       <div class="fld"><label>📅 ថ្ងៃផុត</label><input type="date" id="f_blood_exp${sfx}"></div>
       <div class="fld"><label>👤 អ្នកយកប្រើ</label><input type="text" id="f_bag_taker${sfx}" placeholder="ឈ្មោះ..."></div>
       <div class="fld"><label>🕐 ថ្ងៃ ម៉ោង យក</label><input type="datetime-local" id="f_bag_taken_dt${sfx}"></div>
@@ -3122,6 +3145,7 @@ function openEdit(i) {
     ['', '_2', '_3', '_4', '_5', '_6', '_7'].forEach(sfx => {
       const cb = document.getElementById('edit_bag_back' + sfx);
       if (cb && cb.checked) editBagBackChange(cb, sfx, true);
+      updateBagCodeSuggestions('edit_grp' + sfx, 'edit_blood_type' + sfx, 'edit_bagcode_dl' + sfx);
     });
   }, 150);
 }
@@ -3223,9 +3247,10 @@ function buildEditForm(r) {
       </div>
       <div style="display:grid;grid-template-columns:1.8fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">
         <div class="fld"><label>📋 លេខកូដ</label>
-          <input type="text" data-key="blood_code${sfx}" value="${eH(code)}"
+          <input type="text" id="edit_blood_code${sfx}" data-key="blood_code${sfx}" value="${eH(code)}" list="edit_bagcode_dl${sfx}"
             style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:JetBrains Mono,monospace;outline:none;letter-spacing:.5px"
             onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
+          <datalist id="edit_bagcode_dl${sfx}"></datalist>
         </div>
         <div class="fld">
           <label style="color:var(--green)">✅ យកប្រើរួច</label>
@@ -3254,12 +3279,12 @@ function buildEditForm(r) {
           </label>
         </div>
         <div class="fld"><label>🩸 Group / Rh</label>
-          <select data-key="grp${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none">
+          <select id="edit_grp${sfx}" data-key="grp${sfx}" onchange="updateBagCodeSuggestions('edit_grp${sfx}','edit_blood_type${sfx}','edit_bagcode_dl${sfx}')" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none">
             ${grpOpts(grp)}
           </select>
         </div>
         <div class="fld"><label>💉 ប្រភេទ</label>
-          <select data-key="blood_type${sfx}" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none">
+          <select id="edit_blood_type${sfx}" data-key="blood_type${sfx}" onchange="updateBagCodeSuggestions('edit_grp${sfx}','edit_blood_type${sfx}','edit_bagcode_dl${sfx}')" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none">
             ${typeOpts(btype)}
           </select>
         </div>
@@ -3575,7 +3600,8 @@ function editAddBag() {
     '</div>' +
     '<div style="display:grid;grid-template-columns:1.8fr 140px 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">' +
       '<div class="fld"><label>📋 លេខកូដ</label>' +
-        '<input type="text" data-key="blood_code' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:JetBrains Mono,monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">' +
+        '<input type="text" id="edit_blood_code' + sfx + '" data-key="blood_code' + sfx + '" list="edit_bagcode_dl' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:JetBrains Mono,monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">' +
+        '<datalist id="edit_bagcode_dl' + sfx + '"></datalist>' +
       '</div>' +
       '<div class="fld"><label style="color:var(--green)">✅ យកប្រើរួច</label>' +
         '<label id="edit_lbl_used' + sfx + '" style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700" onmouseenter="this.style.borderColor=\'var(--green)\'" onmouseleave="if(!document.getElementById(\'edit_bag_used' + sfx + '\').checked)this.style.borderColor=\'var(--border)\'">' +
@@ -3590,10 +3616,10 @@ function editAddBag() {
         '</label>' +
       '</div>' +
       '<div class="fld"><label>🩸 Group / Rh</label>' +
-        '<select data-key="grp' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>' +
+        '<select id="edit_grp' + sfx + '" data-key="grp' + sfx + '" onchange="updateBagCodeSuggestions(\'edit_grp' + sfx + '\',\'edit_blood_type' + sfx + '\',\'edit_bagcode_dl' + sfx + '\')" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>' +
       '</div>' +
       '<div class="fld"><label>💉 ប្រភេទ</label>' +
-        '<select data-key="blood_type' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>' +
+        '<select id="edit_blood_type' + sfx + '" data-key="blood_type' + sfx + '" onchange="updateBagCodeSuggestions(\'edit_grp' + sfx + '\',\'edit_blood_type' + sfx + '\',\'edit_bagcode_dl' + sfx + '\')" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>' +
       '</div>' +
       '<div class="fld"><label>📅 ថ្ងៃផុត</label>' +
         '<input type="date" data-key="blood_exp' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">' +
@@ -4474,7 +4500,8 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
           <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
             <div class="fld">
               <label>📋 លេខកូដ សាក់ឈាម</label>
-              <input type="text" id="f_blood_code" placeholder="e.g. 20261234">
+              <input type="text" id="f_blood_code" list="f_bagcode_dl" placeholder="e.g. 20261234">
+              <datalist id="f_bagcode_dl"></datalist>
             </div>
             <div class="fld">
               <label style="color:var(--green)">✅ យកប្រើរួច</label>
@@ -4498,11 +4525,11 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
             </div>
             <div class="fld">
               <label>🩸 Group / Rh</label>
-              <select id="f_group"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>
+              <select id="f_group" onchange="updateBagCodeSuggestions('f_group','f_blood_type','f_bagcode_dl')"><option value="">-- ជ្រើស --</option><option>A Pos</option><option>A Neg</option><option>B Pos</option><option>B Neg</option><option>O Pos</option><option>O Neg</option><option>AB Pos</option><option>AB Neg</option></select>
             </div>
             <div class="fld">
               <label>💉 ប្រភេទ</label>
-              <select id="f_blood_type"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>
+              <select id="f_blood_type" onchange="updateBagCodeSuggestions('f_group','f_blood_type','f_bagcode_dl')"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>
             </div>
             <div class="fld">
               <label>📅 ថ្ងៃផុតកំណត់</label>
