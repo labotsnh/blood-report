@@ -2159,6 +2159,7 @@ function exportAuditExcel() {
 var STOCK_TABLE = 'blood_stock';
 var allStock = [];
 var _stockFilter = 'active';
+var _stockListLimit = 20, _stockListKey = 'active';
 var _stockLoaded = false;
 var STOCK_GRPS = ['A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Neg'];
 var STOCK_TYPES = ['RC','FFP','WB','PL'];
@@ -2444,9 +2445,9 @@ function _stockAvailableMatrix() {
   return map;
 }
 
-function buildStockPage() {
-  if (!_stockLoaded) return;
-  var threshold = parseInt(document.getElementById('stock-low-threshold')?.value) || 15;
+// Builds the Group × Type available-stock matrix HTML — shared by the Stock page and Daily
+// Report (which shows it as a live "right now" snapshot regardless of the selected date range).
+function _buildStockMatrixHtml(threshold) {
   var avail = _stockAvailableMatrix();
   var seenGrp = {}, seenType = {};
   allStock.forEach(function(b) { seenGrp[b.grp] = 1; seenType[b.blood_type] = 1; });
@@ -2455,7 +2456,6 @@ function buildStockPage() {
   if (!grps.length) grps = STOCK_GRPS;
   if (!types.length) types = STOCK_TYPES;
 
-  // ── Summary matrix ──
   var th = 'padding:9px 12px;text-align:center;white-space:nowrap';
   var mh = '<div class="card" style="padding:0;overflow:hidden"><div style="overflow-x:auto">' +
     '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#0C4A6E;color:white">' +
@@ -2481,7 +2481,21 @@ function buildStockPage() {
   mh += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:900;border-top:2px solid var(--border)"><td style="padding:9px 12px">សរុប</td>' +
     types.map(function(t) { return '<td style="padding:8px;text-align:center">' + colTot[t] + '</td>'; }).join('') +
     '<td style="padding:8px 12px;text-align:center;border-left:2px solid var(--border);font-size:16px">' + grandTot + '</td></tr></tfoot></table></div></div>';
-  document.getElementById('stock-summary-grid').innerHTML = mh;
+  return mh;
+}
+
+function buildStockPage() {
+  if (!_stockLoaded) return;
+  var threshold = parseInt(document.getElementById('stock-low-threshold')?.value) || 15;
+  document.getElementById('stock-summary-grid').innerHTML = _buildStockMatrixHtml(threshold);
+
+  var avail = _stockAvailableMatrix();
+  var seenGrp = {}, seenType = {};
+  allStock.forEach(function(b) { seenGrp[b.grp] = 1; seenType[b.blood_type] = 1; });
+  var grps = STOCK_GRPS.filter(function(g) { return seenGrp[g]; });
+  var types = STOCK_TYPES.filter(function(t) { return seenType[t]; });
+  if (!grps.length) grps = STOCK_GRPS;
+  if (!types.length) types = STOCK_TYPES;
 
   // ── Alerts: low stock + near-expiry ──
   var lowList = [];
@@ -2530,19 +2544,21 @@ function buildStockPage() {
     if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
     return b.status === _stockFilter;
   });
+  if (_stockFilter !== _stockListKey) { _stockListKey = _stockFilter; _stockListLimit = 20; }
   document.getElementById('stock-list-count').textContent = rows.length + ' Batch';
   var wrap = document.getElementById('stock-table');
   if (!rows.length) {
     wrap.innerHTML = '<div class="empty"><div class="ei">📭</div><p>គ្មាន Batch ត្រូវនឹងតម្រងនេះទេ</p></div>';
     return;
   }
+  var shownRows = rows.slice(0, _stockListLimit);
   var th2 = 'padding:9px 12px;text-align:left;white-space:nowrap';
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
     '<th style="'+th2+'">Batch No.</th><th style="'+th2+'">Group</th><th style="'+th2+'">ប្រភេទ</th>' +
     '<th style="'+th2+';text-align:right">ទទួល</th><th style="'+th2+';text-align:right">X-match</th><th style="'+th2+';text-align:right">នៅសេរី</th>' +
     '<th style="'+th2+'">ថ្ងៃផុតកំណត់</th><th style="'+th2+'">ថ្ងៃទទួល</th><th style="'+th2+'">ប្រភព</th>' +
     '<th style="'+th2+'">ស្ថានភាព</th><th style="'+th2+'">សកម្មភាព</th></tr></thead><tbody>';
-  rows.forEach(function(b, i) {
+  shownRows.forEach(function(b, i) {
     var d = b.expiry_date ? _daysUntil(b.expiry_date) : null;
     var expBadge = !b.expiry_date ? '<span style="color:#CBD5E1">—</span>' :
       '<span style="background:' + (d<=0?'#FEE2E2':d<=7?'#FEF3C7':'#F1F5F9') + ';color:' + (d<=0?'#B91C1C':d<=7?'#B45309':'#334155') + ';padding:2px 9px;border-radius:12px;font-weight:800;font-size:11.5px">' + b.expiry_date + (d!=null? ' ('+(d<=0?'ផុតហើយ':d+'ថ្ងៃ')+')':'') + '</span>';
@@ -2572,8 +2588,83 @@ function buildStockPage() {
     '</tr>';
   });
   h += '</tbody></table>';
+  if (rows.length > 20) {
+    var pbtn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
+    h += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:600">បង្ហាញ ' + shownRows.length + ' / ' + rows.length + '</span>' +
+      (shownRows.length < rows.length ? '<button style="'+pbtn+'" onclick="stockListMore()">⬇️ បង្ហាញបន្ថែមទៀត (+20)</button>' : '') +
+      (shownRows.length < rows.length && rows.length - shownRows.length > 20 ? '<button style="'+pbtn+'" onclick="stockListAll()">បង្ហាញទាំងអស់</button>' : '') +
+      (_stockListLimit > 20 ? '<button style="'+pbtn+';color:#64748B" onclick="stockListLess()">⬆️ បង្ហាញតិចវិញ</button>' : '') +
+    '</div>';
+  }
+  wrap.innerHTML = h;
+  buildStockEntryTable();
+}
+function stockListMore() { _stockListLimit += 20; buildStockPage(); }
+function stockListAll()  { _stockListLimit = 100000; buildStockPage(); }
+
+// ═══════════════════════════════════════════
+// STOCK ENTRY TABLE — Bags received, filtered by its own ចាប់ពី/ដល់ date range
+// ═══════════════════════════════════════════
+var _stockEntryLimit = 20, _stockEntryKey = '';
+
+function buildStockEntryTable() {
+  var fromEl = document.getElementById('stockentry-from'), toEl = document.getElementById('stockentry-to');
+  if (!fromEl || !toEl) return; // not on the Stock page
+  if (!fromEl.value) fromEl.value = _todayStr();
+  if (!toEl.value) toEl.value = _todayStr();
+  var from = fromEl.value, to = toEl.value;
+  if (to < from) to = from; // guard against an inverted range
+
+  var rows = allStock.filter(function(b) { return b.received_date && b.received_date >= from && b.received_date <= to; })
+    .sort(function(a, b) { return (b.received_date || '').localeCompare(a.received_date || ''); });
+
+  var key = from + '|' + to;
+  if (key !== _stockEntryKey) { _stockEntryKey = key; _stockEntryLimit = 20; }
+
+  var countEl = document.getElementById('stockentry-count');
+  var totQty = rows.reduce(function(s, b) { return s + (b.qty_received || 0); }, 0);
+  if (countEl) countEl.textContent = rows.length + ' Batch · ' + totQty + ' Bag';
+
+  var wrap = document.getElementById('stockentry-table');
+  if (!wrap) return;
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="empty"><div class="ei">📭</div><p>គ្មាន Bag ត្រូវបានទទួលចូលស្តុកក្នុងចន្លោះកាលបរិច្ឆេទនេះទេ</p></div>';
+    return;
+  }
+  var shown = rows.slice(0, _stockEntryLimit);
+  var th = 'padding:9px 12px;text-align:left;white-space:nowrap';
+  var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="'+th+'">ថ្ងៃទទួល</th><th style="'+th+'">🏷️ Bag Code</th><th style="'+th+'">🩸 Group</th><th style="'+th+'">💉 ប្រភេទ</th>' +
+    '<th style="'+th+';text-align:right">ទទួល</th><th style="'+th+'">ថ្ងៃផុតកំណត់</th></tr></thead><tbody>';
+  shown.forEach(function(b, i) {
+    h += '<tr style="border-bottom:1px solid var(--border)' + (i%2?';background:#FAFBFC':'') + '">' +
+      '<td style="padding:8px 12px;white-space:nowrap">' + (b.received_date||'-') + '</td>' +
+      '<td style="padding:8px 12px;font-family:JetBrains Mono,monospace;font-weight:700">' + eH(b.batch_no || ('#'+b.id)) + '</td>' +
+      '<td style="padding:8px 12px;font-weight:800;color:' + (STOCK_GRP_COLOR[b.grp]||'#334155') + '">' + eH(b.grp) + '</td>' +
+      '<td style="padding:8px 12px">' + eH(b.blood_type) + '</td>' +
+      '<td style="padding:8px 12px;text-align:right;font-weight:800">' + (b.qty_received||0) + '</td>' +
+      '<td style="padding:8px 12px;white-space:nowrap">' + (b.expiry_date||'-') + '</td>' +
+    '</tr>';
+  });
+  h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:900;border-top:2px solid var(--border)">' +
+    '<td colspan="4" style="padding:10px 12px;text-align:right">សរុប (' + rows.length + ' Batch)</td>' +
+    '<td style="padding:10px 12px;text-align:right">' + totQty + '</td><td></td></tr></tfoot></table>';
+  if (rows.length > 20) {
+    var pbtn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
+    h += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
+      '<span style="font-size:12px;color:var(--muted);font-weight:600">បង្ហាញ ' + shown.length + ' / ' + rows.length + '</span>' +
+      (shown.length < rows.length ? '<button style="'+pbtn+'" onclick="stockEntryMore()">⬇️ បង្ហាញបន្ថែមទៀត (+20)</button>' : '') +
+      (shown.length < rows.length && rows.length - shown.length > 20 ? '<button style="'+pbtn+'" onclick="stockEntryAll()">បង្ហាញទាំងអស់</button>' : '') +
+      (_stockEntryLimit > 20 ? '<button style="'+pbtn+';color:#64748B" onclick="stockEntryLess()">⬆️ បង្ហាញតិចវិញ</button>' : '') +
+    '</div>';
+  }
   wrap.innerHTML = h;
 }
+function stockEntryMore() { _stockEntryLimit += 20; buildStockEntryTable(); }
+function stockEntryAll()  { _stockEntryLimit = 100000; buildStockEntryTable(); }
+function stockEntryLess() { _stockEntryLimit = 20; buildStockEntryTable(); }
+function stockListLess() { _stockListLimit = 20; buildStockPage(); }
 function stockSetFilter(f) { _stockFilter = f; buildStockPage(); }
 
 // ── Receive new stock ──
@@ -4846,6 +4937,13 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       </div>
     </div>
 
+    <!-- Section: Current Stock Snapshot (live — not tied to the selected date range) -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <h3 style="font-size:15px;font-weight:800;margin:0">🩸 ស្តុកឈាម (ឥឡូវនេះ)</h3>
+      <span style="font-size:11px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;padding:3px 10px;border-radius:20px;font-weight:700">⚠️ លេខបច្ចុប្បន្ន — មិនអាស្រ័យនឹងថ្ងៃដែលជ្រើសខាងលើទេ</span>
+    </div>
+    <div id="daily-stock-matrix" style="margin-bottom:28px"></div>
+
     <!-- Section 0: Bag Flow -->
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       <h3 style="font-size:15px;font-weight:800;margin:0">📊 ចលនា Bag — ថ្មី · ខ្ចី · យកប្រើ · សង · នៅសល់</h3>
@@ -4959,6 +5057,21 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     </div>
     <div style="font-size:11px;color:var(--muted);line-height:1.7;margin-bottom:32px">
       💡 ពេល Bag ណាមួយត្រូវបានគូស "យកប្រើ" ក្នុង record អ្នកជំងឺ ប្រព័ន្ធកាត់ចេញពី Batch ជិតផុតកំណត់បំផុតជាមុន (FEFO) ដោយស្វ័យប្រវត្តិ — មិនបាច់កាត់ស្តុកដោយដៃទេ។
+    </div>
+
+    <!-- Stock Entry Table — its own date range, independent of the Batch filter above -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <h3 style="font-size:15px;font-weight:800;margin:0">📋 តារាងបញ្ជូលស្តុក</h3>
+      <span id="stockentry-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted);font-weight:600">ចាប់ពី</span>
+        <input type="date" id="stockentry-from" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
+        <span style="font-size:12px;color:var(--muted);font-weight:600">ដល់</span>
+        <input type="date" id="stockentry-to" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
+      <div id="stockentry-table" style="overflow-x:auto"></div>
     </div>
   </div>
 </div>
@@ -6656,6 +6769,14 @@ function buildDailyReport() {
   var isOneDay = (win.end - win.start) === 86400000;
   if (noteEl) noteEl.textContent = isOneDay ? '' : ('📅 រយៈពេលកំណត់ផ្ទាល់ខ្លួន: ' + _dailyRangeLabel(win));
 
+  // ── Current stock snapshot (live — same matrix as 📦 ស្តុក, not affected by the date range) ──
+  var stockMatrixEl = document.getElementById('daily-stock-matrix');
+  if (stockMatrixEl) {
+    stockMatrixEl.innerHTML = (typeof _stockLoaded !== 'undefined' && _stockLoaded && typeof allStock !== 'undefined' && allStock.length)
+      ? _buildStockMatrixHtml(parseInt(document.getElementById('stock-low-threshold')?.value) || 15)
+      : '<div style="font-size:12.5px;color:var(--muted);padding:12px 4px">⏳ កំពុងទាញទិន្នន័យស្តុក... (ឬមិនទាន់មានទិន្នន័យស្តុកទេ — ចូល 📦 ស្តុក ដើម្បីបញ្ចូល)</div>';
+  }
+
   // ── Section 0: Bag Flow + remaining stock list ──
   var remRows = _dailyRemainingRows(win);
   _renderDailyFlow(win, remRows);
@@ -6786,8 +6907,32 @@ function exportDailyExcel() {
   retAoa.push(['', '', 'សរុប', '', '', '', '', retTot]);
   var wsRet = XLSX.utils.aoa_to_sheet(retAoa);
 
+  // Current stock snapshot (live — labeled clearly since it's not tied to the report range)
+  var wsStock = null;
+  if (typeof _stockLoaded !== 'undefined' && _stockLoaded && typeof allStock !== 'undefined' && allStock.length) {
+    var stockAoa = [['ស្តុកឈាម (ឥឡូវនេះ — មិនអាស្រ័យនឹងរយៈពេលរបាយការណ៍)'], []];
+    var availMap = _stockAvailableMatrix();
+    var seenG = {}, seenT = {};
+    allStock.forEach(function(b) { seenG[b.grp] = 1; seenT[b.blood_type] = 1; });
+    var gList = STOCK_GRPS.filter(function(g) { return seenG[g]; });
+    var tList = STOCK_TYPES.filter(function(t) { return seenT[t]; });
+    if (!gList.length) gList = STOCK_GRPS;
+    if (!tList.length) tList = STOCK_TYPES;
+    stockAoa.push(['Group / ប្រភេទ'].concat(tList, ['សរុប']));
+    var colSums = {}; tList.forEach(function(t) { colSums[t] = 0; }); var grand = 0;
+    gList.forEach(function(g) {
+      var rowSum = 0;
+      var row = [g].concat(tList.map(function(t) { var v = availMap[g+'|'+t] || 0; rowSum += v; colSums[t] += v; grand += v; return v; }));
+      row.push(rowSum);
+      stockAoa.push(row);
+    });
+    stockAoa.push(['សរុប'].concat(tList.map(function(t) { return colSums[t]; }), [grand]));
+    wsStock = XLSX.utils.aoa_to_sheet(stockAoa);
+  }
+
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Summary');
+  if (wsStock) XLSX.utils.book_append_sheet(wb, wsStock, 'ស្តុកឥឡូវនេះ');
   XLSX.utils.book_append_sheet(wb, wsFlow, 'Bag Flow');
   XLSX.utils.book_append_sheet(wb, wsRet, 'ឈាមសង-មជ្ឈមណ្ឌល');
   XLSX.utils.book_append_sheet(wb, wsRem, 'នៅសល់');
@@ -6806,7 +6951,10 @@ function printDailyReport() {
   var flowAlert = document.getElementById('daily-flow-alert')?.innerHTML || '';
   var _remAll   = _dailyRemFiltered(_dailyRemainingRows(win));
   var remTable  = _remAll.length ? _remTableHtml(_remAll, _remAll, true) : '<div class="empty"><div class="ei">✅</div><p>គ្មាន Bag នៅសល់ទេ</p></div>';
+  var stockMatrix = (typeof _stockLoaded !== 'undefined' && _stockLoaded && typeof allStock !== 'undefined' && allStock.length)
+    ? _buildStockMatrixHtml(parseInt(document.getElementById('stock-low-threshold')?.value) || 15) : '';
   var bodyHtml = `
+    ${stockMatrix ? '<h3 style="font-size:15px;font-weight:800;margin:0 0 6px">🩸 ស្តុកឈាម (ឥឡូវនេះ)</h3><p style="font-size:11px;color:#92400E;margin:0 0 12px">⚠️ លេខបច្ចុប្បន្ន — មិនអាស្រ័យនឹងរយៈពេលរបាយការណ៍ខាងលើទេ</p><div style="margin-bottom:24px">' + stockMatrix + '</div>' : ''}
     <h3 style="font-size:15px;font-weight:800;margin:0 0 14px">📊 ចលនា Bag — ថ្មី · ខ្ចី · យកប្រើ · សង · នៅសល់</h3>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">${flowTable}</div>
     <div style="margin-bottom:24px">${flowAlert}</div>
