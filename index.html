@@ -220,6 +220,7 @@ tbody td:first-child{text-align:center;color:var(--muted);font-family:JetBrains 
 /* ── MODAL ── */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;display:none;align-items:flex-start;justify-content:center;padding:20px;backdrop-filter:blur(4px);overflow-y:auto}
 .overlay.open{display:flex}
+.bad-num{border-color:#DC2626!important;background:#FEF2F2!important}
 .modal{background:white;border-radius:16px;width:100%;max-width:1100px;box-shadow:var(--shadow-lg);animation:slideUp .25s ease;margin:auto}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 .modal-head{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,var(--dark),#1F2937);border-radius:16px 16px 0 0}
@@ -983,6 +984,80 @@ function typeOptsHtml() {
 // first (FEFO) — fires on Group/Rh or ប្រភេទ change. Uses a <datalist> so staff can still type
 // any code freely; this only offers suggestions, it never forces a choice. Silently does
 // nothing if stock hasn't loaded yet or no match exists (plain typing still works as before).
+// When a Bag Code that exists in 📦 ស្តុក is chosen from the suggestion list (or typed / scanned in
+// full), fill that bag's 📅 ថ្ងៃផុតកំណត់ from the stock record — stock is the source of truth for a
+// physical bag's expiry, so it replaces whatever was in the field. Does nothing for a code that
+// isn't in stock, and never touches a field while the code is only partly typed.
+// ── Hb / Ht format rules ─────────────────────────────────────────────────────
+//  Hb (g/dL): must carry its decimal point — one or two digits, a point, ONE decimal digit (7.2, 10.5)
+//  Ht (%)   : whole number, at most 2 digits (21) — no decimal point, a 3rd digit is rejected with an alert
+// Typing is filtered live (also accepts a comma as the point and Khmer numerals), and the same rules are
+// re-checked when the record is saved.
+function _numNorm(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u17E0-\u17E9]/g, function(c) { return String.fromCharCode(c.charCodeAt(0) - 0x17E0 + 48); })  // Khmer digits -> 0-9
+    .replace(/,/g, '.');
+}
+function hbValidate(val) {
+  var s = _numNorm(val).trim();
+  if (!s) return '';
+  return /^\d{1,2}\.\d$/.test(s) ? '' : 'Hb ត្រូវមានក្បៀស 1 ខ្ទង់ក្រោយក្បៀស ឧ. 7.2 (បានបញ្ចូល: ' + s + ')';
+}
+function htValidate(val) {
+  var s = _numNorm(val).trim();
+  if (!s) return '';
+  return /^\d{1,2}$/.test(s) ? '' : 'Ht បានតែ 2 ខ្ទង់ គ្មានក្បៀស ឧ. 21 (បានបញ្ចូល: ' + s + ')';
+}
+function _numFlag(el, bad) {
+  if (!el) return;
+  (el.closest && el.closest('.iu') || el).classList[bad ? 'add' : 'remove']('bad-num');
+}
+// live filter while typing in Hb
+function hbInput(el) {
+  var raw = _numNorm(el.value), out = '', dot = false, intN = 0, decN = 0, rejected = '';
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw[i];
+    if (c === '.') { if (dot || intN === 0) { rejected = 'ក្បៀស'; continue; } dot = true; out += c; }
+    else if (c >= '0' && c <= '9') {
+      if (!dot) { if (intN >= 2) { rejected = 'ខ្ទង់ទី 3 មុនក្បៀស — Hb ត្រូវមានក្បៀស ឧ. 7.2'; continue; } intN++; }
+      else { if (decN >= 1) { rejected = 'Hb មានតែ 1 ខ្ទង់ក្រោយក្បៀស ឧ. 7.2'; continue; } decN++; }
+      out += c;
+    } else { rejected = 'អក្សរមិនអនុញ្ញាត (តែលេខ និងក្បៀស)'; }
+  }
+  if (out !== el.value) el.value = out;
+  _numFlag(el, !!rejected);
+  if (rejected) showToast('⚠️ Hb: ' + rejected, 'err');
+}
+// live filter while typing in Ht — digits only, 2 at most
+function htInput(el) {
+  var raw = _numNorm(el.value), digits = raw.replace(/[^0-9]/g, '');
+  var over = digits.length > 2, bad = over || /[^0-9]/.test(raw);
+  if (digits.length > 2) digits = digits.slice(0, 2);
+  if (digits !== el.value) el.value = digits;
+  _numFlag(el, bad);
+  if (over) showToast('⚠️ Ht បានតែ 2 ខ្ទង់ ឧ. 21 — ខ្ទង់ទី 3 មិនអនុញ្ញាតទេ', 'err');
+  else if (bad) showToast('⚠️ Ht: តែលេខប៉ុណ្ណោះ (គ្មានក្បៀស) ឧ. 21', 'err');
+}
+// when leaving the field / after a change: flag and explain an incomplete value (e.g. Hb "7" with no point)
+function hbCheckField(el) { var m = hbValidate(el.value); _numFlag(el, !!m); if (m) showToast('⚠️ ' + m, 'err'); }
+function htCheckField(el) { var m = htValidate(el.value); _numFlag(el, !!m); if (m) showToast('⚠️ ' + m, 'err'); }
+
+function autoFillBagExpiry(codeId, expId) {
+  var code = (document.getElementById(codeId)?.value || '').trim();
+  var exp = document.getElementById(expId);
+  if (!code || !exp || typeof allStock === 'undefined') return;
+  var cands = allStock.filter(function(b) { return b.batch_no === code && b.expiry_date; });
+  if (!cands.length) return;
+  var b = cands.find(function(x) { return x.status === 'active'; }) || cands[0];
+  if (exp.value === b.expiry_date) return;
+  exp.value = b.expiry_date;
+  try { exp.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+  // brief green flash so staff can see it was filled automatically
+  exp.style.transition = 'background .3s, border-color .3s';
+  exp.style.background = '#DCFCE7'; exp.style.borderColor = '#16A34A';
+  setTimeout(function() { exp.style.background = ''; exp.style.borderColor = ''; }, 1300);
+}
+
 function updateBagCodeSuggestions(grpId, typeId, dlId) {
   var dl = document.getElementById(dlId);
   if (!dl) return;
@@ -1021,7 +1096,7 @@ function addBagRow() {
         style="margin-left:auto;padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:white;color:var(--muted);font-size:12px;cursor:pointer">✕</button>
     </div>
     <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
-      <div class="fld"><label>📋 លេខកូដ</label><input type="text" id="f_blood_code${sfx}" list="f_bagcode_dl${sfx}" placeholder="${ph}"><datalist id="f_bagcode_dl${sfx}"></datalist></div>
+      <div class="fld"><label>📋 លេខកូដ</label><input type="text" id="f_blood_code${sfx}" list="f_bagcode_dl${sfx}" oninput="autoFillBagExpiry('f_blood_code${sfx}','f_blood_exp${sfx}')" placeholder="${ph}"><datalist id="f_bagcode_dl${sfx}"></datalist></div>
       <div class="fld">
         <label style="color:var(--green)">✅ យកប្រើរួច</label>
         <label style="display:flex;align-items:center;gap:8px;border:2px solid var(--border);border-radius:9px;padding:10px 14px;cursor:pointer;background:white;transition:all .15s;font-size:14px;font-weight:700"
@@ -1781,6 +1856,12 @@ async function saveRecord() {
 
   const htEl = document.getElementById('f_ht');
   if (!htEl?.value?.trim()) { flagErr(htEl, 'សូមបញ្ចូល Ht (%)'); return false; }
+
+  // Format: Hb needs its decimal point (7.2), Ht is at most 2 digits (21)
+  const _hbMsg = hbValidate(hbEl.value);
+  if (_hbMsg) { _numFlag(hbEl, true); flagErr(hbEl, _hbMsg); return false; }
+  const _htMsg = htValidate(htEl.value);
+  if (_htMsg) { _numFlag(htEl, true); flagErr(htEl, _htMsg); return false; }
 
   const xmEl = document.getElementById('f_xmatch');
   if (!xmEl?.value?.trim()) { flagErr(xmEl, 'សូមបញ្ចូល X-MATCH (BAG)'); return false; }
@@ -2647,9 +2728,21 @@ function buildStockEntryTable() {
       '<td style="padding:8px 12px;white-space:nowrap">' + (b.expiry_date||'-') + '</td>' +
     '</tr>';
   });
-  h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:900;border-top:2px solid var(--border)">' +
-    '<td colspan="4" style="padding:10px 12px;text-align:right">សរុប (' + rows.length + ' Batch)</td>' +
-    '<td style="padding:10px 12px;text-align:right">' + totQty + '</td><td></td></tr></tfoot></table>';
+  // Per-type totals over ALL rows in range (not just the visible page), in the usual order,
+  // skipping types with nothing received — e.g. "សរុប: 36 · RC: 10 · FFP: 20 · PL: 6"
+  var typeTot = {};
+  rows.forEach(function(b) { typeTot[b.blood_type] = (typeTot[b.blood_type] || 0) + (b.qty_received || 0); });
+  var typeOrder = STOCK_TYPES.filter(function(t) { return typeTot[t]; })
+    .concat(Object.keys(typeTot).filter(function(t) { return STOCK_TYPES.indexOf(t) < 0 && typeTot[t]; }));
+  var typeChips = typeOrder.map(function(t) {
+    return '<span style="display:inline-block;background:white;border:1.5px solid #CBD5E1;border-radius:8px;padding:3px 11px;margin-left:8px;font-size:13px">' +
+      eH(t) + ': <b style="color:#0369A1;font-size:15px">' + typeTot[t] + '</b></span>';
+  }).join('');
+  h += '</tbody><tfoot><tr style="background:#F1F5F9;border-top:2px solid var(--border)">' +
+    '<td colspan="6" style="padding:12px 14px;text-align:right;font-weight:900;font-size:14px">' +
+      'សរុប: <span style="font-size:17px">' + totQty + '</span> Bag <span style="font-weight:600;font-size:11px;color:var(--muted)">(' + rows.length + ' Batch)</span>' +
+      typeChips +
+    '</td></tr></tfoot></table>';
   if (rows.length > 20) {
     var pbtn = 'border:1.5px solid var(--border);background:white;border-radius:9px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1;font-family:inherit';
     h += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:12px;border-top:1px solid var(--border);background:#FAFBFC;flex-wrap:wrap">' +
@@ -2676,6 +2769,13 @@ function _rsBlankRow(prefill) {
   return Object.assign({ code:'', grp:'', type:'', expiry:'', received:_todayStr(), qty:1 }, prefill || {});
 }
 
+// The scan auto-advance leaves an empty row waiting for the NEXT bag (auto:true, no code). It is
+// only a placeholder: it never counts toward the totals and is never saved — unless staff touch
+// it (change Group/Type/dates/qty or scan into it), which clears the flag and makes it a real row.
+function _rsRealRows() {
+  return _receiveRows.filter(function(r) { return !(r.auto && !r.code); });
+}
+
 function rsRenderRows() {
   var tbody = document.getElementById('rs_rows_body');
   if (!tbody) return;
@@ -2688,7 +2788,7 @@ function rsRenderRows() {
     var codeInp = inp + ";font-family:'JetBrains Mono',monospace" + (codeTooLong ? ';border-color:#DC2626;background:#FEF2F2' : '');
     return '<tr style="border-bottom:1px solid var(--border)' + (i % 2 ? ';background:#FAFBFC' : '') + '">' +
       '<td style="' + cell + 'text-align:center;color:var(--muted);font-weight:700">' + (i + 1) + '</td>' +
-      '<td style="' + cell + '"><input type="text" id="rs_code_' + i + '" value="' + eH(r.code) + '" placeholder="scan or វាយបញ្ជូល" autocomplete="off" oninput="rsUpdateCell(' + i + ',\'code\',this.value)" onkeydown="if(event.key===\'Enter\'||event.key===\'Tab\')event.preventDefault()" style="' + codeInp + '">' +
+      '<td style="' + cell + '"><input type="text" id="rs_code_' + i + '" value="' + eH(r.code) + '" placeholder="scan or វាយបញ្ជូល" autocomplete="off" oninput="rsUpdateCell(' + i + ',\'code\',this.value)" onkeydown="rsCodeKey(event,' + i + ')" style="' + codeInp + '">' +
         '<div id="rs_codewarn_' + i + '" style="font-size:10.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (codeTooLong ? '#B91C1C' : '#94A3B8') + '">' + (r.code ? (codeTooLong ? '⚠️ លើស 10 ខ្ទង់ (' + r.code.length + ')' : r.code.length + ' ខ្ទង់') : '') + '</div></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'grp\',this.value)" style="' + inp + '">' + grpOpts + '</select></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'type\',this.value)" style="' + inp + '">' + typeOpts + '</select></td>' +
@@ -2698,9 +2798,12 @@ function rsRenderRows() {
       '<td style="' + cell + 'text-align:center">' + (_receiveRows.length > 1 ? '<button type="button" onclick="rsRemoveRow(' + i + ')" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>' : '') + '</td>' +
     '</tr>';
   }).join('');
-  var totalBags = _receiveRows.reduce(function(s, r) { return s + (r.code ? 1 : (parseInt(r.qty) || 0)); }, 0);
+  var real = _rsRealRows();
+  var totalBags = real.reduce(function(s, r) { return s + (r.code ? 1 : (parseInt(r.qty) || 0)); }, 0);
   var totalEl = document.getElementById('rs_total_bags'); if (totalEl) totalEl.textContent = totalBags;
-  var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = _receiveRows.length;
+  var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
+  // A full re-render rebuilds every input, so re-apply the duplicate / too-long flags to rows that have a code.
+  _receiveRows.forEach(function(r, idx) { if (r.code) _rsRefreshCodeVisual(idx); });
 }
 
 // Re-checks row i's code against the 10-digit length rule AND against every other row's code
@@ -2731,6 +2834,7 @@ function rsUpdateCell(i, field, value) {
   if (!_receiveRows[i]) return;
   if (field === 'code') {
     var prev = _receiveRows[i].code;
+    if (value) _receiveRows[i].auto = false; // scanned into it — no longer a placeholder
     var wasOver = prev.length > 10;
     var wasDup = !!prev && _receiveRows.some(function(other, idx) { return idx !== i && other.code === prev; });
     _receiveRows[i].code = value;
@@ -2762,25 +2866,123 @@ function rsUpdateCell(i, field, value) {
     return;
   }
   _receiveRows[i][field] = value;
+  _receiveRows[i].auto = false; // staff changed something on it — it's a real row now
   if (field === 'qty') {
     _receiveRows[i].qty = parseInt(value) || 1;
   }
   rsUpdateTotals();
 }
 function rsUpdateTotals() {
-  var totalBags = _receiveRows.reduce(function(s, r) { return s + (r.code ? 1 : (parseInt(r.qty) || 0)); }, 0);
+  var real = _rsRealRows();
+  var totalBags = real.reduce(function(s, r) { return s + (r.code ? 1 : (parseInt(r.qty) || 0)); }, 0);
   var totalEl = document.getElementById('rs_total_bags'); if (totalEl) totalEl.textContent = totalBags;
-  var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = _receiveRows.length;
+  var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
 }
 
-function rsAddRow() {
+function rsAddRow(auto) {
   // Copy Group/Type/Expiry from the last row for convenience — a delivery is usually mostly
   // the same type, so this saves re-picking them for every row; code/qty always reset.
+  // auto=true marks the row as a scan-flow placeholder (see _rsRealRows).
   var last = _receiveRows[_receiveRows.length - 1];
   var newIndex = _receiveRows.length;
-  _receiveRows.push(_rsBlankRow(last ? { grp:last.grp, type:last.type, expiry:last.expiry, received:last.received } : null));
+  var row = _rsBlankRow(last ? { grp:last.grp, type:last.type, expiry:last.expiry, received:last.received } : null);
+  if (auto === true) row.auto = true;
+  _receiveRows.push(row);
   rsRenderRows();
   document.getElementById('rs_code_' + newIndex)?.focus();
+}
+
+// Enter (or Tab) in a Code Bag field — what a barcode scanner sends right after the digits —
+// jumps straight to the next row's Code Bag, adding a new row when this is the last one, so a
+// whole delivery can be scanned back-to-back without touching the mouse.
+//  • empty field        → Enter does nothing; Tab keeps its normal keyboard navigation
+//  • duplicate code     → stay put with the text selected, so the next scan simply replaces it
+//  • everything else    → advance (a too-long code only warns; it never blocks)
+var _rsLastAdvance = 0; // when the scan last auto-advanced (ms) — see the stray-suffix guard below
+function rsCodeKey(ev, i) {
+  var isEnter = ev.key === 'Enter', isTab = ev.key === 'Tab';
+  if (!isEnter && !isTab) return;
+  var r = _receiveRows[i];
+  if (!r || !r.code) {
+    // Empty field. Right after an auto-advance, a second suffix key from the scanner (e.g. Enter+Tab)
+    // must not be allowed to push the cursor on to Group/Type/Expiry — swallow it for a moment.
+    if (isEnter || (Date.now() - _rsLastAdvance) < 400) ev.preventDefault();
+    return;
+  }
+  ev.preventDefault();
+  var isDup = _receiveRows.some(function(o, idx) { return idx !== i && o.code === r.code; });
+  if (isDup) {
+    var cur = document.getElementById('rs_code_' + i);
+    if (cur) { cur.focus(); if (cur.select) cur.select(); }
+    return;
+  }
+  _rsLastAdvance = Date.now();
+  if (i < _receiveRows.length - 1) {
+    var nxt = document.getElementById('rs_code_' + (i + 1));
+    if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+  } else {
+    rsAddRow(true);
+  }
+}
+
+// ── Scan redirect ─────────────────────────────────────────────────────────────
+// A barcode scanner just "types" into whatever has focus. If staff have just picked the expiry
+// date / Group / Type, that field (e.g. the date's year) still has focus, so the whole code used
+// to land there instead of in 🏷️ Code Bag. While the receive window is open we watch for the
+// unmistakable signature of a scan — several digits arriving only a few ms apart (people can't type
+// that fast) — and when it's heading anywhere other than a Code Bag field we undo what the first
+// digits did to that field and send the whole code to the next empty Code Bag instead.
+var _rsBurst = { n:0, digits:'', lastT:0, snap:null, src:'', notes:'' };
+function _rsIsCodeInput(el) { return !!(el && el.id && String(el.id).indexOf('rs_code_') === 0); }
+
+function _rsScanSniffer(ev) {
+  var modal = document.getElementById('receiveStockModal');
+  if (!modal || !modal.classList.contains('open')) return;
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.repeat) return;     // shortcuts and held-down keys are never a scan
+  var key = ev.key || '';
+  if (!/^[0-9]$/.test(key)) {
+    if (!/^(Shift|Control|Alt|Meta|CapsLock)$/.test(key)) _rsBurst.n = 0; // Enter/Tab/letters end any pending burst
+    return;
+  }
+  var t = ev.target;
+  if (_rsIsCodeInput(t)) { _rsBurst.n = 0; return; }                  // digits already going where they belong
+  var now = ev.timeStamp || Date.now();
+  var gap = now - _rsBurst.lastT;
+  _rsBurst.lastT = now;
+  if (_rsBurst.n === 0 || gap > 45) {
+    // Possible start of a scan. Snapshot BEFORE this digit lands anywhere so it can be undone.
+    _rsBurst.n = 1; _rsBurst.digits = key;
+    try { _rsBurst.snap = JSON.stringify(_receiveRows); } catch (e) { _rsBurst.snap = null; }
+    _rsBurst.src = document.getElementById('rs_source')?.value || '';
+    _rsBurst.notes = document.getElementById('rs_notes')?.value || '';
+    return;
+  }
+  _rsBurst.n++; _rsBurst.digits += key;
+  if (_rsBurst.n < 3) return;
+  // 3+ digits at scanner speed, going somewhere other than a Code Bag field -> it's a scan.
+  ev.preventDefault(); if (ev.stopPropagation) ev.stopPropagation();
+  _rsRedirectScan(_rsBurst.digits, t);
+  _rsBurst.n = 0;
+}
+
+function _rsRedirectScan(digits, wrongEl) {
+  // 1) undo whatever the first digits did to the field that wrongly had focus
+  try { if (_rsBurst.snap) _receiveRows = JSON.parse(_rsBurst.snap); } catch (e) {}
+  if (wrongEl && wrongEl.id === 'rs_source') wrongEl.value = _rsBurst.src;
+  if (wrongEl && wrongEl.id === 'rs_notes')  wrongEl.value = _rsBurst.notes;
+  // 2) destination = first empty single-bag row (a no-code lot of several bags is left alone); else a fresh row
+  var dest = -1;
+  for (var k = 0; k < _receiveRows.length; k++) {
+    if (!_receiveRows[k].code && (parseInt(_receiveRows[k].qty) || 1) === 1) { dest = k; break; }
+  }
+  if (dest < 0) { rsAddRow(true); dest = _receiveRows.length - 1; }
+  else { rsRenderRows(); }
+  // 3) put the digits in that Code Bag and keep the cursor there so the rest of the scan (and its Enter) land normally
+  var inp = document.getElementById('rs_code_' + dest);
+  if (inp) inp.value = digits;
+  rsUpdateCell(dest, 'code', digits);
+  if (inp) { inp.focus(); try { inp.setSelectionRange(digits.length, digits.length); } catch (e) {} }
+  showToast('📷 ស្កេនបញ្ចូលក្នុង Code Bag ជួរទី ' + (dest + 1) + ' ស្វ័យប្រវត្តិ', 'ok');
 }
 function rsRemoveRow(i) {
   if (_receiveRows.length <= 1) return;
@@ -2794,23 +2996,30 @@ function openReceiveStockModal() {
   _receiveRows = [_rsBlankRow()];
   rsRenderRows();
   document.getElementById('receiveStockModal').classList.add('open');
+  _rsBurst.n = 0;
+  document.addEventListener('keydown', _rsScanSniffer, true);   // capture phase: sees scanner keys before any field does
   // A barcode scanner just "types" into whatever currently has keyboard focus — with nothing
   // focused, scanning does nothing. Focus the first row's Code Bag field automatically.
   setTimeout(function() { document.getElementById('rs_code_0')?.focus(); }, 60);
 }
-function closeReceiveStockModal() { document.getElementById('receiveStockModal').classList.remove('open'); }
+function closeReceiveStockModal() {
+  document.removeEventListener('keydown', _rsScanSniffer, true);
+  document.getElementById('receiveStockModal').classList.remove('open');
+}
 
 async function saveReceiveStock() {
-  if (!_receiveRows.length) { showToast('⚠️ សូមបន្ថែមយ៉ាងហោចណាស់ 1 ជួរ', 'err'); return; }
+  var rowsToSave = _rsRealRows(); // drops the empty placeholder row the scan auto-advance leaves at the end
+  if (!rowsToSave.length) { showToast('⚠️ សូមបន្ថែមយ៉ាងហោចណាស់ 1 ជួរ', 'err'); return; }
   for (var i = 0; i < _receiveRows.length; i++) {
     var r = _receiveRows[i];
+    if (r.auto && !r.code) continue;
     if (!r.grp)    { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមជ្រើស Group / Rh', 'err'); return; }
     if (!r.type)   { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមជ្រើស ប្រភេទ', 'err'); return; }
     if (!r.expiry) { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមបញ្ចូល ថ្ងៃផុតកំណត់', 'err'); return; }
     if (!r.code && (!r.qty || r.qty <= 0)) { showToast('⚠️ ជួរទី ' + (i+1) + ': ចំនួនត្រូវធំជាង 0', 'err'); return; }
   }
   // Duplicate codes within this submission itself
-  var codes = _receiveRows.map(function(r) { return r.code; }).filter(Boolean);
+  var codes = rowsToSave.map(function(r) { return r.code; }).filter(Boolean);
   var dupCode = codes.find(function(c, i) { return codes.indexOf(c) !== i; });
   if (dupCode) { showToast('⚠️ Code "' + dupCode + '" លេចឡើងច្រើនជាង 1 ដងក្នុងបញ្ជីនេះ', 'err'); return; }
 
@@ -2818,7 +3027,7 @@ async function saveReceiveStock() {
   var notes = document.getElementById('rs_notes').value.trim() || null;
   var receivedBy = currentUser ? (currentUser.full_name || currentUser.username) : null;
 
-  var payload = _receiveRows.map(function(r) {
+  var payload = rowsToSave.map(function(r) {
     var qty = r.code ? 1 : (parseInt(r.qty) || 1);
     return {
       batch_no: r.code || null, grp: r.grp, blood_type: r.type,
@@ -3338,7 +3547,7 @@ function buildEditForm(r) {
       </div>
       <div style="display:grid;grid-template-columns:1.8fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">
         <div class="fld"><label>📋 លេខកូដ</label>
-          <input type="text" id="edit_blood_code${sfx}" data-key="blood_code${sfx}" value="${eH(code)}" list="edit_bagcode_dl${sfx}"
+          <input type="text" id="edit_blood_code${sfx}" data-key="blood_code${sfx}" value="${eH(code)}" list="edit_bagcode_dl${sfx}" oninput="autoFillBagExpiry('edit_blood_code${sfx}','edit_blood_exp${sfx}')"
             style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:JetBrains Mono,monospace;outline:none;letter-spacing:.5px"
             onfocus="this.style.borderColor='var(--red)'" onblur="this.style.borderColor='var(--border)'">
           <datalist id="edit_bagcode_dl${sfx}"></datalist>
@@ -3380,7 +3589,7 @@ function buildEditForm(r) {
           </select>
         </div>
         <div class="fld"><label>📅 ថ្ងៃផុត</label>
-          <input type="date" data-key="blood_exp${sfx}" value="${eH(bexp)}"
+          <input type="date" id="edit_blood_exp${sfx}" data-key="blood_exp${sfx}" value="${eH(bexp)}"
             style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">
         </div>
         <div class="fld"><label>👤 អ្នកយកប្រើ</label>
@@ -3478,8 +3687,8 @@ function buildEditForm(r) {
       </div>
     </div>
     ${einp('diagnosis','🩺 Diagnosis','text',r.diagnosis)}
-    ${einp('hb','🔬 Hb','number',r.hb)}
-    ${einp('ht','🔬 Ht','number',r.ht)}
+    ${einp('hb','🔬 Hb (g/dL) — ឧ. 7.2','text',r.hb,'inputmode="decimal" autocomplete="off" maxlength="5" oninput="hbInput(this)" onchange="hbCheckField(this)"')}
+    ${einp('ht','🔬 Ht (%) — 2 ខ្ទង់ ឧ. 21','text',r.ht,'inputmode="numeric" autocomplete="off" maxlength="3" oninput="htInput(this)" onchange="htCheckField(this)"')}
   </div>
 
   ${secDiv('🩸','ព័ត៌មានសាកឈាម','var(--red)')}
@@ -3691,7 +3900,7 @@ function editAddBag() {
     '</div>' +
     '<div style="display:grid;grid-template-columns:1.8fr 140px 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:12px;align-items:end">' +
       '<div class="fld"><label>📋 លេខកូដ</label>' +
-        '<input type="text" id="edit_blood_code' + sfx + '" data-key="blood_code' + sfx + '" list="edit_bagcode_dl' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:JetBrains Mono,monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">' +
+        '<input type="text" id="edit_blood_code' + sfx + '" data-key="blood_code' + sfx + '" list="edit_bagcode_dl' + sfx + '" oninput="autoFillBagExpiry(\'edit_blood_code' + sfx + '\',\'edit_blood_exp' + sfx + '\')" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:15px;font-weight:800;width:100%;font-family:JetBrains Mono,monospace;outline:none;letter-spacing:.5px" placeholder="e.g. 2026...">' +
         '<datalist id="edit_bagcode_dl' + sfx + '"></datalist>' +
       '</div>' +
       '<div class="fld"><label style="color:var(--green)">✅ យកប្រើរួច</label>' +
@@ -3713,7 +3922,7 @@ function editAddBag() {
         '<select id="edit_blood_type' + sfx + '" data-key="blood_type' + sfx + '" onchange="updateBagCodeSuggestions(\'edit_grp' + sfx + '\',\'edit_blood_type' + sfx + '\',\'edit_bagcode_dl' + sfx + '\')" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;cursor:pointer;outline:none"><option value="">-- ជ្រើស --</option><option value="WB">WB</option><option value="RC">RC</option><option value="PL">PL</option><option value="FFP">FFP</option></select>' +
       '</div>' +
       '<div class="fld"><label>📅 ថ្ងៃផុត</label>' +
-        '<input type="date" data-key="blood_exp' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">' +
+        '<input type="date" id="edit_blood_exp' + sfx + '" data-key="blood_exp' + sfx + '" style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">' +
       '</div>' +
       '<div class="fld"><label>👤 អ្នកយកប្រើ</label>' +
         '<input type="text" data-key="bag_taker' + sfx + '" placeholder="ឈ្មោះ..." style="border:2px solid var(--border);border-radius:9px;padding:11px 14px;font-size:14px;width:100%;font-family:Noto Sans Khmer,sans-serif;outline:none">' +
@@ -3860,6 +4069,17 @@ function editCalc() {
 }
 
 async function saveEdit() {
+  // Format: Hb needs its decimal point (7.2), Ht is at most 2 digits (21). Only a value that was CHANGED
+  // is judged — an older record with a legacy value (e.g. Hb "8") can still be edited for something else.
+  var _hbE = document.querySelector('#editBody [data-key="hb"]'), _htE = document.querySelector('#editBody [data-key="ht"]');
+  if (_hbE && String(_hbE.value).trim() !== String(editOldRecord?.hb ?? '').trim()) {
+    var _m1 = hbValidate(_hbE.value);
+    if (_m1) { _numFlag(_hbE, true); _hbE.scrollIntoView({behavior:'smooth',block:'center'}); showToast('⚠️ ' + _m1, 'err'); return; }
+  }
+  if (_htE && String(_htE.value).trim() !== String(editOldRecord?.ht ?? '').trim()) {
+    var _m2 = htValidate(_htE.value);
+    if (_m2) { _numFlag(_htE, true); _htE.scrollIntoView({behavior:'smooth',block:'center'}); showToast('⚠️ ' + _m2, 'err'); return; }
+  }
   // Validate: bag_used checked → require 👤 អ្នកយកប្រើ AND 🕐 ថ្ងៃ ម៉ោង យក (Edit Record)
   var USED_SFXS_E = ['', '_2', '_3', '_4', '_5', '_6', '_7'];
   for (var _eui = 0; _eui < USED_SFXS_E.length; _eui++) {
@@ -4570,8 +4790,8 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     style="width:100%">
   <div id="diag-dd" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:white;border:2px solid var(--red);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;z-index:9999"></div>
 </div></div>
-        <div class="fld"><label>Hb (g/dL)</label><div class="iu"><input type="number" id="f_hb" placeholder="0.0" step="0.1" style="border:none!important;outline:none"><span class="unit">g/dL</span></div></div>
-        <div class="fld"><label>Ht (%)</label><div class="iu"><input type="number" id="f_ht" placeholder="0" style="border:none!important;outline:none"><span class="unit">%</span></div></div>
+        <div class="fld"><label>Hb (g/dL)</label><div class="iu"><input type="text" inputmode="decimal" autocomplete="off" maxlength="5" id="f_hb" placeholder="0.0" oninput="hbInput(this)" onblur="hbCheckField(this)" style="border:none!important;outline:none"><span class="unit">g/dL</span></div></div>
+        <div class="fld"><label>Ht (%)</label><div class="iu"><input type="text" inputmode="numeric" autocomplete="off" maxlength="3" id="f_ht" placeholder="0" oninput="htInput(this)" onblur="htCheckField(this)" style="border:none!important;outline:none"><span class="unit">%</span></div></div>
       </div>
 
       <!-- S2: សាកឈាម -->
@@ -4591,7 +4811,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
           <div class="fg" style="grid-template-columns:1fr 140px 1fr 1fr 1fr 1fr 1fr 1fr;gap:14px;align-items:end">
             <div class="fld">
               <label>📋 លេខកូដ សាក់ឈាម</label>
-              <input type="text" id="f_blood_code" list="f_bagcode_dl" placeholder="e.g. 20261234">
+              <input type="text" id="f_blood_code" list="f_bagcode_dl" oninput="autoFillBagExpiry('f_blood_code','f_blood_exp')" placeholder="e.g. 20261234">
               <datalist id="f_bagcode_dl"></datalist>
             </div>
             <div class="fld">
