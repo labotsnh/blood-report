@@ -2249,6 +2249,7 @@ var STOCK_GRP_COLOR = { 'A Pos':'#DC2626','A Neg':'#F97316','B Pos':'#2563EB','B
 async function stockFetch(q) { return sbFetch(STOCK_TABLE + (q ? '?' + q : '')); }
 async function stockInsert(row) { return sbFetch(STOCK_TABLE, { method:'POST', body: JSON.stringify(row) }); }
 async function stockInsertMany(rows) { return sbFetch(STOCK_TABLE, { method:'POST', body: JSON.stringify(rows) }); } // PostgREST accepts an array body for bulk insert in one request
+async function stockDelete(id) { return sbFetch(STOCK_TABLE + '?id=eq.' + id, { method:'DELETE', prefer:'return=representation' }); }
 async function stockUpdate(id, row) { return sbFetch(STOCK_TABLE + '?id=eq.' + id, { method:'PATCH', body: JSON.stringify(row), prefer:'return=representation' }); }
 async function logStockAudit(action, recordId, oldData, newData) {
   try {
@@ -2726,7 +2727,8 @@ function buildStockEntryTable() {
       '<td style="padding:8px 12px">' + eH(b.blood_type) + '</td>' +
       '<td style="padding:8px 12px;text-align:right;font-weight:800">' + (b.qty_received||0) + '</td>' +
       '<td style="padding:8px 12px;white-space:nowrap">' + (b.expiry_date||'-') + '</td>' +
-      '<td style="padding:6px 12px;white-space:nowrap"><button onclick="openEditEntryModal(' + b.id + ')" style="border:1.5px solid var(--border);background:white;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">✏️ កែប្រែ</button></td>' +
+      '<td style="padding:6px 12px;white-space:nowrap"><button onclick="openEditEntryModal(' + b.id + ')" style="border:1.5px solid var(--border);background:white;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">✏️ កែប្រែ</button>' +
+        (_isAdminUser() ? ' <button onclick="openDeleteEntryModal(' + b.id + ')" style="border:1.5px solid #FCA5A5;background:white;color:#B91C1C;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">🗑️ លុប</button>' : '') + '</td>' +
     '</tr>';
   });
   // Per-type totals over ALL rows in range (not just the visible page), in the usual order,
@@ -3224,6 +3226,52 @@ async function saveEditEntry() {
     logStockAudit('update', b.id, oldData, Object.assign({ event: 'edit_entry' }, patch));
     showToast('✅ បានកែប្រែ', 'ok');
     closeEditEntryModal();
+    buildStockPage();
+  } catch (e) {
+    showToast('❌ ' + e.message, 'err');
+  } finally { btn.innerHTML = btn._orig; btn.disabled = false; }
+}
+
+// ── Delete a received bag/batch (admin only) ──
+var _deleteEntryId = null;
+function _isAdminUser() { return !!currentUser && currentUser.role === 'admin'; }
+
+function openDeleteEntryModal(id) {
+  if (!_isAdminUser()) { showToast('⛔ មានតែ Admin ទេដែលអាចលុបបាន', 'err'); return; }
+  var b = allStock.find(function(x) { return x.id === id; });
+  if (!b) return;
+  _deleteEntryId = id;
+  var used = (b.qty_received || 0) - (b.qty_remaining || 0);
+  var warn = '';
+  if ((b.qty_reserved || 0) > 0) warn = '⛔ Bag នេះមាន X-match ' + b.qty_reserved + ' — មិនអាចលុបបានទេ';
+  else if (used > 0 || b.status === 'discarded') warn = '⛔ Bag នេះត្រូវបានប្រើ ឬបោះបង់រួចហើយ — មិនអាចលុបបានទេ';
+  document.getElementById('de_info').innerHTML = '<b style="font-family:JetBrains Mono,monospace">' + eH(b.batch_no || ('#' + b.id)) + '</b> · ' + eH(b.grp) + ' ' + eH(b.blood_type) +
+    ' · ទទួល ' + (b.qty_received || 0) + ' · ថ្ងៃទទួល ' + eH(b.received_date || '-');
+  var w = document.getElementById('de_warn');
+  w.textContent = warn; w.style.display = warn ? '' : 'none';
+  document.getElementById('btnDeleteEntry').disabled = !!warn;
+  document.getElementById('de_reason').value = '';
+  document.getElementById('deleteEntryModal').classList.add('open');
+}
+function closeDeleteEntryModal() { document.getElementById('deleteEntryModal').classList.remove('open'); _deleteEntryId = null; }
+
+async function saveDeleteEntry() {
+  if (!_isAdminUser()) { showToast('⛔ មានតែ Admin ទេដែលអាចលុបបាន', 'err'); closeDeleteEntryModal(); return; }
+  var b = allStock.find(function(x) { return x.id === _deleteEntryId; });
+  if (!b) { closeDeleteEntryModal(); return; }
+  var reason = document.getElementById('de_reason').value.trim();
+  if (!reason) { showToast('⚠️ សូមបញ្ចូល មូលហេតុ', 'err'); return; }
+  if ((b.qty_reserved || 0) > 0 || (b.qty_received || 0) !== (b.qty_remaining || 0) || b.status === 'discarded') {
+    showToast('⛔ Bag នេះមិនអាចលុបបានទេ', 'err'); return;
+  }
+  var btn = document.getElementById('btnDeleteEntry');
+  btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> កំពុងលុប...'; btn.disabled = true;
+  try {
+    await stockDelete(b.id);
+    logStockAudit('delete', b.id, Object.assign({}, b), { event: 'delete_entry', reason: reason });
+    allStock = allStock.filter(function(x) { return x.id !== b.id; });
+    showToast('🗑️ បានលុប', 'ok');
+    closeDeleteEntryModal();
     buildStockPage();
   } catch (e) {
     showToast('❌ ' + e.message, 'err');
@@ -5473,6 +5521,25 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <button class="btn btn-green" id="btnReceiveStock" onclick="reviewReceiveStock()">👁️ ពិនិត្យមុនទទួល</button>
       <button class="btn btn-ghost" id="btnReceiveBack" style="display:none" onclick="rsShowStep('form')">← ត្រឡប់ទៅកែ</button>
       <button class="btn btn-green" id="btnReceiveApprove" style="display:none" onclick="saveReceiveStock()">✅ Approve · ចូលស្តុក</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Stock Entry Modal (admin only) -->
+<div class="overlay" id="deleteEntryModal">
+  <div class="modal" style="max-width:420px;width:100%">
+    <div class="modal-head">
+      <div><h3>🗑️ លុប Bag ចេញពីស្តុក</h3><p>សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ (មានតែ Admin)</p></div>
+      <button class="close-btn" onclick="closeDeleteEntryModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <div id="de_info" style="font-size:13px"></div>
+      <div id="de_warn" style="display:none;background:#FEF2F2;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:10px;padding:10px 14px;font-size:12.5px;font-weight:700"></div>
+      <div class="fld"><label>📝 មូលហេតុ <span class="req">*</span></label><input type="text" id="de_reason" placeholder="ឧ. បញ្ចូលខុស, Code ជាន់គ្នា..."></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeDeleteEntryModal()">បោះបង់</button>
+      <button class="btn btn-red" id="btnDeleteEntry" onclick="saveDeleteEntry()">🗑️ លុប</button>
     </div>
   </div>
 </div>
