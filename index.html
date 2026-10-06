@@ -3006,9 +3006,11 @@ function openReceiveStockModal() {
   document.getElementById('rs_notes').value = '';
   _receiveRows = [_rsBlankRow()];
   rsRenderRows();
+  _rsPending = null;
+  rsShowStep('form');
   document.getElementById('receiveStockModal').classList.add('open');
   _rsBurst.n = 0;
-  document.addEventListener('keydown', _rsScanSniffer, true);   // capture phase: sees scanner keys before any field does
+  // (rsShowStep('form') above registers the scan listener) capture phase: sees scanner keys before any field does
   // A barcode scanner just "types" into whatever currently has keyboard focus — with nothing
   // focused, scanning does nothing. Focus the first row's Code Bag field automatically.
   setTimeout(function() { document.getElementById('rs_code_0')?.focus(); }, 60);
@@ -3018,21 +3020,22 @@ function closeReceiveStockModal() {
   document.getElementById('receiveStockModal').classList.remove('open');
 }
 
-async function saveReceiveStock() {
+// Validates the form and returns the rows to insert, or null (after a toast) when something is wrong.
+function _rsBuildPayload() {
   var rowsToSave = _rsRealRows(); // drops the empty placeholder row the scan auto-advance leaves at the end
-  if (!rowsToSave.length) { showToast('⚠️ សូមបន្ថែមយ៉ាងហោចណាស់ 1 ជួរ', 'err'); return; }
+  if (!rowsToSave.length) { showToast('⚠️ សូមបន្ថែមយ៉ាងហោចណាស់ 1 ជួរ', 'err'); return null; }
   for (var i = 0; i < _receiveRows.length; i++) {
     var r = _receiveRows[i];
     if (r.auto && !r.code) continue;
-    if (!r.grp)    { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមជ្រើស Group / Rh', 'err'); return; }
-    if (!r.type)   { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមជ្រើស ប្រភេទ', 'err'); return; }
-    if (!r.expiry) { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមបញ្ចូល ថ្ងៃផុតកំណត់', 'err'); return; }
-    if (!r.code && (!r.qty || r.qty <= 0)) { showToast('⚠️ ជួរទី ' + (i+1) + ': ចំនួនត្រូវធំជាង 0', 'err'); return; }
+    if (!r.grp)    { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមជ្រើស Group / Rh', 'err'); return null; }
+    if (!r.type)   { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមជ្រើស ប្រភេទ', 'err'); return null; }
+    if (!r.expiry) { showToast('⚠️ ជួរទី ' + (i+1) + ': សូមបញ្ចូល ថ្ងៃផុតកំណត់', 'err'); return null; }
+    if (!r.code && (!r.qty || r.qty <= 0)) { showToast('⚠️ ជួរទី ' + (i+1) + ': ចំនួនត្រូវធំជាង 0', 'err'); return null; }
   }
   // Duplicate codes within this submission itself
   var codes = rowsToSave.map(function(r) { return r.code; }).filter(Boolean);
   var dupCode = codes.find(function(c, i) { return codes.indexOf(c) !== i; });
-  if (dupCode) { showToast('⚠️ Code "' + dupCode + '" លេចឡើងច្រើនជាង 1 ដងក្នុងបញ្ជីនេះ', 'err'); return; }
+  if (dupCode) { showToast('⚠️ Code "' + dupCode + '" លេចឡើងច្រើនជាង 1 ដងក្នុងបញ្ជីនេះ', 'err'); return null; }
 
   var source = document.getElementById('rs_source').value.trim() || 'NBTC';
   var notes = document.getElementById('rs_notes').value.trim() || null;
@@ -3047,8 +3050,75 @@ async function saveReceiveStock() {
       received_by: receivedBy, source: source, notes: notes, status: 'active'
     };
   });
+  return payload;
+}
 
-  var btn = document.getElementById('btnReceiveStock');
+// Step 1 → 2: show a summary of what was entered so staff can check it before it hits the stock.
+var _rsPending = null;
+function reviewReceiveStock() {
+  var payload = _rsBuildPayload();
+  if (!payload) return;
+  // Bag codes that are already in stock are almost certainly a mistake (same bag scanned twice).
+  var inStock = payload.filter(function(r) { return r.batch_no && allStock.some(function(b) { return b.batch_no === r.batch_no; }); })
+    .map(function(r) { return r.batch_no; });
+  _rsPending = payload;
+
+  var types = STOCK_TYPES.filter(function(t) { return payload.some(function(r) { return r.blood_type === t; }); })
+    .concat(payload.map(function(r) { return r.blood_type; }).filter(function(t, i, a) { return STOCK_TYPES.indexOf(t) < 0 && a.indexOf(t) === i; }));
+  var grps = STOCK_GRPS.filter(function(g) { return payload.some(function(r) { return r.grp === g; }); })
+    .concat(payload.map(function(r) { return r.grp; }).filter(function(g, i, a) { return STOCK_GRPS.indexOf(g) < 0 && a.indexOf(g) === i; }));
+  var cnt = {}, grpTot = {}, typeTot = {}, grand = 0;
+  payload.forEach(function(r) {
+    var k = r.grp + '|' + r.blood_type;
+    cnt[k] = (cnt[k] || 0) + r.qty_received;
+    grpTot[r.grp] = (grpTot[r.grp] || 0) + r.qty_received;
+    typeTot[r.blood_type] = (typeTot[r.blood_type] || 0) + r.qty_received;
+    grand += r.qty_received;
+  });
+  var th = 'padding:9px 12px;text-align:right;white-space:nowrap';
+  var td = 'padding:8px 12px;text-align:right;font-weight:800';
+  var h = '<div style="overflow-x:auto;border:1.5px solid var(--border);border-radius:10px"><table style="width:100%;min-width:0;border-collapse:collapse;font-size:13px"><thead><tr style="background:#0C4A6E;color:white">' +
+    '<th style="' + th + ';text-align:left;width:auto">🩸 Group / 💉 ប្រភេទ</th>' +
+    types.map(function(t) { return '<th style="' + th + '">' + eH(t) + ' ចំនួន</th>'; }).join('') +
+    '<th style="' + th + '">សរុប</th></tr></thead><tbody>';
+  grps.forEach(function(g, i) {
+    h += '<tr style="border-bottom:1px solid var(--border)' + (i % 2 ? ';background:#FAFBFC' : '') + '">' +
+      '<td style="padding:8px 12px;text-align:left;font-weight:800;color:' + (STOCK_GRP_COLOR[g] || '#334155') + '">' + eH(g) + '</td>' +
+      types.map(function(t) { var n = cnt[g + '|' + t]; return '<td style="' + td + ';color:' + (n ? 'inherit' : '#CBD5E1') + '">' + (n || '—') + '</td>'; }).join('') +
+      '<td style="' + td + '">' + grpTot[g] + '</td></tr>';
+  });
+  h += '</tbody><tfoot><tr style="background:#F1F5F9;border-top:2px solid var(--border)"><td style="padding:10px 12px;text-align:left;font-weight:900">សរុប</td>' +
+    types.map(function(t) { return '<td style="' + td + '">' + typeTot[t] + '</td>'; }).join('') +
+    '<td style="' + td + ';color:#059669;font-size:16px">' + grand + '</td></tr></tfoot></table></div>';
+  var withCode = payload.filter(function(r) { return r.batch_no; }).length;
+  h += '<div style="font-size:12px;color:var(--muted);font-weight:600">' + payload.length + ' ជួរ · មាន Code Bag ' + withCode + ' · ប្រភព: ' + eH(payload[0].source) +
+    (payload[0].notes ? ' · ចំណាំ: ' + eH(payload[0].notes) : '') + '</div>';
+  if (inStock.length) {
+    h += '<div style="background:#FEF2F2;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:10px;padding:10px 14px;font-size:12.5px;font-weight:700">⚠️ Code ទាំងនេះមានក្នុងស្តុករួចហើយ៖ ' + inStock.map(eH).join(', ') + ' — សូមត្រឡប់ទៅកែ</div>';
+  }
+  document.getElementById('rs_review_body').innerHTML = h;
+  document.getElementById('btnReceiveApprove').disabled = inStock.length > 0;
+  rsShowStep('review');
+}
+
+function rsShowStep(step) {
+  var review = step === 'review';
+  document.getElementById('rs_form_body').style.display = review ? 'none' : 'flex';
+  document.getElementById('rs_review_wrap').style.display = review ? 'flex' : 'none';
+  document.getElementById('btnReceiveCancel').style.display = review ? 'none' : '';
+  document.getElementById('btnReceiveStock').style.display = review ? 'none' : '';
+  document.getElementById('btnReceiveBack').style.display = review ? '' : 'none';
+  document.getElementById('btnReceiveApprove').style.display = review ? '' : 'none';
+  // Scanner keys must not land in the entry rows while the summary is on screen.
+  document.removeEventListener('keydown', _rsScanSniffer, true);
+  if (!review) document.addEventListener('keydown', _rsScanSniffer, true);
+}
+
+// Step 2: staff confirmed the summary — write to stock.
+async function saveReceiveStock() {
+  var payload = _rsPending;
+  if (!payload || !payload.length) { rsShowStep('form'); return; }
+  var btn = document.getElementById('btnReceiveApprove');
   btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> កំពុងរក្សាទុក...'; btn.disabled = true;
   try {
     var inserted = await stockInsertMany(payload);
@@ -5370,7 +5440,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <div><h3>➕ ទទួលចូលស្តុកថ្មី</h3><p>បញ្ចូល Bag ថ្មីចូលស្តុក — បន្ថែមបានច្រើនជួរម្តងតែម្តង</p></div>
       <button class="close-btn" onclick="closeReceiveStockModal()">✕</button>
     </div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px">
+    <div class="modal-body" id="rs_form_body" style="display:flex;flex-direction:column;gap:12px">
       <div style="overflow-x:auto;border:1.5px solid var(--border);border-radius:10px">
         <table style="width:100%;border-collapse:collapse;font-size:12.5px">
           <thead><tr style="background:#0C4A6E;color:white">
@@ -5394,9 +5464,15 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       </div>
       <div style="font-size:12px;color:var(--muted);font-weight:700">សរុប៖ <span id="rs_total_bags" style="color:#059669;font-size:14px">0</span> Bag ក្នុង <span id="rs_total_rows">0</span> ជួរ</div>
     </div>
+    <div class="modal-body" id="rs_review_wrap" style="display:none;flex-direction:column;gap:12px">
+      <div style="font-size:13px;font-weight:800">📋 ពិនិត្យមើលមុនទទួលចូលស្តុក</div>
+      <div id="rs_review_body" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
     <div class="modal-foot">
-      <button class="btn btn-ghost" onclick="closeReceiveStockModal()">បោះបង់</button>
-      <button class="btn btn-green" id="btnReceiveStock" onclick="saveReceiveStock()">✅ ទទួលចូលស្តុក</button>
+      <button class="btn btn-ghost" id="btnReceiveCancel" onclick="closeReceiveStockModal()">បោះបង់</button>
+      <button class="btn btn-green" id="btnReceiveStock" onclick="reviewReceiveStock()">👁️ ពិនិត្យមុនទទួល</button>
+      <button class="btn btn-ghost" id="btnReceiveBack" style="display:none" onclick="rsShowStep('form')">← ត្រឡប់ទៅកែ</button>
+      <button class="btn btn-green" id="btnReceiveApprove" style="display:none" onclick="saveReceiveStock()">✅ Approve · ចូលស្តុក</button>
     </div>
   </div>
 </div>
