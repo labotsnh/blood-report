@@ -2714,13 +2714,19 @@ var _stockEntryLimit = 20, _stockEntryKey = '';
 function buildStockEntryTable() {
   var fromEl = document.getElementById('stockentry-from'), toEl = document.getElementById('stockentry-to');
   if (!fromEl || !toEl) return; // not on the Stock page
-  if (!fromEl.value) fromEl.value = _todayStr();
-  if (!toEl.value) toEl.value = _todayStr();
+  // The range is date + time ('YYYY-MM-DDTHH:MM') so a night shift that crosses midnight can be picked exactly.
+  if (!fromEl.value) fromEl.value = _todayStr() + 'T00:00';
+  if (!toEl.value) toEl.value = _todayStr() + 'T23:59';
   var from = fromEl.value, to = toEl.value;
   if (to < from) to = from; // guard against an inverted range
 
-  var rows = allStock.filter(function(b) { return b.received_date && b.received_date >= from && b.received_date <= to; })
-    .sort(function(a, b) { return _recvToDT(b).localeCompare(_recvToDT(a)); });
+  // Bags saved before received_time existed have no time: match those on the date alone.
+  var rows = allStock.filter(function(b) {
+    if (!b.received_date) return false;
+    if (!b.received_time) return b.received_date >= from.slice(0, 10) && b.received_date <= to.slice(0, 10);
+    var dt = _recvToDT(b);
+    return dt >= from && dt <= to;
+  }).sort(function(a, b) { return _recvToDT(b).localeCompare(_recvToDT(a)); });
 
   var key = from + '|' + to;
   if (key !== _stockEntryKey) { _stockEntryKey = key; _stockEntryLimit = 20; }
@@ -5503,9 +5509,9 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <span id="stockentry-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--muted);font-weight:600">ចាប់ពី</span>
-        <input type="date" id="stockentry-from" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
+        <input type="datetime-local" id="stockentry-from" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
         <span style="font-size:12px;color:var(--muted);font-weight:600">ដល់</span>
-        <input type="date" id="stockentry-to" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
+        <input type="datetime-local" id="stockentry-to" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
       </div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
