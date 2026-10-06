@@ -2249,6 +2249,7 @@ var STOCK_GRP_COLOR = { 'A Pos':'#DC2626','A Neg':'#F97316','B Pos':'#2563EB','B
 async function stockFetch(q) { return sbFetch(STOCK_TABLE + (q ? '?' + q : '')); }
 async function stockInsert(row) { return sbFetch(STOCK_TABLE, { method:'POST', body: JSON.stringify(row) }); }
 async function stockInsertMany(rows) { return sbFetch(STOCK_TABLE, { method:'POST', body: JSON.stringify(rows) }); } // PostgREST accepts an array body for bulk insert in one request
+async function stockDelete(id) { return sbFetch(STOCK_TABLE + '?id=eq.' + id, { method:'DELETE', prefer:'return=representation' }); }
 async function stockUpdate(id, row) { return sbFetch(STOCK_TABLE + '?id=eq.' + id, { method:'PATCH', body: JSON.stringify(row), prefer:'return=representation' }); }
 async function logStockAudit(action, recordId, oldData, newData) {
   try {
@@ -2260,7 +2261,28 @@ async function logStockAudit(action, recordId, oldData, newData) {
   } catch (e) { console.warn('⚠️ Stock audit log skipped:', e.message); }
 }
 
-function _todayStr() { return new Date().toISOString().slice(0, 10); }
+function _pad2(n) { return (n < 10 ? '0' : '') + n; }
+// Local calendar date (the old UTC version returned yesterday's date for Cambodia before 07:00 —
+// exactly when night-shift staff enter bags after midnight).
+function _todayStr() { var d = new Date(); return d.getFullYear() + '-' + _pad2(d.getMonth() + 1) + '-' + _pad2(d.getDate()); }
+function _nowLocalDT() { var d = new Date(); return _todayStr() + 'T' + _pad2(d.getHours()) + ':' + _pad2(d.getMinutes()); }
+// received_date + received_time -> 'YYYY-MM-DDTHH:MM' for <input type="datetime-local">
+function _recvToDT(b) { return b.received_date ? b.received_date + 'T' + ((b.received_time || '00:00').slice(0, 5)) : ''; }
+// 'YYYY-MM-DDTHH:MM' -> display 'YYYY-MM-DD HH:MM' (time omitted when the row has none)
+function _recvLabel(b) { return b.received_date ? b.received_date + (b.received_time ? ' ' + b.received_time.slice(0, 5) : '') : '-'; }
+// blood_stock needs a `received_time time` column. If it is missing, retry without it so saving still works.
+var _stockTimeColMissing = false;
+function _stripTime(rows) {
+  var one = !Array.isArray(rows), arr = one ? [rows] : rows;
+  var out = arr.map(function(r) { var c = Object.assign({}, r); delete c.received_time; return c; });
+  return one ? out[0] : out;
+}
+function _isTimeColError(e) { return /received_time/i.test((e && e.message) || ''); }
+function _warnTimeCol() {
+  if (_stockTimeColMissing) return;
+  _stockTimeColMissing = true;
+  showToast('⚠️ គ្មាន column received_time ក្នុង Supabase — សូម Run: ALTER TABLE blood_stock ADD COLUMN received_time time;', 'err');
+}
 function _daysUntil(dateStr) {
   if (!dateStr) return null;
   return Math.round((new Date(dateStr + 'T00:00:00') - new Date(_todayStr() + 'T00:00:00')) / 86400000);
@@ -2692,13 +2714,19 @@ var _stockEntryLimit = 20, _stockEntryKey = '';
 function buildStockEntryTable() {
   var fromEl = document.getElementById('stockentry-from'), toEl = document.getElementById('stockentry-to');
   if (!fromEl || !toEl) return; // not on the Stock page
-  if (!fromEl.value) fromEl.value = _todayStr();
-  if (!toEl.value) toEl.value = _todayStr();
+  // The range is date + time ('YYYY-MM-DDTHH:MM') so a night shift that crosses midnight can be picked exactly.
+  if (!fromEl.value) fromEl.value = _todayStr() + 'T00:00';
+  if (!toEl.value) toEl.value = _todayStr() + 'T23:59';
   var from = fromEl.value, to = toEl.value;
   if (to < from) to = from; // guard against an inverted range
 
-  var rows = allStock.filter(function(b) { return b.received_date && b.received_date >= from && b.received_date <= to; })
-    .sort(function(a, b) { return (b.received_date || '').localeCompare(a.received_date || ''); });
+  // Bags saved before received_time existed have no time: match those on the date alone.
+  var rows = allStock.filter(function(b) {
+    if (!b.received_date) return false;
+    if (!b.received_time) return b.received_date >= from.slice(0, 10) && b.received_date <= to.slice(0, 10);
+    var dt = _recvToDT(b);
+    return dt >= from && dt <= to;
+  }).sort(function(a, b) { return _recvToDT(b).localeCompare(_recvToDT(a)); });
 
   var key = from + '|' + to;
   if (key !== _stockEntryKey) { _stockEntryKey = key; _stockEntryLimit = 20; }
@@ -2720,13 +2748,14 @@ function buildStockEntryTable() {
     '<th style="'+th+';text-align:right">ទទួល</th><th style="'+th+'">ថ្ងៃផុតកំណត់</th><th style="'+th+'">សកម្មភាព</th></tr></thead><tbody>';
   shown.forEach(function(b, i) {
     h += '<tr style="border-bottom:1px solid var(--border)' + (i%2?';background:#FAFBFC':'') + '">' +
-      '<td style="padding:8px 12px;white-space:nowrap">' + (b.received_date||'-') + '</td>' +
+      '<td style="padding:8px 12px;white-space:nowrap">' + eH(_recvLabel(b)) + '</td>' +
       '<td style="padding:8px 12px;font-family:JetBrains Mono,monospace;font-weight:700">' + eH(b.batch_no || ('#'+b.id)) + '</td>' +
       '<td style="padding:8px 12px;font-weight:800;color:' + (STOCK_GRP_COLOR[b.grp]||'#334155') + '">' + eH(b.grp) + '</td>' +
       '<td style="padding:8px 12px">' + eH(b.blood_type) + '</td>' +
       '<td style="padding:8px 12px;text-align:right;font-weight:800">' + (b.qty_received||0) + '</td>' +
       '<td style="padding:8px 12px;white-space:nowrap">' + (b.expiry_date||'-') + '</td>' +
-      '<td style="padding:6px 12px;white-space:nowrap"><button onclick="openEditEntryModal(' + b.id + ')" style="border:1.5px solid var(--border);background:white;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">✏️ កែប្រែ</button></td>' +
+      '<td style="padding:6px 12px;white-space:nowrap"><button onclick="openEditEntryModal(' + b.id + ')" style="border:1.5px solid var(--border);background:white;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">✏️ កែប្រែ</button>' +
+        (_isAdminUser() ? ' <button onclick="openDeleteEntryModal(' + b.id + ')" style="border:1.5px solid #FCA5A5;background:white;color:#B91C1C;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">🗑️ លុប</button>' : '') + '</td>' +
     '</tr>';
   });
   // Per-type totals over ALL rows in range (not just the visible page), in the usual order,
@@ -2767,7 +2796,7 @@ var _GRP_OPTS = ['A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Ne
 var _TYPE_OPTS = ['WB','RC','PL','FFP'];
 
 function _rsBlankRow(prefill) {
-  return Object.assign({ code:'', grp:'', type:'', expiry:'', received:_todayStr(), qty:1 }, prefill || {});
+  return Object.assign({ code:'', grp:'', type:'', expiry:'', received:_nowLocalDT(), qty:1 }, prefill || {});
 }
 
 // The scan auto-advance leaves an empty row waiting for the NEXT bag (auto:true, no code). It is
@@ -2794,7 +2823,7 @@ function rsRenderRows() {
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'grp\',this.value)" style="' + inp + '">' + grpOpts + '</select></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'type\',this.value)" style="' + inp + '">' + typeOpts + '</select></td>' +
       '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsUpdateCell(' + i + ',\'expiry\',this.value)" oninput="rsUpdateCell(' + i + ',\'expiry\',this.value)" style="' + inp + '"></td>' +
-      '<td style="' + cell + '"><input type="date" value="' + eH(r.received) + '" onchange="rsUpdateCell(' + i + ',\'received\',this.value)" oninput="rsUpdateCell(' + i + ',\'received\',this.value)" style="' + inp + '"></td>' +
+      '<td style="' + cell + '"><input type="datetime-local" value="' + eH(r.received) + '" onchange="rsUpdateCell(' + i + ',\'received\',this.value)" oninput="rsUpdateCell(' + i + ',\'received\',this.value)" style="' + inp + '"></td>' +
       '<td style="' + cell + '"><input type="number" id="rs_qty_' + i + '" min="1" value="' + r.qty + '" ' + (r.code ? 'disabled title="កំណត់ 1 ពេលមាន Code Bag (តំណាងតែ Bag មួយ)"' : '') + ' oninput="rsUpdateCell(' + i + ',\'qty\',this.value)" style="' + inp + (r.code ? ';background:#F1F5F9;color:var(--muted)' : '') + '"></td>' +
       '<td style="' + cell + 'text-align:center">' + (_receiveRows.length > 1 ? '<button type="button" onclick="rsRemoveRow(' + i + ')" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>' : '') + '</td>' +
     '</tr>';
@@ -2893,7 +2922,8 @@ function rsAddRow(auto) {
     if (sels[0]) last.grp = sels[0].value;
     if (sels[1]) last.type = sels[1].value;
     if (dates[0]) last.expiry = dates[0].value;
-    if (dates[1]) last.received = dates[1].value;
+    var dtl = lastTr.querySelector('input[type="datetime-local"]');
+    if (dtl && dtl.value) last.received = dtl.value;
   }
   var newIndex = _receiveRows.length;
   var row = _rsBlankRow(last ? { grp:last.grp, type:last.type, expiry:last.expiry, received:last.received } : null);
@@ -3046,7 +3076,7 @@ function _rsBuildPayload() {
     return {
       batch_no: r.code || null, grp: r.grp, blood_type: r.type,
       qty_received: qty, qty_remaining: qty,
-      expiry_date: r.expiry, received_date: r.received || _todayStr(),
+      expiry_date: r.expiry, received_date: (r.received || _nowLocalDT()).slice(0, 10), received_time: (r.received || _nowLocalDT()).slice(11, 16) || null,
       received_by: receivedBy, source: source, notes: notes, status: 'active'
     };
   });
@@ -3121,7 +3151,13 @@ async function saveReceiveStock() {
   var btn = document.getElementById('btnReceiveApprove');
   btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> កំពុងរក្សាទុក...'; btn.disabled = true;
   try {
-    var inserted = await stockInsertMany(payload);
+    var inserted;
+    if (_stockTimeColMissing) payload = _stripTime(payload);
+    try { inserted = await stockInsertMany(payload); }
+    catch (e1) {
+      if (!_isTimeColError(e1)) throw e1;
+      _warnTimeCol(); payload = _stripTime(payload); inserted = await stockInsertMany(payload);
+    }
     var insArr = Array.isArray(inserted) ? inserted : [];
     insArr.forEach(function(r) { allStock.unshift(r); });
     var totalBags = payload.reduce(function(s, r) { return s + r.qty_received; }, 0);
@@ -3188,7 +3224,7 @@ function openEditEntryModal(id) {
   document.getElementById('ee_grp').innerHTML = opt(grps, b.grp);
   document.getElementById('ee_type').innerHTML = opt(types, b.blood_type);
   document.getElementById('ee_qty').value = b.qty_received || 0;
-  document.getElementById('ee_received').value = b.received_date || '';
+  document.getElementById('ee_received').value = _recvToDT(b);
   document.getElementById('ee_expiry').value = b.expiry_date || '';
   document.getElementById('editEntryModal').classList.add('open');
 }
@@ -3205,7 +3241,7 @@ async function saveEditEntry() {
   var expiry = document.getElementById('ee_expiry').value;
   if (!code) { showToast('⚠️ សូមបញ្ចូល Bag Code', 'err'); return; }
   if (isNaN(qty) || qty < 1) { showToast('⚠️ សូមបញ្ចូលចំនួនត្រឹមត្រូវ', 'err'); return; }
-  if (!received) { showToast('⚠️ សូមជ្រើស ថ្ងៃទទួល', 'err'); return; }
+  if (!received) { showToast('⚠️ សូមជ្រើស ថ្ងៃ និងម៉ោងទទួល', 'err'); return; }
   if (code !== b.batch_no && allStock.some(function(x) { return x.id !== b.id && x.batch_no === code; })) {
     showToast('⚠️ Bag Code "' + code + '" មានរួចហើយក្នុងស្តុក', 'err'); return;
   }
@@ -3213,17 +3249,68 @@ async function saveEditEntry() {
   var oldRecv = b.qty_received || 0;
   var newRemaining = Math.max(0, (b.qty_remaining || 0) + (qty - oldRecv));
   var patch = { batch_no: code, grp: grp, blood_type: type, qty_received: qty, qty_remaining: newRemaining,
-                received_date: received, expiry_date: expiry || null };
+                received_date: received.slice(0, 10), received_time: received.slice(11, 16) || null, expiry_date: expiry || null };
   var oldData = {};
   Object.keys(patch).forEach(function(k) { oldData[k] = b[k]; });
   var btn = document.getElementById('btnEditEntry');
   btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> កំពុងរក្សាទុក...'; btn.disabled = true;
   try {
-    await stockUpdate(b.id, patch);
+    if (_stockTimeColMissing) { patch = _stripTime(patch); }
+    try { await stockUpdate(b.id, patch); }
+    catch (e1) {
+      if (!_isTimeColError(e1)) throw e1;
+      _warnTimeCol(); patch = _stripTime(patch); await stockUpdate(b.id, patch);
+    }
     Object.assign(b, patch);
     logStockAudit('update', b.id, oldData, Object.assign({ event: 'edit_entry' }, patch));
     showToast('✅ បានកែប្រែ', 'ok');
     closeEditEntryModal();
+    buildStockPage();
+  } catch (e) {
+    showToast('❌ ' + e.message, 'err');
+  } finally { btn.innerHTML = btn._orig; btn.disabled = false; }
+}
+
+// ── Delete a received bag/batch (admin only) ──
+var _deleteEntryId = null;
+function _isAdminUser() { return !!currentUser && currentUser.role === 'admin'; }
+
+function openDeleteEntryModal(id) {
+  if (!_isAdminUser()) { showToast('⛔ មានតែ Admin ទេដែលអាចលុបបាន', 'err'); return; }
+  var b = allStock.find(function(x) { return x.id === id; });
+  if (!b) return;
+  _deleteEntryId = id;
+  var used = (b.qty_received || 0) - (b.qty_remaining || 0);
+  var warn = '';
+  if ((b.qty_reserved || 0) > 0) warn = '⛔ Bag នេះមាន X-match ' + b.qty_reserved + ' — មិនអាចលុបបានទេ';
+  else if (used > 0 || b.status === 'discarded') warn = '⛔ Bag នេះត្រូវបានប្រើ ឬបោះបង់រួចហើយ — មិនអាចលុបបានទេ';
+  document.getElementById('de_info').innerHTML = '<b style="font-family:JetBrains Mono,monospace">' + eH(b.batch_no || ('#' + b.id)) + '</b> · ' + eH(b.grp) + ' ' + eH(b.blood_type) +
+    ' · ទទួល ' + (b.qty_received || 0) + ' · ថ្ងៃទទួល ' + eH(b.received_date || '-');
+  var w = document.getElementById('de_warn');
+  w.textContent = warn; w.style.display = warn ? '' : 'none';
+  document.getElementById('btnDeleteEntry').disabled = !!warn;
+  document.getElementById('de_reason').value = '';
+  document.getElementById('deleteEntryModal').classList.add('open');
+}
+function closeDeleteEntryModal() { document.getElementById('deleteEntryModal').classList.remove('open'); _deleteEntryId = null; }
+
+async function saveDeleteEntry() {
+  if (!_isAdminUser()) { showToast('⛔ មានតែ Admin ទេដែលអាចលុបបាន', 'err'); closeDeleteEntryModal(); return; }
+  var b = allStock.find(function(x) { return x.id === _deleteEntryId; });
+  if (!b) { closeDeleteEntryModal(); return; }
+  var reason = document.getElementById('de_reason').value.trim();
+  if (!reason) { showToast('⚠️ សូមបញ្ចូល មូលហេតុ', 'err'); return; }
+  if ((b.qty_reserved || 0) > 0 || (b.qty_received || 0) !== (b.qty_remaining || 0) || b.status === 'discarded') {
+    showToast('⛔ Bag នេះមិនអាចលុបបានទេ', 'err'); return;
+  }
+  var btn = document.getElementById('btnDeleteEntry');
+  btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> កំពុងលុប...'; btn.disabled = true;
+  try {
+    await stockDelete(b.id);
+    logStockAudit('delete', b.id, Object.assign({}, b), { event: 'delete_entry', reason: reason });
+    allStock = allStock.filter(function(x) { return x.id !== b.id; });
+    showToast('🗑️ បានលុប', 'ok');
+    closeDeleteEntryModal();
     buildStockPage();
   } catch (e) {
     showToast('❌ ' + e.message, 'err');
@@ -5422,9 +5509,9 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <span id="stockentry-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--muted);font-weight:600">ចាប់ពី</span>
-        <input type="date" id="stockentry-from" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
+        <input type="datetime-local" id="stockentry-from" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
         <span style="font-size:12px;color:var(--muted);font-weight:600">ដល់</span>
-        <input type="date" id="stockentry-to" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
+        <input type="datetime-local" id="stockentry-to" onchange="buildStockEntryTable()" style="border:1.5px solid var(--border);border-radius:9px;padding:6px 10px;font-size:12.5px;font-weight:700">
       </div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
@@ -5449,7 +5536,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:88px">🩸 Group/Rh <span class="req">*</span></th>
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:68px">💉 ប្រភេទ <span class="req">*</span></th>
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:132px">📅 ថ្ងៃផុតកំណត់ <span class="req">*</span></th>
-            <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:132px">📅 ថ្ងៃទទួល</th>
+            <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:176px">📅 ថ្ងៃ · ម៉ោងទទួល</th>
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:62px">📦 ចំនួន <span class="req">*</span></th>
             <th style="padding:8px 10px"></th>
           </tr></thead>
@@ -5477,6 +5564,25 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
   </div>
 </div>
 
+<!-- Delete Stock Entry Modal (admin only) -->
+<div class="overlay" id="deleteEntryModal">
+  <div class="modal" style="max-width:420px;width:100%">
+    <div class="modal-head">
+      <div><h3>🗑️ លុប Bag ចេញពីស្តុក</h3><p>សកម្មភាពនេះមិនអាចត្រឡប់វិញបានទេ (មានតែ Admin)</p></div>
+      <button class="close-btn" onclick="closeDeleteEntryModal()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <div id="de_info" style="font-size:13px"></div>
+      <div id="de_warn" style="display:none;background:#FEF2F2;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:10px;padding:10px 14px;font-size:12.5px;font-weight:700"></div>
+      <div class="fld"><label>📝 មូលហេតុ <span class="req">*</span></label><input type="text" id="de_reason" placeholder="ឧ. បញ្ចូលខុស, Code ជាន់គ្នា..."></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeDeleteEntryModal()">បោះបង់</button>
+      <button class="btn btn-red" id="btnDeleteEntry" onclick="saveDeleteEntry()">🗑️ លុប</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit Stock Entry Modal -->
 <div class="overlay" id="editEntryModal">
   <div class="modal" style="max-width:460px;width:100%">
@@ -5492,7 +5598,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       </div>
       <div class="fld"><label>ចំនួនទទួល</label><input type="number" id="ee_qty" min="1"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="fld"><label>ថ្ងៃទទួល</label><input type="date" id="ee_received"></div>
+        <div class="fld"><label>ថ្ងៃ · ម៉ោងទទួល</label><input type="datetime-local" id="ee_received"></div>
         <div class="fld"><label>ថ្ងៃផុតកំណត់</label><input type="date" id="ee_expiry"></div>
       </div>
     </div>
