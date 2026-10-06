@@ -2793,8 +2793,8 @@ function rsRenderRows() {
         '<div id="rs_codewarn_' + i + '" style="font-size:10.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (codeTooLong ? '#B91C1C' : '#94A3B8') + '">' + (r.code ? (codeTooLong ? '⚠️ លើស 10 ខ្ទង់ (' + r.code.length + ')' : r.code.length + ' ខ្ទង់') : '') + '</div></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'grp\',this.value)" style="' + inp + '">' + grpOpts + '</select></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'type\',this.value)" style="' + inp + '">' + typeOpts + '</select></td>' +
-      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsUpdateCell(' + i + ',\'expiry\',this.value)" style="' + inp + '"></td>' +
-      '<td style="' + cell + '"><input type="date" value="' + eH(r.received) + '" onchange="rsUpdateCell(' + i + ',\'received\',this.value)" style="' + inp + '"></td>' +
+      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsUpdateCell(' + i + ',\'expiry\',this.value)" oninput="rsUpdateCell(' + i + ',\'expiry\',this.value)" style="' + inp + '"></td>' +
+      '<td style="' + cell + '"><input type="date" value="' + eH(r.received) + '" onchange="rsUpdateCell(' + i + ',\'received\',this.value)" oninput="rsUpdateCell(' + i + ',\'received\',this.value)" style="' + inp + '"></td>' +
       '<td style="' + cell + '"><input type="number" id="rs_qty_' + i + '" min="1" value="' + r.qty + '" ' + (r.code ? 'disabled title="កំណត់ 1 ពេលមាន Code Bag (តំណាងតែ Bag មួយ)"' : '') + ' oninput="rsUpdateCell(' + i + ',\'qty\',this.value)" style="' + inp + (r.code ? ';background:#F1F5F9;color:var(--muted)' : '') + '"></td>' +
       '<td style="' + cell + 'text-align:center">' + (_receiveRows.length > 1 ? '<button type="button" onclick="rsRemoveRow(' + i + ')" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>' : '') + '</td>' +
     '</tr>';
@@ -2885,6 +2885,16 @@ function rsAddRow(auto) {
   // the same type, so this saves re-picking them for every row; code/qty always reset.
   // auto=true marks the row as a scan-flow placeholder (see _rsRealRows).
   var last = _receiveRows[_receiveRows.length - 1];
+  // Read the last row's live controls first: a date typed or picked in the browser may not have
+  // fired its change event yet when the button is clicked, which would copy a stale/empty value.
+  var lastTr = document.querySelectorAll('#rs_rows_body tr')[_receiveRows.length - 1];
+  if (last && lastTr) {
+    var sels = lastTr.querySelectorAll('select'), dates = lastTr.querySelectorAll('input[type="date"]');
+    if (sels[0]) last.grp = sels[0].value;
+    if (sels[1]) last.type = sels[1].value;
+    if (dates[0]) last.expiry = dates[0].value;
+    if (dates[1]) last.received = dates[1].value;
+  }
   var newIndex = _receiveRows.length;
   var row = _rsBlankRow(last ? { grp:last.grp, type:last.type, expiry:last.expiry, received:last.received } : null);
   if (auto === true) row.auto = true;
