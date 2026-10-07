@@ -5504,6 +5504,8 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div id="daily-summary" class="daily-cards" style="margin-bottom:12px"></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <span id="daily-new-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
+      <button type="button" id="daily-new-clear" onclick="dailyNewFilter('')" style="display:none;border:1.5px solid var(--border);background:white;border-radius:20px;padding:3px 12px;font-size:11.5px;font-weight:700;cursor:pointer;color:#B91C1C">✕ លុបតម្រង</button>
+      <span style="font-size:11px;color:var(--muted)">ចុចលើ ដាក់ថ្មី · ខ្ចី · យកប្រើ · សង ខាងលើ ដើម្បីត្រង</span>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
       <div id="daily-new-table" style="overflow-x:auto"></div>
@@ -7304,7 +7306,13 @@ function _dailyNewRows(win) {
         takenDt: evtDt || '',
         lab: (back ? (r['bag_back_lab'+sfx] || r['bag_lab_staff'+sfx]) : r['bag_lab_staff'+sfx]) || '-',
         taker: r['bag_taker'+sfx] || '-',
-        status: status
+        status: status,
+        // Card filters (same rules as the cards' counts). ថ្មី/ខ្ចី are recorded per patient, not per bag,
+        // so they match every bag of a patient whose record has that quantity.
+        isNew: (parseFloat(r.qty_new) || 0) > 0,
+        isBorrow: (parseFloat(r.qty_borrow) || 0) > 0,
+        isUsedIn: used && _inWindow(r['bag_taken_dt'+sfx], win),
+        isBackIn: back && !cannotRet && _inWindow(r['bag_back_dt'+sfx], win)
       });
     });
   });
@@ -7328,6 +7336,62 @@ function _dailyNewBagStats(win) {
   return { used: used, back: back, cannot: cannot };
 }
 
+
+// ── Section 1: summary cards (click ដាក់ថ្មី / ខ្ចី / យកប្រើ / សង to filter the table below) + table ──
+var _dailyNewFilter = '';
+var _DAILY_NEW_FILTERS = { 'new':'ដាក់ថ្មី', 'borrow':'ខ្ចី', 'used':'យកប្រើ', 'back':'សង' };
+function dailyNewFilter(k) {
+  _dailyNewFilter = (k && k !== _dailyNewFilter) ? k : ''; // click again (or a total card) to clear
+  _renderDailyNewSection(_dailyWindow());
+}
+function _renderDailyNewSection(win) {
+  var rangeRecs = allRecs.filter(function(r) { return _entryInRange((r.date || '').slice(0, 10), win); });
+
+  var totalPatients = rangeRecs.length;
+  var totalBags = rangeRecs.reduce(function(sum, r) { return sum + _dailyBagCount(r); }, 0);
+  var totalNew    = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_new)    || 0); }, 0);
+  var totalBorrow = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_borrow) || 0); }, 0);
+  // "យកប្រើ"/"សង" counted at the individual-bag level, matched against each bag's own
+  // taken/return date — same approach as the 🔄 ជំងឺចាស់ section, so the two stay consistent.
+  var bagStats1   = _dailyNewBagStats(win);
+  var totalUsed   = bagStats1.used;
+  var totalReturn = bagStats1.back;
+
+  var cards = [
+    { icon:'👥', label:'ប៉ុងឈាម (អ្នកជំងឺ)', val: totalPatients, color:'#2563EB', bg:'linear-gradient(145deg,#EFF6FF,#DBEAFE)' },
+    { icon:'🩸', label:'សាក់ឈាម (Bag)',      val: totalBags,     color:'#B91C1C', bg:'linear-gradient(145deg,#FEF2F2,#FEE2E2)' },
+    { key:'new', icon:'🆕', label:'ដាក់ថ្មី',            val: totalNew,      color:'#0891B2', bg:'linear-gradient(145deg,#ECFEFF,#CFFAFE)' },
+    { key:'borrow', icon:'📋', label:'ខ្ចី',                val: totalBorrow,   color:'#B45309', bg:'linear-gradient(145deg,#FFFBEB,#FEF3C7)' },
+    { key:'used', icon:'✅', label:'យកប្រើ',             val: totalUsed,     color:'#059669', bg:'linear-gradient(145deg,#ECFDF5,#D1FAE5)' },
+    { key:'back', icon:'↩️', label:'សង',                 val: totalReturn,   color:'#7C3AED', bg:'linear-gradient(145deg,#F5F3FF,#EDE9FE)' },
+  ];
+  document.getElementById('daily-summary').innerHTML = cards.map(function(c) {
+    var on = !!c.key && _dailyNewFilter === c.key;
+    return '<div role="button" tabindex="0" title="' + (c.key ? 'ចុចដើម្បីត្រងតារាង' : 'បង្ហាញទាំងអស់') + '" onclick="dailyNewFilter(\'' + (c.key || '') + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dailyNewFilter(\'' + (c.key || '') + '\');}" ' +
+      'style="cursor:pointer;background:'+c.bg+';border-radius:12px;padding:9px 12px;display:flex;align-items:center;gap:10px;border:' + (on ? '2px solid '+c.color : '1px solid rgba(0,0,0,.04)') + ';box-shadow:' + (on ? '0 0 0 3px '+c.color+'33' : 'none') + ';min-width:0">' +
+      '<div style="flex:none;width:30px;height:30px;border-radius:9px;background:white;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.07)">'+c.icon+'</div>' +
+      '<div style="min-width:0">' +
+        '<div style="font-size:21px;font-weight:900;color:'+c.color+';line-height:1">'+c.val+'</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:3px;line-height:1.25">'+c.label+'</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  // ── Section 1 table: every bag on records entered in range, with its current status ──
+  var newRows = _dailyNewRows(win);
+  var fk = _dailyNewFilter, flag = { 'new':'isNew', 'borrow':'isBorrow', 'used':'isUsedIn', 'back':'isBackIn' }[fk];
+  if (flag) newRows = newRows.filter(function(r) { return r[flag]; });
+  _renderDailyBagTable(
+    document.getElementById('daily-new-table'),
+    document.getElementById('daily-new-count'),
+    newRows, fk ? 'គ្មាន Bag ត្រូវនឹងតម្រង "' + _DAILY_NEW_FILTERS[fk] + '" ក្នុងរយៈពេលនេះទេ' : 'គ្មាន Bag ត្រូវបានបញ្ចូលក្នុងរយៈពេលនេះទេ', false, win
+  );
+  var cnt = document.getElementById('daily-new-count');
+  if (cnt && fk) cnt.textContent += ' · 🔎 ត្រង: ' + _DAILY_NEW_FILTERS[fk];
+  var clr = document.getElementById('daily-new-clear');
+  if (clr) clr.style.display = fk ? '' : 'none';
+}
+
 function buildDailyReport() {
   var win = _dailyWindow();
   var noteEl = document.getElementById('daily-cutoff-note');
@@ -7349,43 +7413,7 @@ function buildDailyReport() {
   buildDailyReturns(win);   // async (reads the audit log)
 
   // ── Section 1: records entered within the selected range ──
-  var rangeRecs = allRecs.filter(function(r) { return _entryInRange((r.date || '').slice(0, 10), win); });
-
-  var totalPatients = rangeRecs.length;
-  var totalBags = rangeRecs.reduce(function(sum, r) { return sum + _dailyBagCount(r); }, 0);
-  var totalNew    = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_new)    || 0); }, 0);
-  var totalBorrow = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_borrow) || 0); }, 0);
-  // "យកប្រើ"/"សង" counted at the individual-bag level, matched against each bag's own
-  // taken/return date — same approach as the 🔄 ជំងឺចាស់ section, so the two stay consistent.
-  var bagStats1   = _dailyNewBagStats(win);
-  var totalUsed   = bagStats1.used;
-  var totalReturn = bagStats1.back;
-
-  var cards = [
-    { icon:'👥', label:'ប៉ុងឈាម (អ្នកជំងឺ)', val: totalPatients, color:'#2563EB', bg:'linear-gradient(145deg,#EFF6FF,#DBEAFE)' },
-    { icon:'🩸', label:'សាក់ឈាម (Bag)',      val: totalBags,     color:'#B91C1C', bg:'linear-gradient(145deg,#FEF2F2,#FEE2E2)' },
-    { icon:'🆕', label:'ដាក់ថ្មី',            val: totalNew,      color:'#0891B2', bg:'linear-gradient(145deg,#ECFEFF,#CFFAFE)' },
-    { icon:'📋', label:'ខ្ចី',                val: totalBorrow,   color:'#B45309', bg:'linear-gradient(145deg,#FFFBEB,#FEF3C7)' },
-    { icon:'✅', label:'យកប្រើ',             val: totalUsed,     color:'#059669', bg:'linear-gradient(145deg,#ECFDF5,#D1FAE5)' },
-    { icon:'↩️', label:'សង',                 val: totalReturn,   color:'#7C3AED', bg:'linear-gradient(145deg,#F5F3FF,#EDE9FE)' },
-  ];
-  document.getElementById('daily-summary').innerHTML = cards.map(function(c) {
-    return '<div style="background:'+c.bg+';border-radius:12px;padding:9px 12px;display:flex;align-items:center;gap:10px;border:1px solid rgba(0,0,0,.04);min-width:0">' +
-      '<div style="flex:none;width:30px;height:30px;border-radius:9px;background:white;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.07)">'+c.icon+'</div>' +
-      '<div style="min-width:0">' +
-        '<div style="font-size:21px;font-weight:900;color:'+c.color+';line-height:1">'+c.val+'</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:3px;line-height:1.25">'+c.label+'</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-
-  // ── Section 1 table: every bag on records entered in range, with its current status ──
-  var newRows = _dailyNewRows(win);
-  _renderDailyBagTable(
-    document.getElementById('daily-new-table'),
-    document.getElementById('daily-new-count'),
-    newRows, 'គ្មាន Bag ត្រូវបានបញ្ចូលក្នុងរយៈពេលនេះទេ', false, win
-  );
+  _renderDailyNewSection(win);
 
   // ── Section 2: bags taken/returned in range, from records entered before the range ──
   // "យកប្រើ" and "សង" are separate events with their own timestamp (bag_taken_dt vs bag_back_dt).
