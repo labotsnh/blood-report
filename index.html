@@ -2748,7 +2748,7 @@ function buildStockEntryTable() {
   var th = 'padding:9px 12px;text-align:left;white-space:nowrap';
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
     '<th style="'+th+'">ថ្ងៃទទួល</th><th style="'+th+'">🏷️ Bag Code</th><th style="'+th+'">🩸 Group</th><th style="'+th+'">💉 ប្រភេទ</th>' +
-    '<th style="'+th+';text-align:right">ទទួល</th><th style="'+th+'">ថ្ងៃផុតកំណត់</th><th style="'+th+'">សកម្មភាព</th></tr></thead><tbody>';
+    '<th style="'+th+';text-align:right">ទទួល</th><th style="'+th+'">ថ្ងៃផុតកំណត់</th><th style="'+th+'">👤 អ្នកបញ្ចូល</th><th style="'+th+'">សកម្មភាព</th></tr></thead><tbody>';
   shown.forEach(function(b, i) {
     h += '<tr style="border-bottom:1px solid var(--border)' + (i%2?';background:#FAFBFC':'') + '">' +
       '<td style="padding:8px 12px;white-space:nowrap">' + eH(_recvLabel(b)) + '</td>' +
@@ -2757,6 +2757,7 @@ function buildStockEntryTable() {
       '<td style="padding:8px 12px">' + eH(b.blood_type) + '</td>' +
       '<td style="padding:8px 12px;text-align:right;font-weight:800">' + (b.qty_received||0) + '</td>' +
       '<td style="padding:8px 12px;white-space:nowrap">' + (b.expiry_date||'-') + '</td>' +
+      '<td style="padding:8px 12px;white-space:nowrap">' + eH(b.received_by || '-') + '</td>' +
       '<td style="padding:6px 12px;white-space:nowrap"><button onclick="openEditEntryModal(' + b.id + ')" style="border:1.5px solid var(--border);background:white;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">✏️ កែប្រែ</button>' +
         (_isAdminUser() ? ' <button onclick="openDeleteEntryModal(' + b.id + ')" style="border:1.5px solid #FCA5A5;background:white;color:#B91C1C;border-radius:7px;padding:4px 10px;font-size:11.5px;cursor:pointer;font-weight:700">🗑️ លុប</button>' : '') + '</td>' +
     '</tr>';
@@ -2772,7 +2773,7 @@ function buildStockEntryTable() {
       eH(t) + ': <b style="color:#0369A1;font-size:15px">' + typeTot[t] + '</b></span>';
   }).join('');
   h += '</tbody><tfoot><tr style="background:#F1F5F9;border-top:2px solid var(--border)">' +
-    '<td colspan="7" style="padding:12px 14px;text-align:right;font-weight:900;font-size:14px">' +
+    '<td colspan="8" style="padding:12px 14px;text-align:right;font-weight:900;font-size:14px">' +
       'សរុប: <span style="font-size:17px">' + totQty + '</span> Bag <span style="font-weight:600;font-size:11px;color:var(--muted)">(' + rows.length + ' Batch)</span>' +
       typeChips +
     '</td></tr></tfoot></table>';
