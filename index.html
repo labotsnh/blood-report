@@ -2240,6 +2240,7 @@ function exportAuditExcel() {
 var STOCK_TABLE = 'blood_stock';
 var allStock = [];
 var _stockFilter = 'active';
+var _stockSearch = ''; // Bag Code search over every status; overrides the filter chips while non-empty
 var _stockListLimit = 20, _stockListKey = 'active';
 var _stockLoaded = false;
 var STOCK_GRPS = ['A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Neg'];
@@ -2641,17 +2642,19 @@ function buildStockPage() {
   }).join('');
 
   // ── Batch table ──
+  var q = _stockSearch.toLowerCase();
   var rows = allStock.filter(function(b) {
+    if (q) return String(b.batch_no || ('#' + b.id)).toLowerCase().indexOf(q) >= 0;
     if (_stockFilter === 'all') return true;
     if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
     if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
     return b.status === _stockFilter;
   });
   if (_stockFilter !== _stockListKey) { _stockListKey = _stockFilter; _stockListLimit = 20; }
-  document.getElementById('stock-list-count').textContent = rows.length + ' Batch';
+  document.getElementById('stock-list-count').textContent = rows.length + ' Batch' + (q ? ' · ស្វែងរក "' + _stockSearch + '"' : '');
   var wrap = document.getElementById('stock-table');
   if (!rows.length) {
-    wrap.innerHTML = '<div class="empty"><div class="ei">📭</div><p>គ្មាន Batch ត្រូវនឹងតម្រងនេះទេ</p></div>';
+    wrap.innerHTML = '<div class="empty"><div class="ei">📭</div><p>' + (q ? 'រក Bag Code "' + eH(_stockSearch) + '" មិនឃើញទេ' : 'គ្មាន Batch ត្រូវនឹងតម្រងនេះទេ') + '</p></div>';
     return;
   }
   var shownRows = rows.slice(0, _stockListLimit);
@@ -2789,6 +2792,18 @@ function stockEntryAll()  { _stockEntryLimit = 100000; buildStockEntryTable(); }
 function stockEntryLess() { _stockEntryLimit = 20; buildStockEntryTable(); }
 function stockListLess() { _stockListLimit = 20; buildStockPage(); }
 function stockSetFilter(f) { _stockFilter = f; buildStockPage(); }
+function stockSearch() {
+  _stockSearch = (document.getElementById('stock-search').value || '').trim();
+  _stockListLimit = 20;
+  document.getElementById('stock-search-clear').style.display = _stockSearch ? '' : 'none';
+  document.getElementById('stock-filter-chips').style.opacity = _stockSearch ? '.45' : ''; // chips are ignored while searching
+  buildStockPage();
+}
+function stockSearchClear() {
+  document.getElementById('stock-search').value = '';
+  stockSearch();
+  document.getElementById('stock-search').focus();
+}
 
 // ── Receive new stock ──
 var _receiveRows = []; // [{code, grp, type, expiry, received, qty}]
@@ -5495,6 +5510,15 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <h3 style="font-size:15px;font-weight:800;margin:0">📋 បញ្ជី Batch ស្តុក</h3>
       <span id="stock-list-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Batch</span>
       <div id="stock-filter-chips" style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="position:relative;flex:1 1 260px;max-width:380px">
+        <input type="text" id="stock-search" placeholder="🔍 ស្វែងរក Bag Code (scan ឬវាយ)" autocomplete="off"
+          oninput="stockSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();stockSearch();}"
+          style="width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:9px;padding:8px 34px 8px 12px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none">
+        <button type="button" id="stock-search-clear" onclick="stockSearchClear()" title="Clear" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:#64748B;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>
+      </div>
+      <button type="button" class="btn btn-ghost" onclick="stockSearch()" style="white-space:nowrap">🔍 ស្វែងរក</button>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
       <div id="stock-table" style="overflow-x:auto"></div>
