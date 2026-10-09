@@ -2945,9 +2945,6 @@ function _rsSyncFromDom() {
 // A scanner that missed the redirect types the whole code into the date's year segment ('106691-10-22').
 // Years here are always 4 digits, so anything longer is rejected and the last good date is put back.
 function _badYear(v) { return /^\d{5,}-/.test(v || ''); }
-// Group / Type / Expiry / Received only ever change because the person used THAT control. A change event
-// from a control that does not have focus (a scanner's keys, a browser quirk) is rejected and the control put
-// back, so scanning a Bag Code can only ever touch the Code Bag.
 var _RS_FIELDS = ['grp', 'type', 'expiry', 'received'];
 function _rsSetGood(r, field) { r._good = r._good || {}; r._good[field] = r[field]; }
 function _rsPutBack(i, field) {            // show the model value in the control again
@@ -2962,18 +2959,11 @@ function _rsPutBack(i, field) {            // show the model value in the contro
 function rsFieldInput(i, field, el) {
   var r = _receiveRows[i];
   if (!r) return;
-  var host = el.closest ? el.closest('.dt24') : null;
-  var focused = host ? host.contains(document.activeElement) : document.activeElement === el;
-  if (!focused) {                          // not the user: undo
-    _rsPutBack(i, field);
-    console.warn('receive form: ignored a change to', field, 'on row', i + 1, 'from a control without focus');
-    return;
-  }
   if (field === 'expiry' && _badYear(el.value)) { el.value = r.expiry || ''; return; }
   rsUpdateCell(i, field, el.value);
 }
 
-// Safety net behind the check above: every 200ms while the receive window is open, any row whose Group / Type /
+// Safety net: every 200ms while the receive window is open, any row whose Group / Type /
 // Expiry / Received no longer matches what the user last set (and whose control is not being edited) is put
 // back and a notice is shown. Programmatic changes that are legitimate (copy down, restoring a snapshot) update
 // the remembered value through _rsSetGood, so only unexplained changes are undone.
