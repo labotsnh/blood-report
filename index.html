@@ -3087,6 +3087,13 @@ function rsApplyLock() {
   if (msg) { msg.textContent = _rsLocked ? 'Group / ប្រភេទ / ថ្ងៃផុតកំណត់ មិនអាចប្តូរបាន ពេល scan' : ''; msg.style.color = '#B45309'; }
 }
 function rsToggleLock() { _rsLocked = !_rsLocked; rsApplyLock(); }
+// Unticking "auto-lock" releases the lock straight away so the fields can be edited again; ticking it again
+// locks at once if Code Bags have already been entered (otherwise it locks at the first scan).
+function rsAutoLockChanged(on) {
+  if (!on) _rsLocked = false;
+  else if (_receiveRows.some(function(r) { return r.code; })) _rsLocked = true;
+  rsApplyLock();
+}
 
 // Bring row i into view (centred) so the one being scanned next is always visible
 function _rsScrollToRow(i) {
@@ -5783,7 +5790,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       </div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <button type="button" id="rs_lockbtn" onclick="rsToggleLock()" style="border:1.5px solid var(--border);background:white;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">🔓 ចាក់សោ Group · ប្រភេទ · ថ្ងៃ</button>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer"><input type="checkbox" id="rs_autolock" checked> ចាក់សោស្វ័យប្រវត្តិ ពេល scan Bag ដំបូង</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer"><input type="checkbox" id="rs_autolock" checked onchange="rsAutoLockChanged(this.checked)"> ចាក់សោស្វ័យប្រវត្តិ ពេល scan Bag ដំបូង</label>
         <span id="rs_lockmsg" style="font-size:12px;font-weight:700"></span>
       </div>
       <button type="button" onclick="rsAddRow()" style="align-self:flex-start;border:1.5px dashed var(--border);background:white;border-radius:9px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1">➕ បន្ថែមជួរ</button>
