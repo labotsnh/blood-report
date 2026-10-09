@@ -2946,7 +2946,34 @@ function _rsSyncFromDom() {
 function _badYear(v) { return /^\d{5,}-/.test(v || ''); }
 function rsExpiryInput(i, el) {
   if (_badYear(el.value)) { el.value = (_receiveRows[i] && _receiveRows[i].expiry) || ''; return; }
+  // Emptying the date while that very field has focus is the user (Backspace, or Clear in the calendar):
+  // remember it so the guard below does not "restore" a date the user removed on purpose.
+  if (_receiveRows[i]) _receiveRows[i]._cleared = (!el.value && document.activeElement === el);
   rsUpdateCell(i, 'expiry', el.value);
+}
+
+// Safety net: an expiry date that was set must never vanish by itself (e.g. while Code Bags are being
+// scanned). Every 200ms while the receive window is open, a row whose expiry went empty — or whose field
+// no longer shows what the row holds — gets its last known date back and a notice is shown. Only an
+// explicit clear by the user (see rsExpiryInput) is respected.
+var _rsGuardTimer = null;
+function _rsGuardTick() {
+  var modal = document.getElementById('receiveStockModal');
+  if (!modal || !modal.classList.contains('open')) return;
+  var trs = document.querySelectorAll('#rs_rows_body tr');
+  if (!trs.length || trs.length !== _receiveRows.length) return;
+  var healed = [];
+  _receiveRows.forEach(function(r, i) {
+    var de = trs[i].querySelector('td:nth-child(5) input[type="date"]');
+    if (!de || document.activeElement === de) return;       // never fight the user while they type
+    if (r.expiry) { r._exp = r.expiry; r._cleared = false; }
+    else if (r._exp && !r._cleared) { r.expiry = r._exp; healed.push(i + 1); }
+    if (de.value !== (r.expiry || '')) { de.value = r.expiry || ''; if (!healed.length || healed.indexOf(i + 1) < 0) healed.push(i + 1); }
+  });
+  if (healed.length) {
+    console.warn('receive form: expiry restored on rows', healed);
+    showToast('⚠️ ថ្ងៃផុតកំណត់ ជួរទី ' + healed.join(', ') + ' ត្រូវបានស្តារឡើងវិញ', 'err');
+  }
 }
 function rsUpdateCell(i, field, value) {
   if (!_receiveRows[i]) return;
@@ -3158,6 +3185,7 @@ function openReceiveStockModal() {
   _rsPending = null;
   rsShowStep('form');
   document.getElementById('receiveStockModal').classList.add('open');
+  clearInterval(_rsGuardTimer); _rsGuardTimer = setInterval(_rsGuardTick, 200);
   _rsBurst.n = 0;
   // (rsShowStep('form') above registers the scan listener) capture phase: sees scanner keys before any field does
   // A barcode scanner just "types" into whatever currently has keyboard focus — with nothing
@@ -3165,6 +3193,7 @@ function openReceiveStockModal() {
   setTimeout(function() { document.getElementById('rs_code_0')?.focus(); }, 60);
 }
 function closeReceiveStockModal() {
+  clearInterval(_rsGuardTimer); _rsGuardTimer = null;
   document.removeEventListener('keydown', _rsScanSniffer, true);
   document.getElementById('receiveStockModal').classList.remove('open');
 }
