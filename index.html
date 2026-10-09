@@ -2979,6 +2979,15 @@ function rsUpdateTotals() {
   var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
 }
 
+// Index of the first single-bag row after `from` that still has no Code Bag (-1 if none). A row with
+// qty > 1 and no code is a "lot" of unlabelled bags and is never a scan target.
+function _rsNextEmpty(from) {
+  for (var k = from + 1; k < _receiveRows.length; k++) {
+    if (!_receiveRows[k].code && (parseInt(_receiveRows[k].qty) || 1) === 1) return k;
+  }
+  return -1;
+}
+
 function rsAddRow(auto) {
   // Copy Group/Type/Expiry from the last row for convenience — a delivery is usually mostly
   // the same type, so this saves re-picking them for every row; code/qty always reset.
@@ -3000,7 +3009,10 @@ function rsAddRow(auto) {
   if (auto === true) row.auto = true;
   _receiveRows.push(row);
   rsRenderRows();
-  document.getElementById('rs_code_' + newIndex)?.focus();
+  // Clicking ➕ (several times) then scanning must fill the rows top-down, so put the cursor on the FIRST
+  // empty Code Bag. A scan-driven row (auto) is by definition the next one to fill.
+  var target = (auto === true) ? newIndex : _rsNextEmpty(-1);
+  document.getElementById('rs_code_' + (target < 0 ? newIndex : target))?.focus();
 }
 
 // Enter (or Tab) in a Code Bag field — what a barcode scanner sends right after the digits —
@@ -3028,8 +3040,11 @@ function rsCodeKey(ev, i) {
     return;
   }
   _rsLastAdvance = Date.now();
-  if (i < _receiveRows.length - 1) {
-    var nxt = document.getElementById('rs_code_' + (i + 1));
+  // Next row that still needs a code (rows already scanned are skipped); none left -> add one at the end,
+  // which copies Group/Type/Expiry from the row above.
+  var nextIdx = _rsNextEmpty(i);
+  if (nextIdx >= 0) {
+    var nxt = document.getElementById('rs_code_' + nextIdx);
     if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
   } else {
     rsAddRow(true);
