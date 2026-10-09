@@ -2883,10 +2883,10 @@ function rsRenderRows() {
       '<td style="' + cell + 'text-align:center;color:var(--muted);font-weight:700">' + (i + 1) + '</td>' +
       '<td style="' + cell + '"><input type="text" id="rs_code_' + i + '" value="' + eH(r.code) + '" placeholder="scan or វាយបញ្ជូល" autocomplete="off" oninput="rsUpdateCell(' + i + ',\'code\',this.value)" onkeydown="rsCodeKey(event,' + i + ')" style="' + codeInp + '">' +
         '<div id="rs_codewarn_' + i + '" style="font-size:10.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (codeTooLong ? '#B91C1C' : '#94A3B8') + '">' + (r.code ? (codeTooLong ? '⚠️ លើស 10 ខ្ទង់ (' + r.code.length + ')' : r.code.length + ' ខ្ទង់') : '') + '</div></td>' +
-      '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'grp\',this.value)" style="' + inp + '">' + grpOpts + '</select></td>' +
-      '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'type\',this.value)" style="' + inp + '">' + typeOpts + '</select></td>' +
-      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsExpiryInput(' + i + ',this)" oninput="rsExpiryInput(' + i + ',this)" style="' + inp + '"></td>' +
-      '<td style="' + cell + '">' + _dt24Html('rs_recv_' + i, r.received, "rsUpdateCell(" + i + ",'received',document.getElementById('rs_recv_" + i + "').value)", true) + '</td>' +
+      '<td style="' + cell + '"><select onchange="rsFieldInput(' + i + ',\'grp\',this)" style="' + inp + '">' + grpOpts + '</select></td>' +
+      '<td style="' + cell + '"><select onchange="rsFieldInput(' + i + ',\'type\',this)" style="' + inp + '">' + typeOpts + '</select></td>' +
+      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsFieldInput(' + i + ',\'expiry\',this)" oninput="rsFieldInput(' + i + ',\'expiry\',this)" style="' + inp + '"></td>' +
+      '<td style="' + cell + '">' + _dt24Html('rs_recv_' + i, r.received, "rsFieldInput(" + i + ",'received',document.getElementById('rs_recv_" + i + "'))", true) + '</td>' +
       '<td style="' + cell + '"><input type="number" id="rs_qty_' + i + '" min="1" value="' + r.qty + '" ' + (r.code ? 'disabled title="កំណត់ 1 ពេលមាន Code Bag (តំណាងតែ Bag មួយ)"' : '') + ' oninput="rsUpdateCell(' + i + ',\'qty\',this.value)" style="' + inp + (r.code ? ';background:#F1F5F9;color:var(--muted)' : '') + '"></td>' +
       '<td style="' + cell + 'text-align:center">' + (_receiveRows.length > 1 ? '<button type="button" onclick="rsRemoveRow(' + i + ')" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>' : '') + '</td>' +
     '</tr>';
@@ -2938,24 +2938,45 @@ function _rsSyncFromDom() {
     if (sels[1]) r.type = sels[1].value;
     if (d && !_badYear(d.value)) r.expiry = d.value;
     if (hid && hid.value) r.received = hid.value;
+    _RS_FIELDS.forEach(function(f) { _rsSetGood(r, f); });
   });
 }
 
 // A scanner that missed the redirect types the whole code into the date's year segment ('106691-10-22').
 // Years here are always 4 digits, so anything longer is rejected and the last good date is put back.
 function _badYear(v) { return /^\d{5,}-/.test(v || ''); }
-function rsExpiryInput(i, el) {
-  if (_badYear(el.value)) { el.value = (_receiveRows[i] && _receiveRows[i].expiry) || ''; return; }
-  // Emptying the date while that very field has focus is the user (Backspace, or Clear in the calendar):
-  // remember it so the guard below does not "restore" a date the user removed on purpose.
-  if (_receiveRows[i]) _receiveRows[i]._cleared = (!el.value && document.activeElement === el);
-  rsUpdateCell(i, 'expiry', el.value);
+// Group / Type / Expiry / Received only ever change because the person used THAT control. A change event
+// from a control that does not have focus (a scanner's keys, a browser quirk) is rejected and the control put
+// back, so scanning a Bag Code can only ever touch the Code Bag.
+var _RS_FIELDS = ['grp', 'type', 'expiry', 'received'];
+function _rsSetGood(r, field) { r._good = r._good || {}; r._good[field] = r[field]; }
+function _rsPutBack(i, field) {            // show the model value in the control again
+  var r = _receiveRows[i], tr = document.querySelectorAll('#rs_rows_body tr')[i];
+  if (!r || !tr) return;
+  var v = r[field] || '', sels = tr.querySelectorAll('select');
+  if (field === 'grp' && sels[0]) sels[0].value = v;
+  else if (field === 'type' && sels[1]) sels[1].value = v;
+  else if (field === 'expiry') { var de = tr.querySelector('td:nth-child(5) input[type="date"]'); if (de) de.value = v; }
+  else if (field === 'received') _dt24Set('rs_recv_' + i, v);
+}
+function rsFieldInput(i, field, el) {
+  var r = _receiveRows[i];
+  if (!r) return;
+  var host = el.closest ? el.closest('.dt24') : null;
+  var focused = host ? host.contains(document.activeElement) : document.activeElement === el;
+  if (!focused) {                          // not the user: undo
+    _rsPutBack(i, field);
+    console.warn('receive form: ignored a change to', field, 'on row', i + 1, 'from a control without focus');
+    return;
+  }
+  if (field === 'expiry' && _badYear(el.value)) { el.value = r.expiry || ''; return; }
+  rsUpdateCell(i, field, el.value);
 }
 
-// Safety net: an expiry date that was set must never vanish by itself (e.g. while Code Bags are being
-// scanned). Every 200ms while the receive window is open, a row whose expiry went empty — or whose field
-// no longer shows what the row holds — gets its last known date back and a notice is shown. Only an
-// explicit clear by the user (see rsExpiryInput) is respected.
+// Safety net behind the check above: every 200ms while the receive window is open, any row whose Group / Type /
+// Expiry / Received no longer matches what the user last set (and whose control is not being edited) is put
+// back and a notice is shown. Programmatic changes that are legitimate (copy down, restoring a snapshot) update
+// the remembered value through _rsSetGood, so only unexplained changes are undone.
 var _rsGuardTimer = null;
 function _rsGuardTick() {
   var modal = document.getElementById('receiveStockModal');
@@ -2964,15 +2985,24 @@ function _rsGuardTick() {
   if (!trs.length || trs.length !== _receiveRows.length) return;
   var healed = [];
   _receiveRows.forEach(function(r, i) {
-    var de = trs[i].querySelector('td:nth-child(5) input[type="date"]');
-    if (!de || document.activeElement === de) return;       // never fight the user while they type
-    if (r.expiry) { r._exp = r.expiry; r._cleared = false; }
-    else if (r._exp && !r._cleared) { r.expiry = r._exp; healed.push(i + 1); }
-    if (de.value !== (r.expiry || '')) { de.value = r.expiry || ''; if (!healed.length || healed.indexOf(i + 1) < 0) healed.push(i + 1); }
+    if (!r._good) { _RS_FIELDS.forEach(function(f) { _rsSetGood(r, f); }); return; }
+    _RS_FIELDS.forEach(function(f) {
+      var tr = trs[i], sels = tr.querySelectorAll('select'), el = null;
+      if (f === 'grp') el = sels[0]; else if (f === 'type') el = sels[1];
+      else if (f === 'expiry') el = tr.querySelector('td:nth-child(5) input[type="date"]');
+      else el = tr.querySelector('.dt24');
+      if (!el) return;
+      var editing = el.contains ? el.contains(document.activeElement) : false;
+      if (f !== 'received' && document.activeElement === el) editing = true;
+      if (editing) return;                                 // never fight the user while they edit
+      if (r[f] !== r._good[f]) { r[f] = r._good[f]; healed.push(f + ' #' + (i + 1)); _rsPutBack(i, f); return; }
+      var shown = (f === 'received') ? (document.getElementById('rs_recv_' + i) || {}).value : el.value;
+      if ((shown || '') !== (r[f] || '')) { _rsPutBack(i, f); healed.push(f + ' #' + (i + 1)); }
+    });
   });
   if (healed.length) {
-    console.warn('receive form: expiry restored on rows', healed);
-    showToast('⚠️ ថ្ងៃផុតកំណត់ ជួរទី ' + healed.join(', ') + ' ត្រូវបានស្តារឡើងវិញ', 'err');
+    console.warn('receive form: restored', healed);
+    showToast('⚠️ ស្តារតម្លៃដែលប្រែប្រួលដោយឯកឯង៖ ' + healed.join(', '), 'err');
   }
 }
 function rsUpdateCell(i, field, value) {
@@ -3012,6 +3042,7 @@ function rsUpdateCell(i, field, value) {
   }
   var oldVal = _receiveRows[i][field];
   _receiveRows[i][field] = value;
+  if (_RS_FIELDS.indexOf(field) >= 0) _rsSetGood(_receiveRows[i], field);
   _receiveRows[i].auto = false; // staff changed something on it — it's a real row now
   // Group / Type / Expiry / Received follow DOWN the list: rows below that are not scanned yet and still held
   // the old value (i.e. were copies of this row) take the new one, so picking them once on row 1 is enough
@@ -3021,7 +3052,7 @@ function rsUpdateCell(i, field, value) {
     for (var j = i + 1; j < _receiveRows.length; j++) {
       var rj = _receiveRows[j];
       if (rj.code || rj[field] !== oldVal) continue;
-      rj[field] = value;
+      rj[field] = value; _rsSetGood(rj, field);
       var tr = trs[j]; if (!tr) continue;
       var sels = tr.querySelectorAll('select');
       if (field === 'grp' && sels[0]) sels[0].value = value;
