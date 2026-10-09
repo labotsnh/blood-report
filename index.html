@@ -2283,8 +2283,10 @@ function _dt24Html(id, value, onChangeJs, compact) {
     '<input type="hidden" id="' + id + '" value="' + eH(d ? d + 'T' + h + ':' + m : '') + '"></span>';
 }
 function _dt24Changed(span) {
-  var d = span.querySelector('[data-p="d"]').value, h = span.querySelector('[data-p="h"]').value, m = span.querySelector('[data-p="m"]').value;
+  var dEl = span.querySelector('[data-p="d"]');
   var hid = span.querySelector('input[type="hidden"]');
+  if (/^\d{5,}-/.test(dEl.value)) { dEl.value = hid.value.slice(0, 10); return; } // scanner digits typed into the year
+  var d = dEl.value, h = span.querySelector('[data-p="h"]').value, m = span.querySelector('[data-p="m"]').value;
   var nv = d ? d + 'T' + h + ':' + m : '';
   if (hid.value === nv) return;
   hid.value = nv;
@@ -2883,7 +2885,7 @@ function rsRenderRows() {
         '<div id="rs_codewarn_' + i + '" style="font-size:10.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (codeTooLong ? '#B91C1C' : '#94A3B8') + '">' + (r.code ? (codeTooLong ? '⚠️ លើស 10 ខ្ទង់ (' + r.code.length + ')' : r.code.length + ' ខ្ទង់') : '') + '</div></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'grp\',this.value)" style="' + inp + '">' + grpOpts + '</select></td>' +
       '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'type\',this.value)" style="' + inp + '">' + typeOpts + '</select></td>' +
-      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsUpdateCell(' + i + ',\'expiry\',this.value)" oninput="rsUpdateCell(' + i + ',\'expiry\',this.value)" style="' + inp + '"></td>' +
+      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsExpiryInput(' + i + ',this)" oninput="rsExpiryInput(' + i + ',this)" style="' + inp + '"></td>' +
       '<td style="' + cell + '">' + _dt24Html('rs_recv_' + i, r.received, "rsUpdateCell(" + i + ",'received',document.getElementById('rs_recv_" + i + "').value)", true) + '</td>' +
       '<td style="' + cell + '"><input type="number" id="rs_qty_' + i + '" min="1" value="' + r.qty + '" ' + (r.code ? 'disabled title="កំណត់ 1 ពេលមាន Code Bag (តំណាងតែ Bag មួយ)"' : '') + ' oninput="rsUpdateCell(' + i + ',\'qty\',this.value)" style="' + inp + (r.code ? ';background:#F1F5F9;color:var(--muted)' : '') + '"></td>' +
       '<td style="' + cell + 'text-align:center">' + (_receiveRows.length > 1 ? '<button type="button" onclick="rsRemoveRow(' + i + ')" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>' : '') + '</td>' +
@@ -2921,6 +2923,13 @@ function _rsRefreshCodeVisual(i) {
   }
 }
 
+// A scanner that missed the redirect types the whole code into the date's year segment ('106691-10-22').
+// Years here are always 4 digits, so anything longer is rejected and the last good date is put back.
+function _badYear(v) { return /^\d{5,}-/.test(v || ''); }
+function rsExpiryInput(i, el) {
+  if (_badYear(el.value)) { el.value = (_receiveRows[i] && _receiveRows[i].expiry) || ''; return; }
+  rsUpdateCell(i, 'expiry', el.value);
+}
 function rsUpdateCell(i, field, value) {
   if (!_receiveRows[i]) return;
   if (field === 'code') {
@@ -3051,7 +3060,7 @@ function _rsScanSniffer(ev) {
   var now = ev.timeStamp || Date.now();
   var gap = now - _rsBurst.lastT;
   _rsBurst.lastT = now;
-  if (_rsBurst.n === 0 || gap > 45) {
+  if (_rsBurst.n === 0 || gap > 300) {
     // Possible start of a scan. Snapshot BEFORE this digit lands anywhere so it can be undone.
     _rsBurst.n = 1; _rsBurst.digits = key;
     try { _rsBurst.snap = JSON.stringify(_receiveRows); } catch (e) { _rsBurst.snap = null; }
@@ -3059,6 +3068,11 @@ function _rsScanSniffer(ev) {
     _rsBurst.notes = document.getElementById('rs_notes')?.value || '';
     return;
   }
+  // A scanner (or USB polling) can pause for a moment mid-code; a person never types digits this close
+  // together. Gaps up to 120ms still count as one burst. A longer gap restarts the count but KEEPS the
+  // snapshot from the start of the burst — refreshing it here would capture the already-corrupted date
+  // and the expiry would stay broken after the redirect.
+  if (gap > 120) { _rsBurst.n = 1; _rsBurst.digits = key; return; }
   _rsBurst.n++; _rsBurst.digits += key;
   if (_rsBurst.n < 3) return;
   // 3+ digits at scanner speed, going somewhere other than a Code Bag field -> it's a scan.
