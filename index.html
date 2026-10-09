@@ -2897,6 +2897,7 @@ function rsRenderRows() {
   var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
   // A full re-render rebuilds every input, so re-apply the duplicate / too-long flags to rows that have a code.
   _receiveRows.forEach(function(r, idx) { if (r.code) _rsRefreshCodeVisual(idx); });
+  rsApplyLock();
 }
 
 // Re-checks row i's code against the 10-digit length rule AND against every other row's code
@@ -3014,6 +3015,7 @@ function rsUpdateCell(i, field, value) {
 
     // A row with a specific bag code represents exactly that one bag — lock qty to 1.
     if (value) _receiveRows[i].qty = 1;
+    if (value && !_rsLocked && (document.getElementById('rs_autolock') || {}).checked) { _rsLocked = true; rsApplyLock(); }
     var qtyInput = document.getElementById('rs_qty_' + i);
     if (qtyInput) {
       qtyInput.disabled = !!value;
@@ -3063,6 +3065,35 @@ function rsUpdateTotals() {
   var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
 }
 
+// ── Lock Group / Type / Expiry / Received ──
+// While locked those controls are disabled (they cannot take focus or keystrokes), so scanning Bag Codes
+// can only ever touch the Code Bag column. It locks by itself when the first Code Bag is entered (unless the
+// box is unticked) and the button unlocks it again. New rows still copy the values down.
+var _rsLocked = false;
+function rsApplyLock() {
+  document.querySelectorAll('#rs_rows_body tr').forEach(function(tr) {
+    // Tab must only ever move from one Code Bag to the next one, never through the other fields.
+    tr.querySelectorAll('select, input, button').forEach(function(el) {
+      if (!(el.id && el.id.indexOf('rs_code_') === 0)) el.tabIndex = -1;
+    });
+    tr.querySelectorAll('select, td:nth-child(5) input, .dt24 input[data-p]').forEach(function(el) { el.disabled = _rsLocked; });
+  });
+  var btn = document.getElementById('rs_lockbtn'), msg = document.getElementById('rs_lockmsg');
+  if (btn) {
+    btn.textContent = _rsLocked ? '🔒 ចាក់សោរួច — ចុចដើម្បីដោះសោ' : '🔓 ចាក់សោ Group · ប្រភេទ · ថ្ងៃ';
+    btn.style.background = _rsLocked ? '#FEF3C7' : 'white';
+    btn.style.borderColor = _rsLocked ? '#F59E0B' : 'var(--border)';
+  }
+  if (msg) { msg.textContent = _rsLocked ? 'Group / ប្រភេទ / ថ្ងៃផុតកំណត់ មិនអាចប្តូរបាន ពេល scan' : ''; msg.style.color = '#B45309'; }
+}
+function rsToggleLock() { _rsLocked = !_rsLocked; rsApplyLock(); }
+
+// Bring row i into view (centred) so the one being scanned next is always visible
+function _rsScrollToRow(i) {
+  var tr = document.querySelectorAll('#rs_rows_body tr')[i];
+  if (tr && tr.scrollIntoView) tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
 // Index of the first single-bag row after `from` that still has no Code Bag (-1 if none). A row with
 // qty > 1 and no code is a "lot" of unlabelled bags and is never a scan target.
 function _rsNextEmpty(from) {
@@ -3088,7 +3119,9 @@ function rsAddRow(auto, skipSync) {
   // Clicking ➕ (several times) then scanning must fill the rows top-down, so put the cursor on the FIRST
   // empty Code Bag. A scan-driven row (auto) is by definition the next one to fill.
   var target = (auto === true) ? newIndex : _rsNextEmpty(-1);
-  document.getElementById('rs_code_' + (target < 0 ? newIndex : target))?.focus();
+  if (target < 0) target = newIndex;
+  document.getElementById('rs_code_' + target)?.focus({ preventScroll: true });
+  _rsScrollToRow(target);
 }
 
 // Enter (or Tab) in a Code Bag field — what a barcode scanner sends right after the digits —
@@ -3121,7 +3154,7 @@ function rsCodeKey(ev, i) {
   var nextIdx = _rsNextEmpty(i);
   if (nextIdx >= 0) {
     var nxt = document.getElementById('rs_code_' + nextIdx);
-    if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+    if (nxt) { nxt.focus({ preventScroll: true }); if (nxt.select) nxt.select(); _rsScrollToRow(nextIdx); }
   } else {
     rsAddRow(true);
   }
@@ -3188,7 +3221,7 @@ function _rsRedirectScan(digits, wrongEl) {
   var inp = document.getElementById('rs_code_' + dest);
   if (inp) inp.value = digits;
   rsUpdateCell(dest, 'code', digits);
-  if (inp) { inp.focus(); try { inp.setSelectionRange(digits.length, digits.length); } catch (e) {} }
+  if (inp) { inp.focus({ preventScroll: true }); try { inp.setSelectionRange(digits.length, digits.length); } catch (e) {} _rsScrollToRow(dest); }
   showToast('📷 ស្កេនបញ្ចូលក្នុង Code Bag ជួរទី ' + (dest + 1) + ' ស្វ័យប្រវត្តិ', 'ok');
 }
 function rsRemoveRow(i) {
@@ -3204,6 +3237,9 @@ function openReceiveStockModal() {
   _receiveRows = [_rsBlankRow()];
   rsRenderRows();
   _rsPending = null;
+  _rsLocked = false;
+  var al = document.getElementById('rs_autolock'); if (al) al.checked = true;
+  rsApplyLock();
   rsShowStep('form');
   document.getElementById('receiveStockModal').classList.add('open');
   clearInterval(_rsGuardTimer); _rsGuardTimer = setInterval(_rsGuardTick, 200);
@@ -5744,6 +5780,11 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
           </tr></thead>
           <tbody id="rs_rows_body"></tbody>
         </table>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button type="button" id="rs_lockbtn" onclick="rsToggleLock()" style="border:1.5px solid var(--border);background:white;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">🔓 ចាក់សោ Group · ប្រភេទ · ថ្ងៃ</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer"><input type="checkbox" id="rs_autolock" checked> ចាក់សោស្វ័យប្រវត្តិ ពេល scan Bag ដំបូង</label>
+        <span id="rs_lockmsg" style="font-size:12px;font-weight:700"></span>
       </div>
       <button type="button" onclick="rsAddRow()" style="align-self:flex-start;border:1.5px dashed var(--border);background:white;border-radius:9px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1">➕ បន្ថែមជួរ</button>
 
