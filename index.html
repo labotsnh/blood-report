@@ -2283,8 +2283,10 @@ function _dt24Html(id, value, onChangeJs, compact) {
     '<input type="hidden" id="' + id + '" value="' + eH(d ? d + 'T' + h + ':' + m : '') + '"></span>';
 }
 function _dt24Changed(span) {
-  var d = span.querySelector('[data-p="d"]').value, h = span.querySelector('[data-p="h"]').value, m = span.querySelector('[data-p="m"]').value;
+  var dEl = span.querySelector('[data-p="d"]');
   var hid = span.querySelector('input[type="hidden"]');
+  if (/^\d{5,}-/.test(dEl.value)) { dEl.value = hid.value.slice(0, 10); return; } // scanner digits typed into the year
+  var d = dEl.value, h = span.querySelector('[data-p="h"]').value, m = span.querySelector('[data-p="m"]').value;
   var nv = d ? d + 'T' + h + ':' + m : '';
   if (hid.value === nv) return;
   hid.value = nv;
@@ -2881,10 +2883,10 @@ function rsRenderRows() {
       '<td style="' + cell + 'text-align:center;color:var(--muted);font-weight:700">' + (i + 1) + '</td>' +
       '<td style="' + cell + '"><input type="text" id="rs_code_' + i + '" value="' + eH(r.code) + '" placeholder="scan or វាយបញ្ជូល" autocomplete="off" oninput="rsUpdateCell(' + i + ',\'code\',this.value)" onkeydown="rsCodeKey(event,' + i + ')" style="' + codeInp + '">' +
         '<div id="rs_codewarn_' + i + '" style="font-size:10.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (codeTooLong ? '#B91C1C' : '#94A3B8') + '">' + (r.code ? (codeTooLong ? '⚠️ លើស 10 ខ្ទង់ (' + r.code.length + ')' : r.code.length + ' ខ្ទង់') : '') + '</div></td>' +
-      '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'grp\',this.value)" style="' + inp + '">' + grpOpts + '</select></td>' +
-      '<td style="' + cell + '"><select onchange="rsUpdateCell(' + i + ',\'type\',this.value)" style="' + inp + '">' + typeOpts + '</select></td>' +
-      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsUpdateCell(' + i + ',\'expiry\',this.value)" oninput="rsUpdateCell(' + i + ',\'expiry\',this.value)" style="' + inp + '"></td>' +
-      '<td style="' + cell + '">' + _dt24Html('rs_recv_' + i, r.received, "rsUpdateCell(" + i + ",'received',document.getElementById('rs_recv_" + i + "').value)", true) + '</td>' +
+      '<td style="' + cell + '"><select onchange="rsFieldInput(' + i + ',\'grp\',this)" style="' + inp + '">' + grpOpts + '</select></td>' +
+      '<td style="' + cell + '"><select onchange="rsFieldInput(' + i + ',\'type\',this)" style="' + inp + '">' + typeOpts + '</select></td>' +
+      '<td style="' + cell + '"><input type="date" value="' + eH(r.expiry) + '" onchange="rsFieldInput(' + i + ',\'expiry\',this)" oninput="rsFieldInput(' + i + ',\'expiry\',this)" style="' + inp + '"></td>' +
+      '<td style="' + cell + '">' + _dt24Html('rs_recv_' + i, r.received, "rsFieldInput(" + i + ",'received',document.getElementById('rs_recv_" + i + "'))", true) + '</td>' +
       '<td style="' + cell + '"><input type="number" id="rs_qty_' + i + '" min="1" value="' + r.qty + '" ' + (r.code ? 'disabled title="កំណត់ 1 ពេលមាន Code Bag (តំណាងតែ Bag មួយ)"' : '') + ' oninput="rsUpdateCell(' + i + ',\'qty\',this.value)" style="' + inp + (r.code ? ';background:#F1F5F9;color:var(--muted)' : '') + '"></td>' +
       '<td style="' + cell + 'text-align:center">' + (_receiveRows.length > 1 ? '<button type="button" onclick="rsRemoveRow(' + i + ')" style="border:none;background:none;color:#B91C1C;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>' : '') + '</td>' +
     '</tr>';
@@ -2895,6 +2897,7 @@ function rsRenderRows() {
   var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
   // A full re-render rebuilds every input, so re-apply the duplicate / too-long flags to rows that have a code.
   _receiveRows.forEach(function(r, idx) { if (r.code) _rsRefreshCodeVisual(idx); });
+  rsApplyLock();
 }
 
 // Re-checks row i's code against the 10-digit length rule AND against every other row's code
@@ -2921,6 +2924,78 @@ function _rsRefreshCodeVisual(i) {
   }
 }
 
+// What the screen shows is what gets saved: copy Group/Type/Expiry/Received from the live controls into the
+// model before it is used to rebuild the table or to build the payload, so a value that only ever reached
+// the DOM (an event that didn't fire) can't be lost by a re-render. Skipped when the row counts differ
+// (the table is mid-change) and never used right after a scan redirect, which restores a clean snapshot.
+function _rsSyncFromDom() {
+  var trs = document.querySelectorAll('#rs_rows_body tr');
+  if (!trs.length || trs.length !== _receiveRows.length) return;
+  trs.forEach(function(tr, i) {
+    var r = _receiveRows[i], sels = tr.querySelectorAll('select');
+    var d = tr.querySelector('td:nth-child(5) input[type="date"]');
+    var hid = tr.querySelector('.dt24 input[type="hidden"]');
+    if (sels[0]) r.grp = sels[0].value;
+    if (sels[1]) r.type = sels[1].value;
+    if (d && !_badYear(d.value)) r.expiry = d.value;
+    if (hid && hid.value) r.received = hid.value;
+    _RS_FIELDS.forEach(function(f) { _rsSetGood(r, f); });
+  });
+}
+
+// A scanner that missed the redirect types the whole code into the date's year segment ('106691-10-22').
+// Years here are always 4 digits, so anything longer is rejected and the last good date is put back.
+function _badYear(v) { return /^\d{5,}-/.test(v || ''); }
+var _RS_FIELDS = ['grp', 'type', 'expiry', 'received'];
+function _rsSetGood(r, field) { r._good = r._good || {}; r._good[field] = r[field]; }
+function _rsPutBack(i, field) {            // show the model value in the control again
+  var r = _receiveRows[i], tr = document.querySelectorAll('#rs_rows_body tr')[i];
+  if (!r || !tr) return;
+  var v = r[field] || '', sels = tr.querySelectorAll('select');
+  if (field === 'grp' && sels[0]) sels[0].value = v;
+  else if (field === 'type' && sels[1]) sels[1].value = v;
+  else if (field === 'expiry') { var de = tr.querySelector('td:nth-child(5) input[type="date"]'); if (de) de.value = v; }
+  else if (field === 'received') _dt24Set('rs_recv_' + i, v);
+}
+function rsFieldInput(i, field, el) {
+  var r = _receiveRows[i];
+  if (!r) return;
+  if (field === 'expiry' && _badYear(el.value)) { el.value = r.expiry || ''; return; }
+  rsUpdateCell(i, field, el.value);
+}
+
+// Safety net: every 200ms while the receive window is open, any row whose Group / Type /
+// Expiry / Received no longer matches what the user last set (and whose control is not being edited) is put
+// back and a notice is shown. Programmatic changes that are legitimate (copy down, restoring a snapshot) update
+// the remembered value through _rsSetGood, so only unexplained changes are undone.
+var _rsGuardTimer = null;
+function _rsGuardTick() {
+  var modal = document.getElementById('receiveStockModal');
+  if (!modal || !modal.classList.contains('open')) return;
+  var trs = document.querySelectorAll('#rs_rows_body tr');
+  if (!trs.length || trs.length !== _receiveRows.length) return;
+  var healed = [];
+  _receiveRows.forEach(function(r, i) {
+    if (!r._good) { _RS_FIELDS.forEach(function(f) { _rsSetGood(r, f); }); return; }
+    _RS_FIELDS.forEach(function(f) {
+      var tr = trs[i], sels = tr.querySelectorAll('select'), el = null;
+      if (f === 'grp') el = sels[0]; else if (f === 'type') el = sels[1];
+      else if (f === 'expiry') el = tr.querySelector('td:nth-child(5) input[type="date"]');
+      else el = tr.querySelector('.dt24');
+      if (!el) return;
+      var editing = el.contains ? el.contains(document.activeElement) : false;
+      if (f !== 'received' && document.activeElement === el) editing = true;
+      if (editing) return;                                 // never fight the user while they edit
+      if (r[f] !== r._good[f]) { r[f] = r._good[f]; healed.push(f + ' #' + (i + 1)); _rsPutBack(i, f); return; }
+      var shown = (f === 'received') ? (document.getElementById('rs_recv_' + i) || {}).value : el.value;
+      if ((shown || '') !== (r[f] || '')) { _rsPutBack(i, f); healed.push(f + ' #' + (i + 1)); }
+    });
+  });
+  if (healed.length) {
+    console.warn('receive form: restored', healed);
+    showToast('⚠️ ស្តារតម្លៃដែលប្រែប្រួលដោយឯកឯង៖ ' + healed.join(', '), 'err');
+  }
+}
 function rsUpdateCell(i, field, value) {
   if (!_receiveRows[i]) return;
   if (field === 'code') {
@@ -2940,6 +3015,7 @@ function rsUpdateCell(i, field, value) {
 
     // A row with a specific bag code represents exactly that one bag — lock qty to 1.
     if (value) _receiveRows[i].qty = 1;
+    if (value && !_rsLocked && (document.getElementById('rs_autolock') || {}).checked) { _rsLocked = true; rsApplyLock(); }
     var qtyInput = document.getElementById('rs_qty_' + i);
     if (qtyInput) {
       qtyInput.disabled = !!value;
@@ -2956,8 +3032,27 @@ function rsUpdateCell(i, field, value) {
     rsUpdateTotals();
     return;
   }
+  var oldVal = _receiveRows[i][field];
   _receiveRows[i][field] = value;
+  if (_RS_FIELDS.indexOf(field) >= 0) _rsSetGood(_receiveRows[i], field);
   _receiveRows[i].auto = false; // staff changed something on it — it's a real row now
+  // Group / Type / Expiry / Received follow DOWN the list: rows below that are not scanned yet and still held
+  // the old value (i.e. were copies of this row) take the new one, so picking them once on row 1 is enough
+  // whether the extra rows were added before or after. Rows deliberately set to something else are left alone.
+  if ((field === 'grp' || field === 'type' || field === 'expiry' || field === 'received') && oldVal !== value) {
+    var trs = document.querySelectorAll('#rs_rows_body tr');
+    for (var j = i + 1; j < _receiveRows.length; j++) {
+      var rj = _receiveRows[j];
+      if (rj.code || rj[field] !== oldVal) continue;
+      rj[field] = value; _rsSetGood(rj, field);
+      var tr = trs[j]; if (!tr) continue;
+      var sels = tr.querySelectorAll('select');
+      if (field === 'grp' && sels[0]) sels[0].value = value;
+      else if (field === 'type' && sels[1]) sels[1].value = value;
+      else if (field === 'expiry') { var de = tr.querySelector('td:nth-child(5) input[type="date"]'); if (de) de.value = value; }
+      else if (field === 'received') _dt24Set('rs_recv_' + j, value);
+    }
+  }
   if (field === 'qty') {
     _receiveRows[i].qty = parseInt(value) || 1;
   }
@@ -2970,28 +3065,70 @@ function rsUpdateTotals() {
   var rowsEl = document.getElementById('rs_total_rows'); if (rowsEl) rowsEl.textContent = real.length;
 }
 
-function rsAddRow(auto) {
+// ── Lock Group / Type / Expiry / Received ──
+// While locked those controls are disabled (they cannot take focus or keystrokes), so scanning Bag Codes
+// can only ever touch the Code Bag column. It locks by itself when the first Code Bag is entered (unless the
+// box is unticked) and the button unlocks it again. New rows still copy the values down.
+var _rsLocked = false;
+function rsApplyLock() {
+  document.querySelectorAll('#rs_rows_body tr').forEach(function(tr) {
+    // Tab must only ever move from one Code Bag to the next one, never through the other fields.
+    tr.querySelectorAll('select, input, button').forEach(function(el) {
+      if (!(el.id && el.id.indexOf('rs_code_') === 0)) el.tabIndex = -1;
+    });
+    tr.querySelectorAll('select, td:nth-child(5) input, .dt24 input[data-p]').forEach(function(el) { el.disabled = _rsLocked; });
+  });
+  var btn = document.getElementById('rs_lockbtn'), msg = document.getElementById('rs_lockmsg');
+  if (btn) {
+    btn.textContent = _rsLocked ? '🔒 ចាក់សោរួច — ចុចដើម្បីដោះសោ' : '🔓 ចាក់សោ Group · ប្រភេទ · ថ្ងៃ';
+    btn.style.background = _rsLocked ? '#FEF3C7' : 'white';
+    btn.style.borderColor = _rsLocked ? '#F59E0B' : 'var(--border)';
+  }
+  if (msg) { msg.textContent = _rsLocked ? 'Group / ប្រភេទ / ថ្ងៃផុតកំណត់ មិនអាចប្តូរបាន ពេល scan' : ''; msg.style.color = '#B45309'; }
+}
+function rsToggleLock() { _rsLocked = !_rsLocked; rsApplyLock(); }
+// Unticking "auto-lock" releases the lock straight away so the fields can be edited again; ticking it again
+// locks at once if Code Bags have already been entered (otherwise it locks at the first scan).
+function rsAutoLockChanged(on) {
+  if (!on) _rsLocked = false;
+  else if (_receiveRows.some(function(r) { return r.code; })) _rsLocked = true;
+  rsApplyLock();
+}
+
+// Bring row i into view (centred) so the one being scanned next is always visible
+function _rsScrollToRow(i) {
+  var tr = document.querySelectorAll('#rs_rows_body tr')[i];
+  if (tr && tr.scrollIntoView) tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+// Index of the first single-bag row after `from` that still has no Code Bag (-1 if none). A row with
+// qty > 1 and no code is a "lot" of unlabelled bags and is never a scan target.
+function _rsNextEmpty(from) {
+  for (var k = from + 1; k < _receiveRows.length; k++) {
+    if (!_receiveRows[k].code && (parseInt(_receiveRows[k].qty) || 1) === 1) return k;
+  }
+  return -1;
+}
+
+function rsAddRow(auto, skipSync) {
   // Copy Group/Type/Expiry from the last row for convenience — a delivery is usually mostly
   // the same type, so this saves re-picking them for every row; code/qty always reset.
   // auto=true marks the row as a scan-flow placeholder (see _rsRealRows).
+  // Read the live controls first (see _rsSyncFromDom). The scan redirect passes skipSync because the
+  // focused field may have just received stray digits, and it has already restored a clean snapshot.
+  if (!skipSync) _rsSyncFromDom();
   var last = _receiveRows[_receiveRows.length - 1];
-  // Read the last row's live controls first: a date typed or picked in the browser may not have
-  // fired its change event yet when the button is clicked, which would copy a stale/empty value.
-  var lastTr = document.querySelectorAll('#rs_rows_body tr')[_receiveRows.length - 1];
-  if (last && lastTr) {
-    var sels = lastTr.querySelectorAll('select'), dates = lastTr.querySelectorAll('input[type="date"]');
-    if (sels[0]) last.grp = sels[0].value;
-    if (sels[1]) last.type = sels[1].value;
-    if (dates[0]) last.expiry = dates[0].value;
-    var dtl = lastTr.querySelector('.dt24 input[type="hidden"]');
-    if (dtl && dtl.value) last.received = dtl.value;
-  }
   var newIndex = _receiveRows.length;
   var row = _rsBlankRow(last ? { grp:last.grp, type:last.type, expiry:last.expiry, received:last.received } : null);
   if (auto === true) row.auto = true;
   _receiveRows.push(row);
   rsRenderRows();
-  document.getElementById('rs_code_' + newIndex)?.focus();
+  // Clicking ➕ (several times) then scanning must fill the rows top-down, so put the cursor on the FIRST
+  // empty Code Bag. A scan-driven row (auto) is by definition the next one to fill.
+  var target = (auto === true) ? newIndex : _rsNextEmpty(-1);
+  if (target < 0) target = newIndex;
+  document.getElementById('rs_code_' + target)?.focus({ preventScroll: true });
+  _rsScrollToRow(target);
 }
 
 // Enter (or Tab) in a Code Bag field — what a barcode scanner sends right after the digits —
@@ -3019,9 +3156,12 @@ function rsCodeKey(ev, i) {
     return;
   }
   _rsLastAdvance = Date.now();
-  if (i < _receiveRows.length - 1) {
-    var nxt = document.getElementById('rs_code_' + (i + 1));
-    if (nxt) { nxt.focus(); if (nxt.select) nxt.select(); }
+  // Next row that still needs a code (rows already scanned are skipped); none left -> add one at the end,
+  // which copies Group/Type/Expiry from the row above.
+  var nextIdx = _rsNextEmpty(i);
+  if (nextIdx >= 0) {
+    var nxt = document.getElementById('rs_code_' + nextIdx);
+    if (nxt) { nxt.focus({ preventScroll: true }); if (nxt.select) nxt.select(); _rsScrollToRow(nextIdx); }
   } else {
     rsAddRow(true);
   }
@@ -3051,7 +3191,7 @@ function _rsScanSniffer(ev) {
   var now = ev.timeStamp || Date.now();
   var gap = now - _rsBurst.lastT;
   _rsBurst.lastT = now;
-  if (_rsBurst.n === 0 || gap > 45) {
+  if (_rsBurst.n === 0 || gap > 300) {
     // Possible start of a scan. Snapshot BEFORE this digit lands anywhere so it can be undone.
     _rsBurst.n = 1; _rsBurst.digits = key;
     try { _rsBurst.snap = JSON.stringify(_receiveRows); } catch (e) { _rsBurst.snap = null; }
@@ -3059,6 +3199,11 @@ function _rsScanSniffer(ev) {
     _rsBurst.notes = document.getElementById('rs_notes')?.value || '';
     return;
   }
+  // A scanner (or USB polling) can pause for a moment mid-code; a person never types digits this close
+  // together. Gaps up to 120ms still count as one burst. A longer gap restarts the count but KEEPS the
+  // snapshot from the start of the burst — refreshing it here would capture the already-corrupted date
+  // and the expiry would stay broken after the redirect.
+  if (gap > 120) { _rsBurst.n = 1; _rsBurst.digits = key; return; }
   _rsBurst.n++; _rsBurst.digits += key;
   if (_rsBurst.n < 3) return;
   // 3+ digits at scanner speed, going somewhere other than a Code Bag field -> it's a scan.
@@ -3077,17 +3222,18 @@ function _rsRedirectScan(digits, wrongEl) {
   for (var k = 0; k < _receiveRows.length; k++) {
     if (!_receiveRows[k].code && (parseInt(_receiveRows[k].qty) || 1) === 1) { dest = k; break; }
   }
-  if (dest < 0) { rsAddRow(true); dest = _receiveRows.length - 1; }
+  if (dest < 0) { rsAddRow(true, true); dest = _receiveRows.length - 1; }
   else { rsRenderRows(); }
   // 3) put the digits in that Code Bag and keep the cursor there so the rest of the scan (and its Enter) land normally
   var inp = document.getElementById('rs_code_' + dest);
   if (inp) inp.value = digits;
   rsUpdateCell(dest, 'code', digits);
-  if (inp) { inp.focus(); try { inp.setSelectionRange(digits.length, digits.length); } catch (e) {} }
+  if (inp) { inp.focus({ preventScroll: true }); try { inp.setSelectionRange(digits.length, digits.length); } catch (e) {} _rsScrollToRow(dest); }
   showToast('📷 ស្កេនបញ្ចូលក្នុង Code Bag ជួរទី ' + (dest + 1) + ' ស្វ័យប្រវត្តិ', 'ok');
 }
 function rsRemoveRow(i) {
   if (_receiveRows.length <= 1) return;
+  _rsSyncFromDom();
   _receiveRows.splice(i, 1);
   rsRenderRows();
 }
@@ -3098,8 +3244,12 @@ function openReceiveStockModal() {
   _receiveRows = [_rsBlankRow()];
   rsRenderRows();
   _rsPending = null;
+  _rsLocked = false;
+  var al = document.getElementById('rs_autolock'); if (al) al.checked = true;
+  rsApplyLock();
   rsShowStep('form');
   document.getElementById('receiveStockModal').classList.add('open');
+  clearInterval(_rsGuardTimer); _rsGuardTimer = setInterval(_rsGuardTick, 200);
   _rsBurst.n = 0;
   // (rsShowStep('form') above registers the scan listener) capture phase: sees scanner keys before any field does
   // A barcode scanner just "types" into whatever currently has keyboard focus — with nothing
@@ -3107,12 +3257,14 @@ function openReceiveStockModal() {
   setTimeout(function() { document.getElementById('rs_code_0')?.focus(); }, 60);
 }
 function closeReceiveStockModal() {
+  clearInterval(_rsGuardTimer); _rsGuardTimer = null;
   document.removeEventListener('keydown', _rsScanSniffer, true);
   document.getElementById('receiveStockModal').classList.remove('open');
 }
 
 // Validates the form and returns the rows to insert, or null (after a toast) when something is wrong.
 function _rsBuildPayload() {
+  _rsSyncFromDom();
   var rowsToSave = _rsRealRows(); // drops the empty placeholder row the scan auto-advance leaves at the end
   if (!rowsToSave.length) { showToast('⚠️ សូមបន្ថែមយ៉ាងហោចណាស់ 1 ជួរ', 'err'); return null; }
   for (var i = 0; i < _receiveRows.length; i++) {
@@ -3181,6 +3333,27 @@ function reviewReceiveStock() {
   h += '</tbody><tfoot><tr style="background:#F1F5F9;border-top:2px solid var(--border)"><td style="padding:10px 12px;text-align:left;font-weight:900">សរុប</td>' +
     types.map(function(t) { return '<td style="' + td + '">' + typeTot[t] + '</td>'; }).join('') +
     '<td style="' + td + ';color:#059669;font-size:16px">' + grand + '</td></tr></tfoot></table></div>';
+  // Group / Type / Expiry breakdown, so a wrong or missing expiry date is visible before approving.
+  var combo = {}, comboOrder = [];
+  payload.forEach(function(r) {
+    var k = r.grp + '|' + r.blood_type + '|' + (r.expiry_date || '');
+    if (!combo[k]) { combo[k] = { grp: r.grp, type: r.blood_type, exp: r.expiry_date || '', n: 0 }; comboOrder.push(k); }
+    combo[k].n += r.qty_received;
+  });
+  comboOrder.sort(function(a, b) {
+    var x = combo[a], y = combo[b];
+    return (STOCK_GRPS.indexOf(x.grp) - STOCK_GRPS.indexOf(y.grp)) || x.type.localeCompare(y.type) || x.exp.localeCompare(y.exp);
+  });
+  var thc = 'padding:8px 12px;text-align:left;white-space:nowrap';
+  h += '<div style="overflow-x:auto;border:1.5px solid var(--border);border-radius:10px"><table style="width:100%;min-width:0;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#F1F5F9">' +
+    '<th style="' + thc + '">🩸 Group</th><th style="' + thc + '">💉 ប្រភេទ</th><th style="' + thc + '">📅 ថ្ងៃផុតកំណត់</th><th style="' + thc + ';text-align:right">ចំនួន</th></tr></thead><tbody>' +
+    comboOrder.map(function(k) {
+      var c = combo[k];
+      return '<tr style="border-top:1px solid var(--border)"><td style="padding:7px 12px;text-align:left;font-weight:800;color:' + (STOCK_GRP_COLOR[c.grp] || '#334155') + '">' + eH(c.grp) + '</td>' +
+        '<td style="padding:7px 12px;text-align:left">' + eH(c.type) + '</td>' +
+        '<td style="padding:7px 12px;text-align:left;font-weight:700">' + (c.exp ? eH(c.exp) : '<span style="color:#B91C1C">— គ្មាន —</span>') + '</td>' +
+        '<td style="padding:7px 12px;text-align:right;font-weight:800">' + c.n + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
   var withCode = payload.filter(function(r) { return r.batch_no; }).length;
   h += '<div style="font-size:12px;color:var(--muted);font-weight:600">' + payload.length + ' ជួរ · មាន Code Bag ' + withCode + ' · ប្រភព: ' + eH(payload[0].source) +
     (payload[0].notes ? ' · ចំណាំ: ' + eH(payload[0].notes) : '') + '</div>';
@@ -5504,6 +5677,8 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div id="daily-summary" class="daily-cards" style="margin-bottom:12px"></div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
       <span id="daily-new-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
+      <button type="button" id="daily-new-clear" onclick="dailyNewFilter('')" style="display:none;border:1.5px solid var(--border);background:white;border-radius:20px;padding:3px 12px;font-size:11.5px;font-weight:700;cursor:pointer;color:#B91C1C">✕ លុបតម្រង</button>
+      <span style="font-size:11px;color:var(--muted)">ចុចលើ ដាក់ថ្មី · ខ្ចី · យកប្រើ · សង ខាងលើ ដើម្បីត្រង</span>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:32px">
       <div id="daily-new-table" style="overflow-x:auto"></div>
@@ -5599,7 +5774,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     </div>
     <div class="modal-body" id="rs_form_body" style="display:flex;flex-direction:column;gap:12px">
       <div style="overflow-x:auto;border:1.5px solid var(--border);border-radius:10px">
-        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <table style="width:100%;min-width:0;border-collapse:collapse;font-size:12.5px">
           <thead><tr style="background:#0C4A6E;color:white">
             <th style="padding:8px 10px;text-align:left;white-space:nowrap">#</th>
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:118px">🏷️ Code Bag</th>
@@ -5608,10 +5783,15 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:132px">📅 ថ្ងៃផុតកំណត់ <span class="req">*</span></th>
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:230px">📅 ថ្ងៃ · ម៉ោងទទួល (24h)</th>
             <th style="padding:8px 8px;text-align:left;white-space:nowrap;width:62px">📦 ចំនួន <span class="req">*</span></th>
-            <th style="padding:8px 10px"></th>
+            <th style="padding:8px 4px;width:34px"></th>
           </tr></thead>
           <tbody id="rs_rows_body"></tbody>
         </table>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button type="button" id="rs_lockbtn" onclick="rsToggleLock()" style="border:1.5px solid var(--border);background:white;border-radius:9px;padding:7px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit">🔓 ចាក់សោ Group · ប្រភេទ · ថ្ងៃ</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600;cursor:pointer"><input type="checkbox" id="rs_autolock" checked onchange="rsAutoLockChanged(this.checked)"> ចាក់សោស្វ័យប្រវត្តិ ពេល scan Bag ដំបូង</label>
+        <span id="rs_lockmsg" style="font-size:12px;font-weight:700"></span>
       </div>
       <button type="button" onclick="rsAddRow()" style="align-self:flex-start;border:1.5px dashed var(--border);background:white;border-radius:9px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;color:#0369A1">➕ បន្ថែមជួរ</button>
 
@@ -7304,7 +7484,13 @@ function _dailyNewRows(win) {
         takenDt: evtDt || '',
         lab: (back ? (r['bag_back_lab'+sfx] || r['bag_lab_staff'+sfx]) : r['bag_lab_staff'+sfx]) || '-',
         taker: r['bag_taker'+sfx] || '-',
-        status: status
+        status: status,
+        // Card filters (same rules as the cards' counts). ថ្មី/ខ្ចី are recorded per patient, not per bag,
+        // so they match every bag of a patient whose record has that quantity.
+        isNew: (parseFloat(r.qty_new) || 0) > 0,
+        isBorrow: (parseFloat(r.qty_borrow) || 0) > 0,
+        isUsedIn: used && _inWindow(r['bag_taken_dt'+sfx], win),
+        isBackIn: back && !cannotRet && _inWindow(r['bag_back_dt'+sfx], win)
       });
     });
   });
@@ -7328,6 +7514,62 @@ function _dailyNewBagStats(win) {
   return { used: used, back: back, cannot: cannot };
 }
 
+
+// ── Section 1: summary cards (click ដាក់ថ្មី / ខ្ចី / យកប្រើ / សង to filter the table below) + table ──
+var _dailyNewFilter = '';
+var _DAILY_NEW_FILTERS = { 'new':'ដាក់ថ្មី', 'borrow':'ខ្ចី', 'used':'យកប្រើ', 'back':'សង' };
+function dailyNewFilter(k) {
+  _dailyNewFilter = (k && k !== _dailyNewFilter) ? k : ''; // click again (or a total card) to clear
+  _renderDailyNewSection(_dailyWindow());
+}
+function _renderDailyNewSection(win) {
+  var rangeRecs = allRecs.filter(function(r) { return _entryInRange((r.date || '').slice(0, 10), win); });
+
+  var totalPatients = rangeRecs.length;
+  var totalBags = rangeRecs.reduce(function(sum, r) { return sum + _dailyBagCount(r); }, 0);
+  var totalNew    = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_new)    || 0); }, 0);
+  var totalBorrow = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_borrow) || 0); }, 0);
+  // "យកប្រើ"/"សង" counted at the individual-bag level, matched against each bag's own
+  // taken/return date — same approach as the 🔄 ជំងឺចាស់ section, so the two stay consistent.
+  var bagStats1   = _dailyNewBagStats(win);
+  var totalUsed   = bagStats1.used;
+  var totalReturn = bagStats1.back;
+
+  var cards = [
+    { icon:'👥', label:'ប៉ុងឈាម (អ្នកជំងឺ)', val: totalPatients, color:'#2563EB', bg:'linear-gradient(145deg,#EFF6FF,#DBEAFE)' },
+    { icon:'🩸', label:'សាក់ឈាម (Bag)',      val: totalBags,     color:'#B91C1C', bg:'linear-gradient(145deg,#FEF2F2,#FEE2E2)' },
+    { key:'new', icon:'🆕', label:'ដាក់ថ្មី',            val: totalNew,      color:'#0891B2', bg:'linear-gradient(145deg,#ECFEFF,#CFFAFE)' },
+    { key:'borrow', icon:'📋', label:'ខ្ចី',                val: totalBorrow,   color:'#B45309', bg:'linear-gradient(145deg,#FFFBEB,#FEF3C7)' },
+    { key:'used', icon:'✅', label:'យកប្រើ',             val: totalUsed,     color:'#059669', bg:'linear-gradient(145deg,#ECFDF5,#D1FAE5)' },
+    { key:'back', icon:'↩️', label:'សង',                 val: totalReturn,   color:'#7C3AED', bg:'linear-gradient(145deg,#F5F3FF,#EDE9FE)' },
+  ];
+  document.getElementById('daily-summary').innerHTML = cards.map(function(c) {
+    var on = !!c.key && _dailyNewFilter === c.key;
+    return '<div role="button" tabindex="0" title="' + (c.key ? 'ចុចដើម្បីត្រងតារាង' : 'បង្ហាញទាំងអស់') + '" onclick="dailyNewFilter(\'' + (c.key || '') + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();dailyNewFilter(\'' + (c.key || '') + '\');}" ' +
+      'style="cursor:pointer;background:'+c.bg+';border-radius:12px;padding:9px 12px;display:flex;align-items:center;gap:10px;border:' + (on ? '2px solid '+c.color : '1px solid rgba(0,0,0,.04)') + ';box-shadow:' + (on ? '0 0 0 3px '+c.color+'33' : 'none') + ';min-width:0">' +
+      '<div style="flex:none;width:30px;height:30px;border-radius:9px;background:white;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.07)">'+c.icon+'</div>' +
+      '<div style="min-width:0">' +
+        '<div style="font-size:21px;font-weight:900;color:'+c.color+';line-height:1">'+c.val+'</div>' +
+        '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:3px;line-height:1.25">'+c.label+'</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  // ── Section 1 table: every bag on records entered in range, with its current status ──
+  var newRows = _dailyNewRows(win);
+  var fk = _dailyNewFilter, flag = { 'new':'isNew', 'borrow':'isBorrow', 'used':'isUsedIn', 'back':'isBackIn' }[fk];
+  if (flag) newRows = newRows.filter(function(r) { return r[flag]; });
+  _renderDailyBagTable(
+    document.getElementById('daily-new-table'),
+    document.getElementById('daily-new-count'),
+    newRows, fk ? 'គ្មាន Bag ត្រូវនឹងតម្រង "' + _DAILY_NEW_FILTERS[fk] + '" ក្នុងរយៈពេលនេះទេ' : 'គ្មាន Bag ត្រូវបានបញ្ចូលក្នុងរយៈពេលនេះទេ', false, win
+  );
+  var cnt = document.getElementById('daily-new-count');
+  if (cnt && fk) cnt.textContent += ' · 🔎 ត្រង: ' + _DAILY_NEW_FILTERS[fk];
+  var clr = document.getElementById('daily-new-clear');
+  if (clr) clr.style.display = fk ? '' : 'none';
+}
+
 function buildDailyReport() {
   var win = _dailyWindow();
   var noteEl = document.getElementById('daily-cutoff-note');
@@ -7349,43 +7591,7 @@ function buildDailyReport() {
   buildDailyReturns(win);   // async (reads the audit log)
 
   // ── Section 1: records entered within the selected range ──
-  var rangeRecs = allRecs.filter(function(r) { return _entryInRange((r.date || '').slice(0, 10), win); });
-
-  var totalPatients = rangeRecs.length;
-  var totalBags = rangeRecs.reduce(function(sum, r) { return sum + _dailyBagCount(r); }, 0);
-  var totalNew    = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_new)    || 0); }, 0);
-  var totalBorrow = rangeRecs.reduce(function(sum, r) { return sum + (parseFloat(r.qty_borrow) || 0); }, 0);
-  // "យកប្រើ"/"សង" counted at the individual-bag level, matched against each bag's own
-  // taken/return date — same approach as the 🔄 ជំងឺចាស់ section, so the two stay consistent.
-  var bagStats1   = _dailyNewBagStats(win);
-  var totalUsed   = bagStats1.used;
-  var totalReturn = bagStats1.back;
-
-  var cards = [
-    { icon:'👥', label:'ប៉ុងឈាម (អ្នកជំងឺ)', val: totalPatients, color:'#2563EB', bg:'linear-gradient(145deg,#EFF6FF,#DBEAFE)' },
-    { icon:'🩸', label:'សាក់ឈាម (Bag)',      val: totalBags,     color:'#B91C1C', bg:'linear-gradient(145deg,#FEF2F2,#FEE2E2)' },
-    { icon:'🆕', label:'ដាក់ថ្មី',            val: totalNew,      color:'#0891B2', bg:'linear-gradient(145deg,#ECFEFF,#CFFAFE)' },
-    { icon:'📋', label:'ខ្ចី',                val: totalBorrow,   color:'#B45309', bg:'linear-gradient(145deg,#FFFBEB,#FEF3C7)' },
-    { icon:'✅', label:'យកប្រើ',             val: totalUsed,     color:'#059669', bg:'linear-gradient(145deg,#ECFDF5,#D1FAE5)' },
-    { icon:'↩️', label:'សង',                 val: totalReturn,   color:'#7C3AED', bg:'linear-gradient(145deg,#F5F3FF,#EDE9FE)' },
-  ];
-  document.getElementById('daily-summary').innerHTML = cards.map(function(c) {
-    return '<div style="background:'+c.bg+';border-radius:12px;padding:9px 12px;display:flex;align-items:center;gap:10px;border:1px solid rgba(0,0,0,.04);min-width:0">' +
-      '<div style="flex:none;width:30px;height:30px;border-radius:9px;background:white;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 1px 4px rgba(0,0,0,.07)">'+c.icon+'</div>' +
-      '<div style="min-width:0">' +
-        '<div style="font-size:21px;font-weight:900;color:'+c.color+';line-height:1">'+c.val+'</div>' +
-        '<div style="font-size:11px;color:var(--muted);font-weight:700;margin-top:3px;line-height:1.25">'+c.label+'</div>' +
-      '</div>' +
-    '</div>';
-  }).join('');
-
-  // ── Section 1 table: every bag on records entered in range, with its current status ──
-  var newRows = _dailyNewRows(win);
-  _renderDailyBagTable(
-    document.getElementById('daily-new-table'),
-    document.getElementById('daily-new-count'),
-    newRows, 'គ្មាន Bag ត្រូវបានបញ្ចូលក្នុងរយៈពេលនេះទេ', false, win
-  );
+  _renderDailyNewSection(win);
 
   // ── Section 2: bags taken/returned in range, from records entered before the range ──
   // "យកប្រើ" and "សង" are separate events with their own timestamp (bag_taken_dt vs bag_back_dt).
