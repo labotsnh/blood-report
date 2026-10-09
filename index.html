@@ -2923,6 +2923,24 @@ function _rsRefreshCodeVisual(i) {
   }
 }
 
+// What the screen shows is what gets saved: copy Group/Type/Expiry/Received from the live controls into the
+// model before it is used to rebuild the table or to build the payload, so a value that only ever reached
+// the DOM (an event that didn't fire) can't be lost by a re-render. Skipped when the row counts differ
+// (the table is mid-change) and never used right after a scan redirect, which restores a clean snapshot.
+function _rsSyncFromDom() {
+  var trs = document.querySelectorAll('#rs_rows_body tr');
+  if (!trs.length || trs.length !== _receiveRows.length) return;
+  trs.forEach(function(tr, i) {
+    var r = _receiveRows[i], sels = tr.querySelectorAll('select');
+    var d = tr.querySelector('td:nth-child(5) input[type="date"]');
+    var hid = tr.querySelector('.dt24 input[type="hidden"]');
+    if (sels[0]) r.grp = sels[0].value;
+    if (sels[1]) r.type = sels[1].value;
+    if (d && !_badYear(d.value)) r.expiry = d.value;
+    if (hid && hid.value) r.received = hid.value;
+  });
+}
+
 // A scanner that missed the redirect types the whole code into the date's year segment ('106691-10-22').
 // Years here are always 4 digits, so anything longer is rejected and the last good date is put back.
 function _badYear(v) { return /^\d{5,}-/.test(v || ''); }
@@ -2965,8 +2983,26 @@ function rsUpdateCell(i, field, value) {
     rsUpdateTotals();
     return;
   }
+  var oldVal = _receiveRows[i][field];
   _receiveRows[i][field] = value;
   _receiveRows[i].auto = false; // staff changed something on it — it's a real row now
+  // Group / Type / Expiry / Received follow DOWN the list: rows below that are not scanned yet and still held
+  // the old value (i.e. were copies of this row) take the new one, so picking them once on row 1 is enough
+  // whether the extra rows were added before or after. Rows deliberately set to something else are left alone.
+  if ((field === 'grp' || field === 'type' || field === 'expiry' || field === 'received') && oldVal !== value) {
+    var trs = document.querySelectorAll('#rs_rows_body tr');
+    for (var j = i + 1; j < _receiveRows.length; j++) {
+      var rj = _receiveRows[j];
+      if (rj.code || rj[field] !== oldVal) continue;
+      rj[field] = value;
+      var tr = trs[j]; if (!tr) continue;
+      var sels = tr.querySelectorAll('select');
+      if (field === 'grp' && sels[0]) sels[0].value = value;
+      else if (field === 'type' && sels[1]) sels[1].value = value;
+      else if (field === 'expiry') { var de = tr.querySelector('td:nth-child(5) input[type="date"]'); if (de) de.value = value; }
+      else if (field === 'received') _dt24Set('rs_recv_' + j, value);
+    }
+  }
   if (field === 'qty') {
     _receiveRows[i].qty = parseInt(value) || 1;
   }
@@ -2988,22 +3024,14 @@ function _rsNextEmpty(from) {
   return -1;
 }
 
-function rsAddRow(auto) {
+function rsAddRow(auto, skipSync) {
   // Copy Group/Type/Expiry from the last row for convenience — a delivery is usually mostly
   // the same type, so this saves re-picking them for every row; code/qty always reset.
   // auto=true marks the row as a scan-flow placeholder (see _rsRealRows).
+  // Read the live controls first (see _rsSyncFromDom). The scan redirect passes skipSync because the
+  // focused field may have just received stray digits, and it has already restored a clean snapshot.
+  if (!skipSync) _rsSyncFromDom();
   var last = _receiveRows[_receiveRows.length - 1];
-  // Read the last row's live controls first: a date typed or picked in the browser may not have
-  // fired its change event yet when the button is clicked, which would copy a stale/empty value.
-  var lastTr = document.querySelectorAll('#rs_rows_body tr')[_receiveRows.length - 1];
-  if (last && lastTr) {
-    var sels = lastTr.querySelectorAll('select'), dates = lastTr.querySelectorAll('input[type="date"]');
-    if (sels[0]) last.grp = sels[0].value;
-    if (sels[1]) last.type = sels[1].value;
-    if (dates[0]) last.expiry = dates[0].value;
-    var dtl = lastTr.querySelector('.dt24 input[type="hidden"]');
-    if (dtl && dtl.value) last.received = dtl.value;
-  }
   var newIndex = _receiveRows.length;
   var row = _rsBlankRow(last ? { grp:last.grp, type:last.type, expiry:last.expiry, received:last.received } : null);
   if (auto === true) row.auto = true;
@@ -3106,7 +3134,7 @@ function _rsRedirectScan(digits, wrongEl) {
   for (var k = 0; k < _receiveRows.length; k++) {
     if (!_receiveRows[k].code && (parseInt(_receiveRows[k].qty) || 1) === 1) { dest = k; break; }
   }
-  if (dest < 0) { rsAddRow(true); dest = _receiveRows.length - 1; }
+  if (dest < 0) { rsAddRow(true, true); dest = _receiveRows.length - 1; }
   else { rsRenderRows(); }
   // 3) put the digits in that Code Bag and keep the cursor there so the rest of the scan (and its Enter) land normally
   var inp = document.getElementById('rs_code_' + dest);
@@ -3117,6 +3145,7 @@ function _rsRedirectScan(digits, wrongEl) {
 }
 function rsRemoveRow(i) {
   if (_receiveRows.length <= 1) return;
+  _rsSyncFromDom();
   _receiveRows.splice(i, 1);
   rsRenderRows();
 }
@@ -3142,6 +3171,7 @@ function closeReceiveStockModal() {
 
 // Validates the form and returns the rows to insert, or null (after a toast) when something is wrong.
 function _rsBuildPayload() {
+  _rsSyncFromDom();
   var rowsToSave = _rsRealRows(); // drops the empty placeholder row the scan auto-advance leaves at the end
   if (!rowsToSave.length) { showToast('⚠️ សូមបន្ថែមយ៉ាងហោចណាស់ 1 ជួរ', 'err'); return null; }
   for (var i = 0; i < _receiveRows.length; i++) {
@@ -3210,6 +3240,27 @@ function reviewReceiveStock() {
   h += '</tbody><tfoot><tr style="background:#F1F5F9;border-top:2px solid var(--border)"><td style="padding:10px 12px;text-align:left;font-weight:900">សរុប</td>' +
     types.map(function(t) { return '<td style="' + td + '">' + typeTot[t] + '</td>'; }).join('') +
     '<td style="' + td + ';color:#059669;font-size:16px">' + grand + '</td></tr></tfoot></table></div>';
+  // Group / Type / Expiry breakdown, so a wrong or missing expiry date is visible before approving.
+  var combo = {}, comboOrder = [];
+  payload.forEach(function(r) {
+    var k = r.grp + '|' + r.blood_type + '|' + (r.expiry_date || '');
+    if (!combo[k]) { combo[k] = { grp: r.grp, type: r.blood_type, exp: r.expiry_date || '', n: 0 }; comboOrder.push(k); }
+    combo[k].n += r.qty_received;
+  });
+  comboOrder.sort(function(a, b) {
+    var x = combo[a], y = combo[b];
+    return (STOCK_GRPS.indexOf(x.grp) - STOCK_GRPS.indexOf(y.grp)) || x.type.localeCompare(y.type) || x.exp.localeCompare(y.exp);
+  });
+  var thc = 'padding:8px 12px;text-align:left;white-space:nowrap';
+  h += '<div style="overflow-x:auto;border:1.5px solid var(--border);border-radius:10px"><table style="width:100%;min-width:0;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#F1F5F9">' +
+    '<th style="' + thc + '">🩸 Group</th><th style="' + thc + '">💉 ប្រភេទ</th><th style="' + thc + '">📅 ថ្ងៃផុតកំណត់</th><th style="' + thc + ';text-align:right">ចំនួន</th></tr></thead><tbody>' +
+    comboOrder.map(function(k) {
+      var c = combo[k];
+      return '<tr style="border-top:1px solid var(--border)"><td style="padding:7px 12px;text-align:left;font-weight:800;color:' + (STOCK_GRP_COLOR[c.grp] || '#334155') + '">' + eH(c.grp) + '</td>' +
+        '<td style="padding:7px 12px;text-align:left">' + eH(c.type) + '</td>' +
+        '<td style="padding:7px 12px;text-align:left;font-weight:700">' + (c.exp ? eH(c.exp) : '<span style="color:#B91C1C">— គ្មាន —</span>') + '</td>' +
+        '<td style="padding:7px 12px;text-align:right;font-weight:800">' + c.n + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
   var withCode = payload.filter(function(r) { return r.batch_no; }).length;
   h += '<div style="font-size:12px;color:var(--muted);font-weight:600">' + payload.length + ' ជួរ · មាន Code Bag ' + withCode + ' · ប្រភព: ' + eH(payload[0].source) +
     (payload[0].notes ? ' · ចំណាំ: ' + eH(payload[0].notes) : '') + '</div>';
