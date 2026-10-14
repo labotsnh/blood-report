@@ -2240,6 +2240,13 @@ function exportAuditExcel() {
 var STOCK_TABLE = 'blood_stock';
 var allStock = [];
 var _stockFilter = 'active';
+// "ក្នុងស្តុក" = really on the shelf: active, bags left, and not past its expiry date (the table labels
+// a batch expiring today as ផុតហើយ). Emptied and expired batches have their own chips / "all".
+function _isInStock(b) {
+  if (b.status !== 'active' || (b.qty_remaining || 0) <= 0) return false;
+  return !b.expiry_date || _daysUntil(b.expiry_date) > 0;
+}
+function _isEmptyBatch(b) { return b.status === 'active' && (b.qty_remaining || 0) <= 0; }
 var _stockGrp = '';    // Group filter for the batch list ('' = all groups)
 var _stockSearch = ''; // Bag Code search over every status; overrides the filter chips while non-empty
 var _stockListLimit = 20, _stockListKey = 'active';
@@ -2689,10 +2696,11 @@ function buildStockPage() {
 
   // ── Filter chips ──
   var filters = [
-    { k:'active',   label:'🟢 ក្នុងស្តុក', n: allStock.filter(function(b){return b.status==='active';}).length },
+    { k:'active',   label:'🟢 ក្នុងស្តុក', n: allStock.filter(_isInStock).length },
     { k:'reserved', label:'🟡 X-match រួច', n: allStock.filter(function(b){return b.status==='active' && (b.qty_reserved||0)>0;}).length },
     { k:'near',     label:'⏳ ជិតផុតកំណត់', n: nearExp.length },
     { k:'expired',  label:'🔴 ផុតកំណត់', n: allStock.filter(function(b){return b.status==='expired';}).length },
+    { k:'empty',    label:'⬜ អស់ស្តុក', n: allStock.filter(_isEmptyBatch).length },
     { k:'discarded',label:'🗑️ បានបោះបង់', n: allStock.filter(function(b){return b.status==='discarded';}).length },
     { k:'all',      label:'គ្រប់ Batch ទាំងអស់', n: allStock.length },
   ];
@@ -2707,6 +2715,8 @@ function buildStockPage() {
     if (_stockFilter === 'all') return true;
     if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
     if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
+    if (_stockFilter === 'active') return _isInStock(b);
+    if (_stockFilter === 'empty') return _isEmptyBatch(b);
     return b.status === _stockFilter;
   }
   // ── Group chips: counts follow the selected status filter ──
