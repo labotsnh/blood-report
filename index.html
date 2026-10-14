@@ -7057,8 +7057,8 @@ async function _dailyRetFromAudit(rg) {
   // Only the few JSON fields we need are requested (small payload even for a month)
   var sel = 'id,record_id,action,changed_by,changed_at,' +
     'old_qty:old_data->>qty_return,new_qty:new_data->>qty_return,' +
-    'ward:new_data->>ward_from,name:new_data->>name,age:new_data->>age,gender:new_data->>gender,entry:new_data->>date,' +
-    'o_ward:old_data->>ward_from,o_name:old_data->>name,o_age:old_data->>age,o_gender:old_data->>gender,o_entry:old_data->>date';
+    'ward:new_data->>ward_from,ward_to:new_data->>ward_to,name:new_data->>name,age:new_data->>age,gender:new_data->>gender,entry:new_data->>date,' +
+    'o_ward:old_data->>ward_from,o_ward_to:old_data->>ward_to,o_name:old_data->>name,o_age:old_data->>age,o_gender:old_data->>gender,o_entry:old_data->>date';
   var rows = [], PAGE = 1000;
   for (var pg = 0; pg < 20; pg++) {
     var q = 'audit_log?select=' + encodeURIComponent(sel) +
@@ -7078,7 +7078,7 @@ async function _dailyRetFromAudit(rg) {
     var entry = String(a.entry || a.o_entry || '').slice(0, 10);
     ev.push({
       when: when, approx: false, qty: delta,
-      ward: a.ward || a.o_ward || '-', name: a.name || a.o_name || '-',
+      ward: a.ward || a.o_ward || '-', wardTo: a.ward_to || a.o_ward_to || '-', name: a.name || a.o_name || '-',
       age: a.age || a.o_age || '-', gender: a.gender || a.o_gender || '-',
       staff: a.changed_by || '-',
       group: (entry && entry === _localDay(when)) ? 'ថ្មី' : 'ចាស់'
@@ -7095,7 +7095,7 @@ function _dailyRetFallback(win) {
     if (!_entryInRange(d, win)) return;
     var q = _num(r.qty_return);
     if (q <= 0) return;
-    ev.push({ when: new Date(d + 'T00:00:00'), approx: true, qty: q, ward: r.ward_from || '-', name: r.name || '-',
+    ev.push({ when: new Date(d + 'T00:00:00'), approx: true, qty: q, ward: r.ward_from || '-', wardTo: r.ward_to || '-', name: r.name || '-',
       age: r.age || '-', gender: r.gender || '-', staff: r.lab_person || '-', group: 'ថ្មី' });
   });
   return ev;
@@ -7114,7 +7114,7 @@ function _retSummaryHtml(events) {
 function _retTableHtml(display, all) {
   var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
-    '<th style="' + th + '">#</th><th style="' + th + '">ថ្ងៃខែឆ្នាំ ម៉ោង</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">ឈ្មោះអ្នកជំងឺ</th>' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ថ្ងៃខែឆ្នាំ ម៉ោង</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">➡️ បញ្ជូនទៅផ្នែក</th><th style="' + th + '">ឈ្មោះអ្នកជំងឺ</th>' +
     '<th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ក្រុម</th>' +
     '<th style="' + th + ';text-align:right">ចំនួនសង</th><th style="' + th + '">បុគ្គលិក</th></tr></thead><tbody>';
   display.forEach(function(e, i) {
@@ -7125,6 +7125,7 @@ function _retTableHtml(display, all) {
       '<td style="padding:9px 12px">' + (i + 1) + '</td>' +
       '<td style="padding:9px 12px;white-space:nowrap">' + _localDay(e.when) + (e.approx ? '' : ' <b>' + _localHM(e.when) + '</b>') + '</td>' +
       '<td style="padding:9px 12px;font-weight:700">' + eH(e.ward) + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700;color:#0369A1">' + (e.wardTo && e.wardTo !== '-' ? eH(e.wardTo) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
       '<td style="padding:9px 12px;font-weight:700">' + eH(e.name) + '</td>' +
       '<td style="padding:9px 12px">' + eH(e.age) + '</td>' +
       '<td style="padding:9px 12px">' + eH(e.gender) + '</td>' +
@@ -7134,7 +7135,7 @@ function _retTableHtml(display, all) {
   });
   var tot = 0; all.forEach(function(e) { tot += e.qty; });
   h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
-    '<td colspan="7" style="padding:10px 12px;text-align:right">សរុប (' + all.length + ' ដង)</td>' +
+    '<td colspan="8" style="padding:10px 12px;text-align:right">សរុប (' + all.length + ' ដង)</td>' +
     '<td style="padding:10px 12px;text-align:right;color:#7C3AED">' + tot + '</td><td></td></tr></tfoot></table>';
   return h;
 }
@@ -7769,15 +7770,15 @@ function exportDailyExcel() {
   var wsRem = XLSX.utils.aoa_to_sheet(remAoa);
 
   // ឈាមសង — បានពីមជ្ឈមណ្ឌល (from the last loaded table)
-  var retAoa = [['ថ្ងៃខែឆ្នាំ','ម៉ោង','ផ្នែក','ឈ្មោះអ្នកជំងឺ','អាយុ','ភេទ','ក្រុម','ចំនួនសង','បុគ្គលិក']];
+  var retAoa = [['ថ្ងៃខែឆ្នាំ','ម៉ោង','ផ្នែក','បញ្ជូនទៅផ្នែក','ឈ្មោះអ្នកជំងឺ','អាយុ','ភេទ','ក្រុម','ចំនួនសង','បុគ្គលិក']];
   var retByWard = {}, retTot = 0;
   _dailyRetEvents.slice().sort(function(a, b) { return a.when - b.when; }).forEach(function(e) {
-    retAoa.push([_localDay(e.when), e.approx ? '' : _localHM(e.when), e.ward, e.name, e.age, e.gender, e.group, e.qty, e.staff]);
+    retAoa.push([_localDay(e.when), e.approx ? '' : _localHM(e.when), e.ward, (e.wardTo && e.wardTo !== '-') ? e.wardTo : '', e.name, e.age, e.gender, e.group, e.qty, e.staff]);
     retByWard[e.ward] = (retByWard[e.ward] || 0) + e.qty; retTot += e.qty;
   });
   retAoa.push([]); retAoa.push(['សរុបតាមផ្នែក (' + _dailyRetLabel() + ')']);
-  Object.keys(retByWard).sort(function(a, b) { return retByWard[b] - retByWard[a]; }).forEach(function(w) { retAoa.push(['', '', w, '', '', '', '', retByWard[w]]); });
-  retAoa.push(['', '', 'សរុប', '', '', '', '', retTot]);
+  Object.keys(retByWard).sort(function(a, b) { return retByWard[b] - retByWard[a]; }).forEach(function(w) { retAoa.push(['', '', w, '', '', '', '', '', retByWard[w]]); });
+  retAoa.push(['', '', 'សរុប', '', '', '', '', '', retTot]);
   var wsRet = XLSX.utils.aoa_to_sheet(retAoa);
 
   // Current stock snapshot (live — labeled clearly since it's not tied to the report range)
