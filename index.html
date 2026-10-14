@@ -2240,6 +2240,30 @@ function exportAuditExcel() {
 var STOCK_TABLE = 'blood_stock';
 var allStock = [];
 var _stockFilter = 'active';
+// "ក្នុងស្តុក" = really on the shelf: active, bags left, and not past its expiry date (the table labels
+// a batch expiring today as ផុតហើយ). Emptied and expired batches have their own chips / "all".
+function _isInStock(b) {
+  if (b.status !== 'active' || (b.qty_remaining || 0) <= 0) return false;
+  return !b.expiry_date || _daysUntil(b.expiry_date) > 0;
+}
+function _isEmptyBatch(b) { return b.status === 'active' && (b.qty_remaining || 0) <= 0; }
+function _stockStatusMatch(b) {
+  if (_stockFilter === 'all') return true;
+  if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
+  if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
+  if (_stockFilter === 'active') return _isInStock(b);
+  if (_stockFilter === 'empty') return _isEmptyBatch(b);
+  return b.status === _stockFilter;
+}
+// The batches the list currently shows (status chip + Group chip, or a Bag Code search over everything)
+function _stockListRows() {
+  var q = _stockSearch.toLowerCase();
+  return allStock.filter(function(b) {
+    if (q) return String(b.batch_no || ('#' + b.id)).toLowerCase().indexOf(q) >= 0;
+    return _stockStatusMatch(b) && (!_stockGrp || b.grp === _stockGrp);
+  });
+}
+var _stockGrp = '';    // Group filter for the batch list ('' = all groups)
 var _stockSearch = ''; // Bag Code search over every status; overrides the filter chips while non-empty
 var _stockListLimit = 20, _stockListKey = 'active';
 var _stockLoaded = false;
@@ -2663,23 +2687,36 @@ function buildStockPage() {
       }).join('') + '</div></div>';
   }
   if (nearExp.length) {
-    alertsHtml += '<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:12px 16px">' +
-      '<div style="font-weight:800;color:#92400E;font-size:13px;margin-bottom:8px">⏳ ជិតផុតកំណត់ (≤ 7 ថ្ងៃ) — ' + nearExp.length + ' Batch</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:6px">' + nearExp.map(function(b) {
-        var d = _daysUntil(b.expiry_date);
-        return '<span style="background:white;border:1px solid #FDE68A;color:#92400E;border-radius:20px;padding:3px 11px;font-size:12px;font-weight:700">' +
-          eH(b.batch_no || ('#'+b.id)) + ' · ' + b.grp + ' ' + b.blood_type + ' · ' + (b.qty_remaining||0) + ' Bag · ' + (d<=0?'ផុតហើយ':d+' ថ្ងៃទៀត') + '</span>';
-      }).join('') + '</div></div>';
+    // One chip per Group + Type (not one per bag): Bag count and the soonest expiry. Click a chip to see just those
+    // batches in the list below (status "ជិតផុតកំណត់" + that Group).
+    var nearBy = {}, nearBags = 0;
+    nearExp.forEach(function(b) {
+      var k = b.grp + '|' + b.blood_type, d = _daysUntil(b.expiry_date);
+      var g = nearBy[k] || (nearBy[k] = { grp: b.grp, type: b.blood_type, bags: 0, batches: 0, minD: d });
+      g.bags += (b.qty_remaining || 0); g.batches++; g.minD = Math.min(g.minD, d);
+      nearBags += (b.qty_remaining || 0);
+    });
+    var nearList = Object.keys(nearBy).map(function(k) { return nearBy[k]; })
+      .sort(function(x, y) { return (x.minD - y.minD) || (STOCK_GRPS.indexOf(x.grp) - STOCK_GRPS.indexOf(y.grp)); });
+    var chipCss = 'background:white;border:1px solid #FDE68A;color:#92400E;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
+    alertsHtml += '<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+      '<span style="font-weight:800;color:#92400E;font-size:13px;margin-right:4px">⏳ ជិតផុតកំណត់ (≤ 7 ថ្ងៃ) — ' + nearExp.length + ' Batch · ' + nearBags + ' Bag</span>' +
+      nearList.map(function(g) {
+        return '<button type="button" onclick="stockJumpNear(\'' + g.grp + '\')" title="មើល Batch ' + g.grp + ' ជិតផុតកំណត់" style="' + chipCss + '">' +
+          '<span style="color:' + (STOCK_GRP_COLOR[g.grp] || '#92400E') + '">' + eH(g.grp) + '</span> ' + eH(g.type) + ': <b>' + g.bags + '</b> · ' + (g.minD <= 0 ? 'ផុតហើយ' : 'ឆាប់បំផុត ' + g.minD + ' ថ្ងៃ') + '</button>';
+      }).join('') +
+      '<button type="button" onclick="stockJumpNear(\'\')" style="' + chipCss + ';background:#92400E;border-color:#92400E;color:white">មើលបញ្ជី ↓</button></div>';
   }
   if (!lowList.length && !nearExp.length) alertsHtml = '<div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:12px;padding:12px 16px;font-size:13px;color:#166534;font-weight:600">✅ ស្តុកគ្រប់គ្រាន់ និងគ្មាន Batch ជិតផុតកំណត់ទេ</div>';
   document.getElementById('stock-alerts').innerHTML = alertsHtml;
 
   // ── Filter chips ──
   var filters = [
-    { k:'active',   label:'🟢 ក្នុងស្តុក', n: allStock.filter(function(b){return b.status==='active';}).length },
+    { k:'active',   label:'🟢 ក្នុងស្តុក', n: allStock.filter(_isInStock).length },
     { k:'reserved', label:'🟡 X-match រួច', n: allStock.filter(function(b){return b.status==='active' && (b.qty_reserved||0)>0;}).length },
     { k:'near',     label:'⏳ ជិតផុតកំណត់', n: nearExp.length },
     { k:'expired',  label:'🔴 ផុតកំណត់', n: allStock.filter(function(b){return b.status==='expired';}).length },
+    { k:'empty',    label:'⬜ អស់ស្តុក', n: allStock.filter(_isEmptyBatch).length },
     { k:'discarded',label:'🗑️ បានបោះបង់', n: allStock.filter(function(b){return b.status==='discarded';}).length },
     { k:'all',      label:'គ្រប់ Batch ទាំងអស់', n: allStock.length },
   ];
@@ -2690,14 +2727,27 @@ function buildStockPage() {
 
   // ── Batch table ──
   var q = _stockSearch.toLowerCase();
-  var rows = allStock.filter(function(b) {
-    if (q) return String(b.batch_no || ('#' + b.id)).toLowerCase().indexOf(q) >= 0;
-    if (_stockFilter === 'all') return true;
-    if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
-    if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
-    return b.status === _stockFilter;
-  });
-  if (_stockFilter !== _stockListKey) { _stockListKey = _stockFilter; _stockListLimit = 20; }
+  function statusMatch(b) { return _stockStatusMatch(b); }
+  // ── Group chips: counts follow the selected status filter ──
+  var grpCount = {}, inStatus = allStock.filter(statusMatch);
+  inStatus.forEach(function(b) { grpCount[b.grp] = (grpCount[b.grp] || 0) + 1; });
+  var grpList = STOCK_GRPS.filter(function(g) { return grpCount[g] || g === _stockGrp; })
+    .concat(Object.keys(grpCount).filter(function(g) { return STOCK_GRPS.indexOf(g) < 0; }));
+  var gchip = function(label, key, n, color) {
+    var on = _stockGrp === key;
+    return '<button onclick="stockSetGroup(\'' + key + '\')" style="border:1.5px solid ' + (on ? color : 'var(--border)') + ';background:' + (on ? color : 'white') + ';color:' + (on ? 'white' : color) +
+      ';border-radius:20px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">' + eH(label) + ' <span style="opacity:.8;font-weight:700">(' + n + ')</span></button>';
+  };
+  var gEl = document.getElementById('stock-grp-chips');
+  if (gEl) {
+    gEl.innerHTML = '<span style="font-size:12px;font-weight:800;color:var(--muted)">🩸 Group:</span>' + gchip('ទាំងអស់', '', inStatus.length, '#475569') +
+      grpList.map(function(g) { return gchip(g, g, grpCount[g] || 0, STOCK_GRP_COLOR[g] || '#334155'); }).join('') +
+      '<button type="button" onclick="printStockList()" title="Print តែបញ្ជីដែលកំពុងបង្ហាញ" style="border:1.5px solid #0369A1;background:#0369A1;color:white;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">🖨️ Print ' + (_stockGrp ? eH(_stockGrp) : 'បញ្ជីនេះ') + '</button>';
+    gEl.style.opacity = _stockSearch ? '.45' : '';
+  }
+  var rows = _stockListRows();   // a Bag Code search ignores status and group
+  var listKey = _stockFilter + '|' + _stockGrp;
+  if (listKey !== _stockListKey) { _stockListKey = listKey; _stockListLimit = 20; }
   document.getElementById('stock-list-count').textContent = rows.length + ' Batch' + (q ? ' · ស្វែងរក "' + _stockSearch + '"' : '');
   var wrap = document.getElementById('stock-table');
   if (!rows.length) {
@@ -2840,11 +2890,20 @@ function stockEntryAll()  { _stockEntryLimit = 100000; buildStockEntryTable(); }
 function stockEntryLess() { _stockEntryLimit = 20; buildStockEntryTable(); }
 function stockListLess() { _stockListLimit = 20; buildStockPage(); }
 function stockSetFilter(f) { _stockFilter = f; buildStockPage(); }
+// From the near-expiry banner: show the "ជិតផុតកំណត់" batches (optionally one Group) in the list below
+function stockJumpNear(g) {
+  _stockFilter = 'near'; _stockGrp = g || '';
+  var inp = document.getElementById('stock-search'); if (inp && inp.value) { inp.value = ''; _stockSearch = ''; var sc = document.getElementById('stock-search-clear'); if (sc) sc.style.display = 'none'; }
+  buildStockPage();
+  var t = document.getElementById('stock-table'); if (t && t.scrollIntoView) t.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+function stockSetGroup(g) { _stockGrp = (g && g !== _stockGrp) ? g : ''; buildStockPage(); }
 function stockSearch() {
   _stockSearch = (document.getElementById('stock-search').value || '').trim();
   _stockListLimit = 20;
   document.getElementById('stock-search-clear').style.display = _stockSearch ? '' : 'none';
   document.getElementById('stock-filter-chips').style.opacity = _stockSearch ? '.45' : ''; // chips are ignored while searching
+  var gc = document.getElementById('stock-grp-chips'); if (gc) gc.style.opacity = _stockSearch ? '.45' : '';
   buildStockPage();
 }
 function stockSearchClear() {
@@ -3562,6 +3621,48 @@ function exportStockExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Stock');
   XLSX.writeFile(wb, 'blood_stock_' + _todayStr() + '.xlsx');
   showToast('⬇️ Exported Stock', 'ok');
+}
+
+// Print only what the list shows now: the chosen status and Group (not the whole stock page)
+function printStockList() {
+  var rows = _stockListRows();
+  if (!rows.length) { showToast('⚠️ គ្មាន Batch សម្រាប់ Print', 'err'); return; }
+  var statusName = { active:'ក្នុងស្តុក', reserved:'X-match រួច', near:'ជិតផុតកំណត់', expired:'ផុតកំណត់', empty:'អស់ស្តុក', discarded:'បានបោះបង់', all:'គ្រប់ Batch' }[_stockFilter] || _stockFilter;
+  var filterText = _stockSearch ? 'ស្វែងរក Bag Code "' + _stockSearch + '"' : 'ស្ថានភាព: ' + statusName + ' · Group: ' + (_stockGrp || 'ទាំងអស់');
+  function stText(b) {
+    var rem = b.qty_remaining || 0, res = b.qty_reserved || 0;
+    if (b.status === 'expired') return 'ផុតកំណត់';
+    if (b.status === 'discarded') return 'បានបោះបង់';
+    if (rem <= 0) return 'អស់ស្តុក';
+    if (b.expiry_date && _daysUntil(b.expiry_date) <= 0) return 'ផុតហើយ';
+    return res > 0 ? 'X-match ' + res : 'ក្នុងស្តុក';
+  }
+  var th = 'padding:7px 10px;text-align:left;white-space:nowrap;border:1px solid #cbd5e1;background:#0C4A6E;color:white;font-size:12px';
+  var td = 'padding:6px 10px;border:1px solid #cbd5e1;font-size:12px';
+  var totBags = 0, totFree = 0;
+  var body = rows.map(function(b, i) {
+    var rem = b.qty_remaining || 0, res = b.qty_reserved || 0;
+    totBags += rem; totFree += Math.max(0, rem - res);
+    return '<tr>' +
+      '<td style="' + td + ';text-align:right">' + (i + 1) + '</td>' +
+      '<td style="' + td + ";font-family:'JetBrains Mono',monospace;font-weight:700\">" + eH(b.batch_no || ('#' + b.id)) + '</td>' +
+      '<td style="' + td + ';font-weight:800;color:' + (STOCK_GRP_COLOR[b.grp] || '#111') + '">' + eH(b.grp) + '</td>' +
+      '<td style="' + td + '">' + eH(b.blood_type) + '</td>' +
+      '<td style="' + td + ';text-align:right">' + (b.qty_received || 0) + '</td>' +
+      '<td style="' + td + ';text-align:right">' + (res || '—') + '</td>' +
+      '<td style="' + td + ';text-align:right;font-weight:800">' + Math.max(0, rem - res) + '</td>' +
+      '<td style="' + td + ';white-space:nowrap">' + eH(b.expiry_date || '-') + '</td>' +
+      '<td style="' + td + ';white-space:nowrap">' + eH(_recvLabel(b)) + '</td>' +
+      '<td style="' + td + '">' + eH(b.source || '-') + '</td>' +
+      '<td style="' + td + ';font-weight:700">' + stText(b) + '</td></tr>';
+  }).join('');
+  var head = ['#','Batch No.','Group','ប្រភេទ','ទទួល','X-match','នៅសេរី','ថ្ងៃផុតកំណត់','ថ្ងៃទទួល','ប្រភព','ស្ថានភាព'].map(function(h) { return '<th style="' + th + '">' + h + '</th>'; }).join('');
+  var titleHtml = '<h1 style="font-size:20px;font-weight:900;margin:0 0 4px">📦 TSNHL Blood Report — បញ្ជី Batch ស្តុក</h1>' +
+    '<p style="color:#444;font-size:13px;font-weight:700;margin:0 0 4px">' + eH(filterText) + ' · ' + rows.length + ' Batch · នៅសេរី ' + totFree + ' Bag</p>' +
+    '<p style="color:#666;font-size:12px;margin:0 0 16px">Printed ' + new Date().toLocaleString() + '</p>';
+  var bodyHtml = '<table style="width:100%;border-collapse:collapse;min-width:0"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>' +
+    '<tfoot><tr><td colspan="6" style="' + td + ';text-align:right;font-weight:900">សរុប ' + rows.length + ' Batch</td><td style="' + td + ';text-align:right;font-weight:900">' + totFree + '</td><td colspan="4" style="' + td + '"></td></tr></tfoot></table>';
+  _openPrintWindow(titleHtml, bodyHtml);
 }
 
 function printStockPage() {
@@ -5740,6 +5841,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
         <button type="button" id="stock-search-clear" onclick="stockSearchClear()" title="Clear" style="display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;color:#64748B;cursor:pointer;font-size:15px;padding:2px 6px">✕</button>
       </div>
       <button type="button" class="btn btn-ghost" onclick="stockSearch()" style="white-space:nowrap">🔍 ស្វែងរក</button>
+      <div id="stock-grp-chips" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto"></div>
     </div>
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
       <div id="stock-table" style="overflow-x:auto"></div>
@@ -6913,7 +7015,7 @@ function _dailyOldRows(win) {
       var base = {
         rid: r.id != null ? r.id : (r.name + '|' + entryDay),
         name: r.name || '-', age: r.age || '-', gender: r.gender || '-',
-        ward: r.ward_from || '-',
+        ward: r.ward_from || '-', wardTo: r.ward_to || '-',
         code: r['blood_code'+sfx] || '-',
         type: r['blood_type'+sfx] || '-',
         qty: 1,
@@ -6955,8 +7057,8 @@ async function _dailyRetFromAudit(rg) {
   // Only the few JSON fields we need are requested (small payload even for a month)
   var sel = 'id,record_id,action,changed_by,changed_at,' +
     'old_qty:old_data->>qty_return,new_qty:new_data->>qty_return,' +
-    'ward:new_data->>ward_from,name:new_data->>name,age:new_data->>age,gender:new_data->>gender,entry:new_data->>date,' +
-    'o_ward:old_data->>ward_from,o_name:old_data->>name,o_age:old_data->>age,o_gender:old_data->>gender,o_entry:old_data->>date';
+    'ward:new_data->>ward_from,ward_to:new_data->>ward_to,name:new_data->>name,age:new_data->>age,gender:new_data->>gender,entry:new_data->>date,' +
+    'o_ward:old_data->>ward_from,o_ward_to:old_data->>ward_to,o_name:old_data->>name,o_age:old_data->>age,o_gender:old_data->>gender,o_entry:old_data->>date';
   var rows = [], PAGE = 1000;
   for (var pg = 0; pg < 20; pg++) {
     var q = 'audit_log?select=' + encodeURIComponent(sel) +
@@ -6976,7 +7078,7 @@ async function _dailyRetFromAudit(rg) {
     var entry = String(a.entry || a.o_entry || '').slice(0, 10);
     ev.push({
       when: when, approx: false, qty: delta,
-      ward: a.ward || a.o_ward || '-', name: a.name || a.o_name || '-',
+      ward: a.ward || a.o_ward || '-', wardTo: a.ward_to || a.o_ward_to || '-', name: a.name || a.o_name || '-',
       age: a.age || a.o_age || '-', gender: a.gender || a.o_gender || '-',
       staff: a.changed_by || '-',
       group: (entry && entry === _localDay(when)) ? 'ថ្មី' : 'ចាស់'
@@ -6993,7 +7095,7 @@ function _dailyRetFallback(win) {
     if (!_entryInRange(d, win)) return;
     var q = _num(r.qty_return);
     if (q <= 0) return;
-    ev.push({ when: new Date(d + 'T00:00:00'), approx: true, qty: q, ward: r.ward_from || '-', name: r.name || '-',
+    ev.push({ when: new Date(d + 'T00:00:00'), approx: true, qty: q, ward: r.ward_from || '-', wardTo: r.ward_to || '-', name: r.name || '-',
       age: r.age || '-', gender: r.gender || '-', staff: r.lab_person || '-', group: 'ថ្មី' });
   });
   return ev;
@@ -7012,7 +7114,7 @@ function _retSummaryHtml(events) {
 function _retTableHtml(display, all) {
   var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
-    '<th style="' + th + '">#</th><th style="' + th + '">ថ្ងៃខែឆ្នាំ ម៉ោង</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">ឈ្មោះអ្នកជំងឺ</th>' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ថ្ងៃខែឆ្នាំ ម៉ោង</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">➡️ បញ្ជូនទៅផ្នែក</th><th style="' + th + '">ឈ្មោះអ្នកជំងឺ</th>' +
     '<th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ក្រុម</th>' +
     '<th style="' + th + ';text-align:right">ចំនួនសង</th><th style="' + th + '">បុគ្គលិក</th></tr></thead><tbody>';
   display.forEach(function(e, i) {
@@ -7023,6 +7125,7 @@ function _retTableHtml(display, all) {
       '<td style="padding:9px 12px">' + (i + 1) + '</td>' +
       '<td style="padding:9px 12px;white-space:nowrap">' + _localDay(e.when) + (e.approx ? '' : ' <b>' + _localHM(e.when) + '</b>') + '</td>' +
       '<td style="padding:9px 12px;font-weight:700">' + eH(e.ward) + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700;color:#0369A1">' + (e.wardTo && e.wardTo !== '-' ? eH(e.wardTo) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
       '<td style="padding:9px 12px;font-weight:700">' + eH(e.name) + '</td>' +
       '<td style="padding:9px 12px">' + eH(e.age) + '</td>' +
       '<td style="padding:9px 12px">' + eH(e.gender) + '</td>' +
@@ -7032,7 +7135,7 @@ function _retTableHtml(display, all) {
   });
   var tot = 0; all.forEach(function(e) { tot += e.qty; });
   h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
-    '<td colspan="7" style="padding:10px 12px;text-align:right">សរុប (' + all.length + ' ដង)</td>' +
+    '<td colspan="8" style="padding:10px 12px;text-align:right">សរុប (' + all.length + ' ដង)</td>' +
     '<td style="padding:10px 12px;text-align:right;color:#7C3AED">' + tot + '</td><td></td></tr></tfoot></table>';
   return h;
 }
@@ -7156,7 +7259,7 @@ function _dailyRemainingRows(win) {
       id: r.id, hn: r.hn || '-', doctor: r.doctor_req || '-', dx: r.diagnosis || '-', hb: (r.hb != null && r.hb !== '') ? r.hb : '-',
       grp: grpStr || r.grp || '-', remark: r.hold_remark || '',
       group: _entryInRange(entryDay, win) ? 'ថ្មី' : 'ចាស់',
-      name: r.name || '-', age: r.age || '-', gender: r.gender || '-', ward: r.ward_from || '-',
+      name: r.name || '-', age: r.age || '-', gender: r.gender || '-', ward: r.ward_from || '-', wardTo: r.ward_to || '-',
       entryDay: entryDay, ageDays: ageDays,
       remNew: ri.nw, remBorrow: ri.borrow, remOther: ri.other, total: ri.total,
       codes: bags.map(function(b) { return b.code; }).join(', ') || '-',
@@ -7237,7 +7340,7 @@ function _remTableHtml(displayRows, allRows, asText) {
   var CUT = 'max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
     '<th style="' + th + '">#</th><th style="' + th + '">ក្រុម</th><th style="' + th + '">HN</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th>' +
-    '<th style="' + th + '">ផ្នែក</th><th style="' + th + '">គ្រូពេទ្យ</th><th style="' + th + '">Dx</th><th style="' + th + '">Hb</th><th style="' + th + '">Group</th>' +
+    '<th style="' + th + '">ផ្នែក</th><th style="' + th + '">➡️ បញ្ជូនទៅផ្នែក</th><th style="' + th + '">គ្រូពេទ្យ</th><th style="' + th + '">Dx</th><th style="' + th + '">Hb</th><th style="' + th + '">Group</th>' +
     '<th style="' + th + '">ថ្ងៃបញ្ចូល</th><th style="' + th + '">អាយុទុក</th>' +
     '<th style="' + th + ';text-align:center">ពី ថ្មី</th><th style="' + th + ';text-align:center;background:#B91C1C">⚠️ ពី ខ្ចី</th>' +
     (showOther ? '<th style="' + th + ';text-align:center">❔</th>' : '') +
@@ -7261,6 +7364,7 @@ function _remTableHtml(displayRows, allRows, asText) {
       '<td style="padding:9px 12px">' + eH(r.age) + '</td>' +
       '<td style="padding:9px 12px">' + eH(r.gender) + '</td>' +
       '<td style="padding:9px 12px">' + eH(r.ward) + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700;color:#0369A1">' + (r.wardTo && r.wardTo !== '-' ? eH(r.wardTo) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
       '<td style="padding:9px 12px"><div style="' + CUT + '" title="' + eH(r.doctor) + '">' + eH(r.doctor) + '</div></td>' +
       '<td style="padding:9px 12px;max-width:none;overflow:visible;text-overflow:clip;white-space:normal">' + eH(r.dx) + '</td>' +
       '<td style="padding:9px 12px">' + eH(r.hb) + '</td>' +
@@ -7279,7 +7383,7 @@ function _remTableHtml(displayRows, allRows, asText) {
   var sNew = 0, sBor = 0, sOth = 0, sTot = 0;
   allRows.forEach(function(r) { sNew += r.remNew; sBor += r.remBorrow; sOth += r.remOther; sTot += r.total; });
   h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
-    '<td colspan="13" style="padding:10px 12px;text-align:right">សរុប (' + allRows.length + ' ករណី)</td>' +
+    '<td colspan="14" style="padding:10px 12px;text-align:right">សរុប (' + allRows.length + ' ករណី)</td>' +
     '<td style="padding:10px 12px;text-align:center;color:#0891B2">' + sNew + '</td>' +
     '<td style="padding:10px 12px;text-align:center;color:#B91C1C">' + sBor + '</td>' +
     (showOther ? '<td style="padding:10px 12px;text-align:center">' + sOth + '</td>' : '') +
@@ -7418,7 +7522,7 @@ function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol, win
   var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
 
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
-    '<th style="' + th + '">#</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ផ្នែក</th>' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">➡️ បញ្ជូនទៅផ្នែក</th>' +
     '<th style="' + th + '">លេខកូដសាក់</th><th style="' + th + '">ប្រភេទសាក់</th><th style="' + th + ';text-align:right">ចំនួន</th>' +
     '<th style="' + th + '">ម៉ោង (យក/សង)</th><th style="' + th + '">បុគ្គលិក Lab</th><th style="' + th + '">បុគ្គលិកផ្នែក</th><th style="' + th + '">ស្ថានភាព</th>' +
   '</tr></thead><tbody>';
@@ -7433,6 +7537,7 @@ function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol, win
       '<td style="' + td + ';padding-top:11px">' + eH(hd.age) + '</td>' +
       '<td style="' + td + ';padding-top:11px">' + eH(hd.gender) + '</td>' +
       '<td style="' + td + ';padding-top:11px">' + eH(hd.ward) + '</td>' +
+      '<td style="' + td + ';padding-top:11px;font-weight:700;color:#0369A1">' + (hd.wardTo && hd.wardTo !== '-' ? eH(hd.wardTo) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
       '<td style="' + td + ';font-family:JetBrains Mono,monospace">' + stack(bags, function(b) { return eH(b.code); }) + '</td>' +
       '<td style="' + td + '">' + stack(bags, function(b) { return eH(b.type); }) + '</td>' +
       '<td style="' + td + ';text-align:right">' + stack(bags, function(b) { return b.qty; }, 'justify-content:flex-end') + '</td>' +
@@ -7450,7 +7555,7 @@ function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol, win
 
   h += '</tbody>' +
     '<tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
-      '<td colspan="7" style="padding:10px 12px;text-align:right">សរុប (' + groups.length + ' នាក់)</td>' +
+      '<td colspan="8" style="padding:10px 12px;text-align:right">សរុប (' + groups.length + ' នាក់)</td>' +
       '<td style="padding:10px 12px;text-align:right">' + totQty + '</td>' +
       '<td colspan="4" style="padding:10px 12px;font-size:11.5px;color:var(--muted)">' +
         (totRem ? '📦 នៅសល់: ' + totRem + '&nbsp;&nbsp;·&nbsp;&nbsp;' : '') +
@@ -7477,7 +7582,7 @@ function _dailyNewRows(win) {
       rows.push({
         rid: r.id != null ? r.id : (r.name + '|' + entryDay),
         name: r.name || '-', age: r.age || '-', gender: r.gender || '-',
-        ward: r.ward_from || '-',
+        ward: r.ward_from || '-', wardTo: r.ward_to || '-',
         code: r['blood_code'+sfx] || '-',
         type: r['blood_type'+sfx] || '-',
         qty: 1,
@@ -7624,26 +7729,26 @@ function exportDailyExcel() {
   var ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
 
   // ជំងឺថ្មី — every bag on records entered today
-  var newRowsAoa = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
+  var newRowsAoa = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','បញ្ជូនទៅផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
   var newRows = _dailyNewRows(win);
   var nNew = 0, nUsed = 0, nBack = 0, nCannot = 0;
   newRows.forEach(function(row) {
     if (row.status === 'នៅសល់') nNew++; else if (row.status === 'យកប្រើ') nUsed++; else if (row.status === 'សង') nBack++; else if (row.status === 'ពុំអាចសង') nCannot++;
-    newRowsAoa.push([row.name, row.age, row.gender, row.ward, row.code, row.type, row.qty, row.lab, row.taker, row.status]);
+    newRowsAoa.push([row.name, row.age, row.gender, row.ward, row.wardTo !== '-' ? row.wardTo : '', row.code, row.type, row.qty, row.lab, row.taker, row.status]);
   });
-  newRowsAoa.push(['','','','','','','','','','']);
-  newRowsAoa.push(['សរុប','','','','','', newRows.length, '', '', 'នៅសល់:'+nNew+' · យកប្រើ:'+nUsed+' · សង:'+nBack+' · ពុំអាចសង:'+nCannot]);
+  newRowsAoa.push(['','','','','','','','','','','']);
+  newRowsAoa.push(['សរុប','','','','','','', newRows.length, '', '', 'នៅសល់:'+nNew+' · យកប្រើ:'+nUsed+' · សង:'+nBack+' · ពុំអាចសង:'+nCannot]);
   var ws0 = XLSX.utils.aoa_to_sheet(newRowsAoa);
 
-  var oldRows = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','ថ្ងៃ ម៉ោង (យក/សង)','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
+  var oldRows = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','បញ្ជូនទៅផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','ថ្ងៃ ម៉ោង (យក/សង)','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
   var dailyRows = _dailyOldRows(win);
   var totUsed = 0, totBack = 0, totCannot = 0, totQty = dailyRows.length;
   dailyRows.forEach(function(row) {
     if (row.status === 'យកប្រើ') totUsed++; else if (row.status === 'សង') totBack++; else if (row.status === 'ពុំអាចសង') totCannot++;
-    oldRows.push([row.name, row.age, row.gender, row.ward, row.code, row.type, row.qty, row.takenDt, row.lab, row.taker, row.status]);
+    oldRows.push([row.name, row.age, row.gender, row.ward, row.wardTo !== '-' ? row.wardTo : '', row.code, row.type, row.qty, row.takenDt, row.lab, row.taker, row.status]);
   });
-  oldRows.push(['','','','','','','','','','','']);
-  oldRows.push(['សរុប','','','','','', totQty, '', '', '', 'យកប្រើ:'+totUsed+' · សង:'+totBack+' · ពុំអាចសង:'+totCannot]);
+  oldRows.push(['','','','','','','','','','','','']);
+  oldRows.push(['សរុប','','','','','','', totQty, '', '', '', 'យកប្រើ:'+totUsed+' · សង:'+totBack+' · ពុំអាចសង:'+totCannot]);
   var ws2 = XLSX.utils.aoa_to_sheet(oldRows);
 
   // Bag Flow sheet
@@ -7660,22 +7765,22 @@ function exportDailyExcel() {
   var wsFlow = XLSX.utils.aoa_to_sheet(flowAoa);
 
   // Remaining stock sheet
-  var remAoa = [['ក្រុម','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','គ្រូពេទ្យ','Dx','Hb','Group','ថ្ងៃបញ្ចូល','អាយុទុក (ថ្ងៃ)','សល់ពីថ្មី','សល់ពីខ្ចី','មិនបញ្ជាក់','សរុប','លេខកូដសាក់','ប្រភេទ','Remark']];
+  var remAoa = [['ក្រុម','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','បញ្ជូនទៅផ្នែក','គ្រូពេទ្យ','Dx','Hb','Group','ថ្ងៃបញ្ចូល','អាយុទុក (ថ្ងៃ)','សល់ពីថ្មី','សល់ពីខ្ចី','មិនបញ្ជាក់','សរុប','លេខកូដសាក់','ប្រភេទ','Remark']];
   _dailyRemainingRows(win).forEach(function(r) {
-    remAoa.push([r.group, r.hn, r.name, r.age, r.gender, r.ward, r.doctor, r.dx, r.hb, r.grp, r.entryDay, r.ageDays, r.remNew, r.remBorrow, r.remOther, r.total, r.codes, r.types, r.remark]);
+    remAoa.push([r.group, r.hn, r.name, r.age, r.gender, r.ward, r.wardTo !== '-' ? r.wardTo : '', r.doctor, r.dx, r.hb, r.grp, r.entryDay, r.ageDays, r.remNew, r.remBorrow, r.remOther, r.total, r.codes, r.types, r.remark]);
   });
   var wsRem = XLSX.utils.aoa_to_sheet(remAoa);
 
   // ឈាមសង — បានពីមជ្ឈមណ្ឌល (from the last loaded table)
-  var retAoa = [['ថ្ងៃខែឆ្នាំ','ម៉ោង','ផ្នែក','ឈ្មោះអ្នកជំងឺ','អាយុ','ភេទ','ក្រុម','ចំនួនសង','បុគ្គលិក']];
+  var retAoa = [['ថ្ងៃខែឆ្នាំ','ម៉ោង','ផ្នែក','បញ្ជូនទៅផ្នែក','ឈ្មោះអ្នកជំងឺ','អាយុ','ភេទ','ក្រុម','ចំនួនសង','បុគ្គលិក']];
   var retByWard = {}, retTot = 0;
   _dailyRetEvents.slice().sort(function(a, b) { return a.when - b.when; }).forEach(function(e) {
-    retAoa.push([_localDay(e.when), e.approx ? '' : _localHM(e.when), e.ward, e.name, e.age, e.gender, e.group, e.qty, e.staff]);
+    retAoa.push([_localDay(e.when), e.approx ? '' : _localHM(e.when), e.ward, (e.wardTo && e.wardTo !== '-') ? e.wardTo : '', e.name, e.age, e.gender, e.group, e.qty, e.staff]);
     retByWard[e.ward] = (retByWard[e.ward] || 0) + e.qty; retTot += e.qty;
   });
   retAoa.push([]); retAoa.push(['សរុបតាមផ្នែក (' + _dailyRetLabel() + ')']);
-  Object.keys(retByWard).sort(function(a, b) { return retByWard[b] - retByWard[a]; }).forEach(function(w) { retAoa.push(['', '', w, '', '', '', '', retByWard[w]]); });
-  retAoa.push(['', '', 'សរុប', '', '', '', '', retTot]);
+  Object.keys(retByWard).sort(function(a, b) { return retByWard[b] - retByWard[a]; }).forEach(function(w) { retAoa.push(['', '', w, '', '', '', '', '', retByWard[w]]); });
+  retAoa.push(['', '', 'សរុប', '', '', '', '', '', retTot]);
   var wsRet = XLSX.utils.aoa_to_sheet(retAoa);
 
   // Current stock snapshot (live — labeled clearly since it's not tied to the report range)
