@@ -7015,7 +7015,7 @@ function _dailyOldRows(win) {
       var base = {
         rid: r.id != null ? r.id : (r.name + '|' + entryDay),
         name: r.name || '-', age: r.age || '-', gender: r.gender || '-',
-        ward: r.ward_from || '-',
+        ward: r.ward_from || '-', wardTo: r.ward_to || '-',
         code: r['blood_code'+sfx] || '-',
         type: r['blood_type'+sfx] || '-',
         qty: 1,
@@ -7259,7 +7259,7 @@ function _dailyRemainingRows(win) {
       id: r.id, hn: r.hn || '-', doctor: r.doctor_req || '-', dx: r.diagnosis || '-', hb: (r.hb != null && r.hb !== '') ? r.hb : '-',
       grp: grpStr || r.grp || '-', remark: r.hold_remark || '',
       group: _entryInRange(entryDay, win) ? 'ថ្មី' : 'ចាស់',
-      name: r.name || '-', age: r.age || '-', gender: r.gender || '-', ward: r.ward_from || '-',
+      name: r.name || '-', age: r.age || '-', gender: r.gender || '-', ward: r.ward_from || '-', wardTo: r.ward_to || '-',
       entryDay: entryDay, ageDays: ageDays,
       remNew: ri.nw, remBorrow: ri.borrow, remOther: ri.other, total: ri.total,
       codes: bags.map(function(b) { return b.code; }).join(', ') || '-',
@@ -7340,7 +7340,7 @@ function _remTableHtml(displayRows, allRows, asText) {
   var CUT = 'max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
     '<th style="' + th + '">#</th><th style="' + th + '">ក្រុម</th><th style="' + th + '">HN</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th>' +
-    '<th style="' + th + '">ផ្នែក</th><th style="' + th + '">គ្រូពេទ្យ</th><th style="' + th + '">Dx</th><th style="' + th + '">Hb</th><th style="' + th + '">Group</th>' +
+    '<th style="' + th + '">ផ្នែក</th><th style="' + th + '">➡️ បញ្ជូនទៅផ្នែក</th><th style="' + th + '">គ្រូពេទ្យ</th><th style="' + th + '">Dx</th><th style="' + th + '">Hb</th><th style="' + th + '">Group</th>' +
     '<th style="' + th + '">ថ្ងៃបញ្ចូល</th><th style="' + th + '">អាយុទុក</th>' +
     '<th style="' + th + ';text-align:center">ពី ថ្មី</th><th style="' + th + ';text-align:center;background:#B91C1C">⚠️ ពី ខ្ចី</th>' +
     (showOther ? '<th style="' + th + ';text-align:center">❔</th>' : '') +
@@ -7364,6 +7364,7 @@ function _remTableHtml(displayRows, allRows, asText) {
       '<td style="padding:9px 12px">' + eH(r.age) + '</td>' +
       '<td style="padding:9px 12px">' + eH(r.gender) + '</td>' +
       '<td style="padding:9px 12px">' + eH(r.ward) + '</td>' +
+      '<td style="padding:9px 12px;font-weight:700;color:#0369A1">' + (r.wardTo && r.wardTo !== '-' ? eH(r.wardTo) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
       '<td style="padding:9px 12px"><div style="' + CUT + '" title="' + eH(r.doctor) + '">' + eH(r.doctor) + '</div></td>' +
       '<td style="padding:9px 12px;max-width:none;overflow:visible;text-overflow:clip;white-space:normal">' + eH(r.dx) + '</td>' +
       '<td style="padding:9px 12px">' + eH(r.hb) + '</td>' +
@@ -7382,7 +7383,7 @@ function _remTableHtml(displayRows, allRows, asText) {
   var sNew = 0, sBor = 0, sOth = 0, sTot = 0;
   allRows.forEach(function(r) { sNew += r.remNew; sBor += r.remBorrow; sOth += r.remOther; sTot += r.total; });
   h += '</tbody><tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
-    '<td colspan="13" style="padding:10px 12px;text-align:right">សរុប (' + allRows.length + ' ករណី)</td>' +
+    '<td colspan="14" style="padding:10px 12px;text-align:right">សរុប (' + allRows.length + ' ករណី)</td>' +
     '<td style="padding:10px 12px;text-align:center;color:#0891B2">' + sNew + '</td>' +
     '<td style="padding:10px 12px;text-align:center;color:#B91C1C">' + sBor + '</td>' +
     (showOther ? '<td style="padding:10px 12px;text-align:center">' + sOth + '</td>' : '') +
@@ -7521,7 +7522,7 @@ function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol, win
   var th = 'padding:10px 12px;text-align:left;white-space:nowrap';
 
   var h = '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:#0C4A6E;color:white">' +
-    '<th style="' + th + '">#</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ផ្នែក</th>' +
+    '<th style="' + th + '">#</th><th style="' + th + '">ឈ្មោះ</th><th style="' + th + '">អាយុ</th><th style="' + th + '">ភេទ</th><th style="' + th + '">ផ្នែក</th><th style="' + th + '">➡️ បញ្ជូនទៅផ្នែក</th>' +
     '<th style="' + th + '">លេខកូដសាក់</th><th style="' + th + '">ប្រភេទសាក់</th><th style="' + th + ';text-align:right">ចំនួន</th>' +
     '<th style="' + th + '">ម៉ោង (យក/សង)</th><th style="' + th + '">បុគ្គលិក Lab</th><th style="' + th + '">បុគ្គលិកផ្នែក</th><th style="' + th + '">ស្ថានភាព</th>' +
   '</tr></thead><tbody>';
@@ -7536,6 +7537,7 @@ function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol, win
       '<td style="' + td + ';padding-top:11px">' + eH(hd.age) + '</td>' +
       '<td style="' + td + ';padding-top:11px">' + eH(hd.gender) + '</td>' +
       '<td style="' + td + ';padding-top:11px">' + eH(hd.ward) + '</td>' +
+      '<td style="' + td + ';padding-top:11px;font-weight:700;color:#0369A1">' + (hd.wardTo && hd.wardTo !== '-' ? eH(hd.wardTo) : '<span style="color:#CBD5E1">—</span>') + '</td>' +
       '<td style="' + td + ';font-family:JetBrains Mono,monospace">' + stack(bags, function(b) { return eH(b.code); }) + '</td>' +
       '<td style="' + td + '">' + stack(bags, function(b) { return eH(b.type); }) + '</td>' +
       '<td style="' + td + ';text-align:right">' + stack(bags, function(b) { return b.qty; }, 'justify-content:flex-end') + '</td>' +
@@ -7553,7 +7555,7 @@ function _renderDailyBagTable(tblWrap, countEl, rows, emptyMsg, showDateCol, win
 
   h += '</tbody>' +
     '<tfoot><tr style="background:#F1F5F9;font-weight:800;border-top:2px solid var(--border)">' +
-      '<td colspan="7" style="padding:10px 12px;text-align:right">សរុប (' + groups.length + ' នាក់)</td>' +
+      '<td colspan="8" style="padding:10px 12px;text-align:right">សរុប (' + groups.length + ' នាក់)</td>' +
       '<td style="padding:10px 12px;text-align:right">' + totQty + '</td>' +
       '<td colspan="4" style="padding:10px 12px;font-size:11.5px;color:var(--muted)">' +
         (totRem ? '📦 នៅសល់: ' + totRem + '&nbsp;&nbsp;·&nbsp;&nbsp;' : '') +
@@ -7580,7 +7582,7 @@ function _dailyNewRows(win) {
       rows.push({
         rid: r.id != null ? r.id : (r.name + '|' + entryDay),
         name: r.name || '-', age: r.age || '-', gender: r.gender || '-',
-        ward: r.ward_from || '-',
+        ward: r.ward_from || '-', wardTo: r.ward_to || '-',
         code: r['blood_code'+sfx] || '-',
         type: r['blood_type'+sfx] || '-',
         qty: 1,
@@ -7727,26 +7729,26 @@ function exportDailyExcel() {
   var ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
 
   // ជំងឺថ្មី — every bag on records entered today
-  var newRowsAoa = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
+  var newRowsAoa = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','បញ្ជូនទៅផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
   var newRows = _dailyNewRows(win);
   var nNew = 0, nUsed = 0, nBack = 0, nCannot = 0;
   newRows.forEach(function(row) {
     if (row.status === 'នៅសល់') nNew++; else if (row.status === 'យកប្រើ') nUsed++; else if (row.status === 'សង') nBack++; else if (row.status === 'ពុំអាចសង') nCannot++;
-    newRowsAoa.push([row.name, row.age, row.gender, row.ward, row.code, row.type, row.qty, row.lab, row.taker, row.status]);
+    newRowsAoa.push([row.name, row.age, row.gender, row.ward, row.wardTo !== '-' ? row.wardTo : '', row.code, row.type, row.qty, row.lab, row.taker, row.status]);
   });
-  newRowsAoa.push(['','','','','','','','','','']);
-  newRowsAoa.push(['សរុប','','','','','', newRows.length, '', '', 'នៅសល់:'+nNew+' · យកប្រើ:'+nUsed+' · សង:'+nBack+' · ពុំអាចសង:'+nCannot]);
+  newRowsAoa.push(['','','','','','','','','','','']);
+  newRowsAoa.push(['សរុប','','','','','','', newRows.length, '', '', 'នៅសល់:'+nNew+' · យកប្រើ:'+nUsed+' · សង:'+nBack+' · ពុំអាចសង:'+nCannot]);
   var ws0 = XLSX.utils.aoa_to_sheet(newRowsAoa);
 
-  var oldRows = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','ថ្ងៃ ម៉ោង (យក/សង)','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
+  var oldRows = [['ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','បញ្ជូនទៅផ្នែក','លេខកូដសាក់','ប្រភេទសាក់','ចំនួន','ថ្ងៃ ម៉ោង (យក/សង)','បុគ្គលិក Lab','បុគ្គលិកផ្នែក','ស្ថានភាព']];
   var dailyRows = _dailyOldRows(win);
   var totUsed = 0, totBack = 0, totCannot = 0, totQty = dailyRows.length;
   dailyRows.forEach(function(row) {
     if (row.status === 'យកប្រើ') totUsed++; else if (row.status === 'សង') totBack++; else if (row.status === 'ពុំអាចសង') totCannot++;
-    oldRows.push([row.name, row.age, row.gender, row.ward, row.code, row.type, row.qty, row.takenDt, row.lab, row.taker, row.status]);
+    oldRows.push([row.name, row.age, row.gender, row.ward, row.wardTo !== '-' ? row.wardTo : '', row.code, row.type, row.qty, row.takenDt, row.lab, row.taker, row.status]);
   });
-  oldRows.push(['','','','','','','','','','','']);
-  oldRows.push(['សរុប','','','','','', totQty, '', '', '', 'យកប្រើ:'+totUsed+' · សង:'+totBack+' · ពុំអាចសង:'+totCannot]);
+  oldRows.push(['','','','','','','','','','','','']);
+  oldRows.push(['សរុប','','','','','','', totQty, '', '', '', 'យកប្រើ:'+totUsed+' · សង:'+totBack+' · ពុំអាចសង:'+totCannot]);
   var ws2 = XLSX.utils.aoa_to_sheet(oldRows);
 
   // Bag Flow sheet
@@ -7763,9 +7765,9 @@ function exportDailyExcel() {
   var wsFlow = XLSX.utils.aoa_to_sheet(flowAoa);
 
   // Remaining stock sheet
-  var remAoa = [['ក្រុម','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','គ្រូពេទ្យ','Dx','Hb','Group','ថ្ងៃបញ្ចូល','អាយុទុក (ថ្ងៃ)','សល់ពីថ្មី','សល់ពីខ្ចី','មិនបញ្ជាក់','សរុប','លេខកូដសាក់','ប្រភេទ','Remark']];
+  var remAoa = [['ក្រុម','HN','ឈ្មោះ','អាយុ','ភេទ','ផ្នែក','បញ្ជូនទៅផ្នែក','គ្រូពេទ្យ','Dx','Hb','Group','ថ្ងៃបញ្ចូល','អាយុទុក (ថ្ងៃ)','សល់ពីថ្មី','សល់ពីខ្ចី','មិនបញ្ជាក់','សរុប','លេខកូដសាក់','ប្រភេទ','Remark']];
   _dailyRemainingRows(win).forEach(function(r) {
-    remAoa.push([r.group, r.hn, r.name, r.age, r.gender, r.ward, r.doctor, r.dx, r.hb, r.grp, r.entryDay, r.ageDays, r.remNew, r.remBorrow, r.remOther, r.total, r.codes, r.types, r.remark]);
+    remAoa.push([r.group, r.hn, r.name, r.age, r.gender, r.ward, r.wardTo !== '-' ? r.wardTo : '', r.doctor, r.dx, r.hb, r.grp, r.entryDay, r.ageDays, r.remNew, r.remBorrow, r.remOther, r.total, r.codes, r.types, r.remark]);
   });
   var wsRem = XLSX.utils.aoa_to_sheet(remAoa);
 
