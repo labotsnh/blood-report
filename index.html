@@ -2247,6 +2247,22 @@ function _isInStock(b) {
   return !b.expiry_date || _daysUntil(b.expiry_date) > 0;
 }
 function _isEmptyBatch(b) { return b.status === 'active' && (b.qty_remaining || 0) <= 0; }
+function _stockStatusMatch(b) {
+  if (_stockFilter === 'all') return true;
+  if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
+  if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
+  if (_stockFilter === 'active') return _isInStock(b);
+  if (_stockFilter === 'empty') return _isEmptyBatch(b);
+  return b.status === _stockFilter;
+}
+// The batches the list currently shows (status chip + Group chip, or a Bag Code search over everything)
+function _stockListRows() {
+  var q = _stockSearch.toLowerCase();
+  return allStock.filter(function(b) {
+    if (q) return String(b.batch_no || ('#' + b.id)).toLowerCase().indexOf(q) >= 0;
+    return _stockStatusMatch(b) && (!_stockGrp || b.grp === _stockGrp);
+  });
+}
 var _stockGrp = '';    // Group filter for the batch list ('' = all groups)
 var _stockSearch = ''; // Bag Code search over every status; overrides the filter chips while non-empty
 var _stockListLimit = 20, _stockListKey = 'active';
@@ -2711,14 +2727,7 @@ function buildStockPage() {
 
   // ── Batch table ──
   var q = _stockSearch.toLowerCase();
-  function statusMatch(b) {
-    if (_stockFilter === 'all') return true;
-    if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
-    if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
-    if (_stockFilter === 'active') return _isInStock(b);
-    if (_stockFilter === 'empty') return _isEmptyBatch(b);
-    return b.status === _stockFilter;
-  }
+  function statusMatch(b) { return _stockStatusMatch(b); }
   // ── Group chips: counts follow the selected status filter ──
   var grpCount = {}, inStatus = allStock.filter(statusMatch);
   inStatus.forEach(function(b) { grpCount[b.grp] = (grpCount[b.grp] || 0) + 1; });
@@ -2732,13 +2741,11 @@ function buildStockPage() {
   var gEl = document.getElementById('stock-grp-chips');
   if (gEl) {
     gEl.innerHTML = '<span style="font-size:12px;font-weight:800;color:var(--muted)">🩸 Group:</span>' + gchip('ទាំងអស់', '', inStatus.length, '#475569') +
-      grpList.map(function(g) { return gchip(g, g, grpCount[g] || 0, STOCK_GRP_COLOR[g] || '#334155'); }).join('');
+      grpList.map(function(g) { return gchip(g, g, grpCount[g] || 0, STOCK_GRP_COLOR[g] || '#334155'); }).join('') +
+      '<button type="button" onclick="printStockList()" title="Print តែបញ្ជីដែលកំពុងបង្ហាញ" style="border:1.5px solid #0369A1;background:#0369A1;color:white;border-radius:20px;padding:5px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit">🖨️ Print ' + (_stockGrp ? eH(_stockGrp) : 'បញ្ជីនេះ') + '</button>';
     gEl.style.opacity = _stockSearch ? '.45' : '';
   }
-  var rows = allStock.filter(function(b) {
-    if (q) return String(b.batch_no || ('#' + b.id)).toLowerCase().indexOf(q) >= 0;   // a Bag Code search ignores status and group
-    return statusMatch(b) && (!_stockGrp || b.grp === _stockGrp);
-  });
+  var rows = _stockListRows();   // a Bag Code search ignores status and group
   var listKey = _stockFilter + '|' + _stockGrp;
   if (listKey !== _stockListKey) { _stockListKey = listKey; _stockListLimit = 20; }
   document.getElementById('stock-list-count').textContent = rows.length + ' Batch' + (q ? ' · ស្វែងរក "' + _stockSearch + '"' : '');
@@ -3614,6 +3621,48 @@ function exportStockExcel() {
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Stock');
   XLSX.writeFile(wb, 'blood_stock_' + _todayStr() + '.xlsx');
   showToast('⬇️ Exported Stock', 'ok');
+}
+
+// Print only what the list shows now: the chosen status and Group (not the whole stock page)
+function printStockList() {
+  var rows = _stockListRows();
+  if (!rows.length) { showToast('⚠️ គ្មាន Batch សម្រាប់ Print', 'err'); return; }
+  var statusName = { active:'ក្នុងស្តុក', reserved:'X-match រួច', near:'ជិតផុតកំណត់', expired:'ផុតកំណត់', empty:'អស់ស្តុក', discarded:'បានបោះបង់', all:'គ្រប់ Batch' }[_stockFilter] || _stockFilter;
+  var filterText = _stockSearch ? 'ស្វែងរក Bag Code "' + _stockSearch + '"' : 'ស្ថានភាព: ' + statusName + ' · Group: ' + (_stockGrp || 'ទាំងអស់');
+  function stText(b) {
+    var rem = b.qty_remaining || 0, res = b.qty_reserved || 0;
+    if (b.status === 'expired') return 'ផុតកំណត់';
+    if (b.status === 'discarded') return 'បានបោះបង់';
+    if (rem <= 0) return 'អស់ស្តុក';
+    if (b.expiry_date && _daysUntil(b.expiry_date) <= 0) return 'ផុតហើយ';
+    return res > 0 ? 'X-match ' + res : 'ក្នុងស្តុក';
+  }
+  var th = 'padding:7px 10px;text-align:left;white-space:nowrap;border:1px solid #cbd5e1;background:#0C4A6E;color:white;font-size:12px';
+  var td = 'padding:6px 10px;border:1px solid #cbd5e1;font-size:12px';
+  var totBags = 0, totFree = 0;
+  var body = rows.map(function(b, i) {
+    var rem = b.qty_remaining || 0, res = b.qty_reserved || 0;
+    totBags += rem; totFree += Math.max(0, rem - res);
+    return '<tr>' +
+      '<td style="' + td + ';text-align:right">' + (i + 1) + '</td>' +
+      '<td style="' + td + ";font-family:'JetBrains Mono',monospace;font-weight:700\">" + eH(b.batch_no || ('#' + b.id)) + '</td>' +
+      '<td style="' + td + ';font-weight:800;color:' + (STOCK_GRP_COLOR[b.grp] || '#111') + '">' + eH(b.grp) + '</td>' +
+      '<td style="' + td + '">' + eH(b.blood_type) + '</td>' +
+      '<td style="' + td + ';text-align:right">' + (b.qty_received || 0) + '</td>' +
+      '<td style="' + td + ';text-align:right">' + (res || '—') + '</td>' +
+      '<td style="' + td + ';text-align:right;font-weight:800">' + Math.max(0, rem - res) + '</td>' +
+      '<td style="' + td + ';white-space:nowrap">' + eH(b.expiry_date || '-') + '</td>' +
+      '<td style="' + td + ';white-space:nowrap">' + eH(_recvLabel(b)) + '</td>' +
+      '<td style="' + td + '">' + eH(b.source || '-') + '</td>' +
+      '<td style="' + td + ';font-weight:700">' + stText(b) + '</td></tr>';
+  }).join('');
+  var head = ['#','Batch No.','Group','ប្រភេទ','ទទួល','X-match','នៅសេរី','ថ្ងៃផុតកំណត់','ថ្ងៃទទួល','ប្រភព','ស្ថានភាព'].map(function(h) { return '<th style="' + th + '">' + h + '</th>'; }).join('');
+  var titleHtml = '<h1 style="font-size:20px;font-weight:900;margin:0 0 4px">📦 TSNHL Blood Report — បញ្ជី Batch ស្តុក</h1>' +
+    '<p style="color:#444;font-size:13px;font-weight:700;margin:0 0 4px">' + eH(filterText) + ' · ' + rows.length + ' Batch · នៅសេរី ' + totFree + ' Bag</p>' +
+    '<p style="color:#666;font-size:12px;margin:0 0 16px">Printed ' + new Date().toLocaleString() + '</p>';
+  var bodyHtml = '<table style="width:100%;border-collapse:collapse;min-width:0"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody>' +
+    '<tfoot><tr><td colspan="6" style="' + td + ';text-align:right;font-weight:900">សរុប ' + rows.length + ' Batch</td><td style="' + td + ';text-align:right;font-weight:900">' + totFree + '</td><td colspan="4" style="' + td + '"></td></tr></tfoot></table>';
+  _openPrintWindow(titleHtml, bodyHtml);
 }
 
 function printStockPage() {
