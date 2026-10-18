@@ -3937,8 +3937,8 @@ function renderTable() {
     const isJamphak = parseFloat(r.not_returned) > 0;
     h += `<tr style="${isJamphak ? 'background:#FECACA;border-left:3px solid #EF4444;' : ''}" ><td>${gi + 1}</td>`;
     TCOLS.forEach(k => h += `<td title="${String(cv[k]).replace(/<[^>]+>/g,'')||''}">${cv[k] ?? '-'}</td>`);
-    h += `<td style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--muted)">${r.sheet}</td>`;
-    h += `<td><div class="tbl-act"><button class="ib edit" onclick="openEdit(${gi})" title="Edit">✏️</button><button class="ib" style="background:#EFF6FF;color:#1D4ED8" onclick="openHistory(${r.id})" title="History">🕘</button><button class="ib del" onclick="delRec(${r.id})" title="Delete">🗑</button></div></td></tr>`;
+    h += `<td style="font-family:JetBrains Mono,monospace;font-size:10px;color:var(--muted)">${r.sheet || '-'}</td>`;
+    h += `<td><div class="tbl-act"><button class="ib edit" onclick="openEdit(${gi})" title="Edit">✏️</button><button class="ib" style="background:#F0FDF4;color:#15803D" onclick="openPatientBarcode(${gi})" title="Barcode អ្នកជំងឺ">🏷️</button><button class="ib" style="background:#EFF6FF;color:#1D4ED8" onclick="openHistory(${r.id})" title="History">🕘</button><button class="ib del" onclick="delRec(${r.id})" title="Delete">🗑</button></div></td></tr>`;
   });
 
   h += '</tbody></table>';
@@ -3991,6 +3991,88 @@ async function delRec(id) {
 // ═══════════════════════════════════════════
 // EDIT
 // ═══════════════════════════════════════════
+
+// ═══════════════════════════════════════════
+// PATIENT BARCODE LABEL — Main File → 🏷️
+// Code 128 (subset B) drawn as SVG, no library. The check symbol and all 106 symbol patterns were
+// verified against python-barcode; the bar widths below are run lengths (bar, space, bar, ...).
+// ═══════════════════════════════════════════
+var _C128 = ['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213','221312','231212','112232','122132','122231','113222','123122','123221','223211','221132','221231','213212','223112','312131','311222','321122','321221','312212','322112','322211','212123','212321','232121','111323','131123','131321','112313','132113','132311','211313','231113','231311','112133','112331','132131','113123','113321','133121','313121','211331','231131','213113','213311','213131','311123','311321','331121','312113','312311','332111','314111','221411','431111','111224','111422','121124','121421','141122','141221','112214','112412','122114','122411','142112','142211','241211','221114','413111','241112','134111','111242','121142','121241','114212','124112','124211','411212','421112','421211','212141','214121','412121','111143','111341','131141','114113','114311','411113','411311','113141','114131','311141','411131','211412','211214','211232','2331112'];
+function code128Svg(text, height) {
+  var vals = [104];                                   // Start B
+  for (var i = 0; i < text.length; i++) {
+    var c = text.charCodeAt(i);
+    vals.push((c < 32 || c > 126 ? 63 : c) - 32);     // characters Code 128-B cannot carry become '?'
+  }
+  var sum = vals[0];
+  for (var k = 1; k < vals.length; k++) sum += vals[k] * k;
+  vals.push(sum % 103); vals.push(106);               // check symbol, stop
+  var x = 10, bars = '', bar = true;                  // 10-module quiet zone each side
+  vals.forEach(function(v) {
+    _C128[v].split('').forEach(function(w) {
+      w = +w;
+      if (bar) bars += '<rect x="' + x + '" y="0" width="' + w + '" height="' + height + '"/>';
+      x += w; bar = !bar;
+    });
+  });
+  var total = x + 10;
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + total + ' ' + height + '" preserveAspectRatio="none" style="width:100%;height:' + height + 'px;display:block" shape-rendering="crispEdges" fill="#000">' + bars + '</svg>';
+}
+
+var _pbRec = null, _pbKey = 'hn';
+function _pbValue(r, key) { return String(key === 'sn' ? (r.sn_code || '') : (r.hn || '')).trim(); }
+function _pbLabelHtml(r, key) {
+  var val = _pbValue(r, key);
+  var age = (r.age || '') + (r.age_month ? ' ឆ្នាំ ' + r.age_month + ' ខែ' : '');
+  var row = function(k, v) { return v ? '<div style="display:flex;gap:6px;line-height:1.35"><span style="color:#64748B;min-width:70px;flex:none">' + k + '</span><b style="word-break:break-word">' + eH(v) + '</b></div>' : ''; };
+  return '<div class="pb-label" style="width:340px;max-width:100%;box-sizing:border-box;border:1.5px solid #0F172A;border-radius:6px;padding:10px 12px;background:white;color:#0F172A;font-family:\'Noto Sans Khmer\',sans-serif;font-size:12.5px">' +
+    '<div style="font-size:10px;font-weight:800;letter-spacing:.4px;color:#64748B;margin-bottom:4px">TSNHL · BLOOD BANK</div>' +
+    (val ? code128Svg(val, 56) + '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:15px;letter-spacing:1px;margin:3px 0 6px">' + eH(val) + '</div>'
+         : '<div style="padding:16px;text-align:center;color:#B91C1C;font-weight:700">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + ' សម្រាប់ធ្វើ Barcode</div>') +
+    '<div style="font-size:15px;font-weight:900;margin-bottom:4px">' + eH(r.name || '-') + '</div>' +
+    row('អាយុ / ភេទ', [age, r.gender].filter(Boolean).join(' · ')) +
+    row('ផ្នែក', [r.ward_from, r.ward_to].filter(Boolean).join(' ➡️ ')) +
+    row('គ្រូពេទ្យ', r.doctor_req) + row('Dx', r.diagnosis) +
+    row('Group / Hb', [r.grp, r.hb ? 'Hb ' + r.hb : ''].filter(Boolean).join(' · ')) +
+    row('ថ្ងៃ', r.date) + (key === 'sn' ? row('HN', r.hn) : row('SN', r.sn_code)) +
+  '</div>';
+}
+function openPatientBarcode(i) {
+  var r = filtered[i];
+  if (!r) return;
+  _pbRec = r;
+  _pbKey = r.hn ? 'hn' : (r.sn_code ? 'sn' : 'hn');
+  document.getElementById('pb_sub').textContent = (r.name || '—') + (r.hn ? ' · HN ' + r.hn : '');
+  document.getElementById('pb_copies').value = 1;
+  pbRender();
+  document.getElementById('patientBarcodeModal').classList.add('open');
+}
+function pbSetKey(k) { _pbKey = k; pbRender(); }
+function pbRender() {
+  if (!_pbRec) return;
+  var on = 'border:1.5px solid #0369A1;background:#0369A1;color:white', off = 'border:1.5px solid var(--border);background:white;color:#334155';
+  var btn = 'border-radius:20px;padding:5px 14px;font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;';
+  document.getElementById('pb_keys').innerHTML = '<span style="font-size:12px;font-weight:700;color:var(--muted)">Barcode ពី៖</span>' +
+    '<button type="button" onclick="pbSetKey(\'hn\')" style="' + btn + (_pbKey === 'hn' ? on : off) + '">HN' + (_pbRec.hn ? ' · ' + eH(_pbRec.hn) : '') + '</button>' +
+    '<button type="button" onclick="pbSetKey(\'sn\')" style="' + btn + (_pbKey === 'sn' ? on : off) + '">SN' + (_pbRec.sn_code ? ' · ' + eH(_pbRec.sn_code) : '') + '</button>';
+  document.getElementById('pb_preview').innerHTML = _pbLabelHtml(_pbRec, _pbKey);
+}
+function closePatientBarcode() { document.getElementById('patientBarcodeModal').classList.remove('open'); _pbRec = null; }
+function printPatientBarcode() {
+  if (!_pbRec) return;
+  if (!_pbValue(_pbRec, _pbKey)) { showToast('⚠️ គ្មានលេខសម្រាប់ធ្វើ Barcode', 'err'); return; }
+  var n = Math.max(1, Math.min(30, parseInt(document.getElementById('pb_copies').value) || 1));
+  var labels = '';
+  for (var k = 0; k < n; k++) labels += '<div style="break-inside:avoid;page-break-inside:avoid;margin:0 8px 8px 0;display:inline-block;vertical-align:top">' + _pbLabelHtml(_pbRec, _pbKey) + '</div>';
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Patient Barcode</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;700;900&family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">' +
+    '<style>body{margin:8mm;background:white} @page{margin:6mm} .pb-label{width:90mm !important}</style></head><body>' + labels +
+    '<script>window.onload=function(){window.print();};<\/script></body></html>';
+  var win = window.open('', '_blank');
+  if (!win) { showToast('សូមអនុញ្ញាត Popup ដើម្បី Print', 'err'); return; }
+  win.document.write(html); win.document.close();
+}
+
 function openEdit(i) {
   const r = filtered[i]; editId = r.id;
   editOldRecord = JSON.parse(JSON.stringify(r));
@@ -5957,6 +6039,27 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeEditEntryModal()">បោះបង់</button>
       <button class="btn btn-green" id="btnEditEntry" onclick="saveEditEntry()">✅ រក្សាទុក</button>
+    </div>
+  </div>
+</div>
+
+<!-- Patient Barcode Modal -->
+<div class="overlay" id="patientBarcodeModal">
+  <div class="modal" style="max-width:460px;width:100%">
+    <div class="modal-head">
+      <div><h3>🏷️ Barcode អ្នកជំងឺ</h3><p id="pb_sub"></p></div>
+      <button class="close-btn" onclick="closePatientBarcode()">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;align-items:center">
+      <div id="pb_keys" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;align-self:stretch"></div>
+      <div id="pb_preview" style="max-width:100%"></div>
+      <div style="display:flex;align-items:center;gap:8px;align-self:stretch;font-size:12.5px;font-weight:700;color:var(--muted)">
+        ចំនួនច្បាប់ Print <input type="number" id="pb_copies" min="1" max="30" value="1" style="width:70px;border:1.5px solid var(--border);border-radius:8px;padding:6px 8px;font-size:13px">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closePatientBarcode()">បិទ</button>
+      <button class="btn btn-green" onclick="printPatientBarcode()">🖨️ Print Barcode</button>
     </div>
   </div>
 </div>
