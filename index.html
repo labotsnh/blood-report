@@ -4023,24 +4023,34 @@ var _pbRec = null, _pbKey = 'hn';
 function _pbValue(r, key) { return String(key === 'sn' ? (r.sn_code || '') : (r.hn || '')).trim(); }
 // Label sticker: 50 mm wide × 25 mm high. Everything is sized in mm so the printed label matches the preview.
 var PB_W = 50, PB_H = 25;
+// Total width of a Code 128-B symbol in modules, quiet zones included (start + data + check + stop)
+function _c128Width(text) { return 11 * (text.length + 2) + 13 + 16; }
 function _pbLabelHtml(r, key) {
   var val = _pbValue(r, key);
+  var side = key === 'sn' ? { k: 'HN', v: String(r.hn || '').trim() } : { k: 'SN', v: String(r.sn_code || '').trim() };
   var age = r.age ? r.age + (r.age_month ? '/' + r.age_month + 'ខ' : '') : '';
   var info = [age, r.gender, r.grp, r.hb ? 'Hb ' + r.hb : ''].filter(Boolean).join(' · ');
   var when = [r.date, _nowLocalDT().slice(11, 16)].filter(Boolean).join(' ');   // record date + time of printing
   var line2 = [[r.ward_from, r.ward_to].filter(Boolean).join(' ➡ '), when].filter(Boolean).join(' · ');
   var cut = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-  // Tick boxes: "បញ្ចូល" is ticked on entry, 1–5 are ticked by staff one at a time as each bag is used
-  var box = '<span style="display:inline-block;width:3.6mm;height:3.6mm;border:0.25mm solid #000;box-sizing:border-box;flex:none"></span>';
-  var cell = function(t) { return '<span style="display:flex;align-items:center;gap:0.7mm;flex:none"><span style="font-size:5.5pt;font-weight:700;line-height:1">' + t + '</span>' + box + '</span>'; };
-  var ticks = cell('បញ្ចូល') + [1, 2, 3, 4, 5].map(cell).join('');
+  // Barcode keeps about 0.2 mm per module (readable), the rest of the width goes to the SN/HN beside it
+  var bw = val ? Math.min(38, Math.max(26, _c128Width(val) * 0.22)) : 0;
+  // Tick boxes: "បញ្ចូល" is ticked on entry, 1–6 are ticked by staff one at a time as each bag is used
+  var box = '<span style="display:inline-block;width:3.4mm;height:3.4mm;border:0.25mm solid #000;box-sizing:border-box;flex:none"></span>';
+  var cell = function(t) { return '<span style="display:flex;align-items:center;gap:0.6mm;flex:none"><span style="font-size:5.5pt;font-weight:700;line-height:1">' + t + '</span>' + box + '</span>'; };
+  var ticks = cell('បញ្ចូល') + [1, 2, 3, 4, 5, 6].map(cell).join('');
   return '<div class="pb-label" style="width:' + PB_W + 'mm;height:' + PB_H + 'mm;box-sizing:border-box;padding:1mm 1.6mm;overflow:hidden;background:white;color:#000;' +
       'font-family:\'Noto Sans Khmer\',sans-serif;line-height:1.2">' +
-    (val ? code128Svg(val, 8.5, true) +
-           '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;line-height:1.05;margin:0.5mm 0 0.3mm;letter-spacing:.3mm">' + eH(val) + '</div>'
-         : '<div style="height:9mm;display:flex;align-items:center;justify-content:center;color:#B91C1C;font-weight:700;font-size:7pt">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + '</div>') +
-    '<div style="display:flex;align-items:baseline;gap:1.5mm;min-width:0">' +
-      '<div style="flex:1 1 auto;min-width:0;' + cut + 'font-size:8pt;font-weight:900">' + eH(r.name || '-') + '</div>' +
+    (val ? '<div style="display:flex;align-items:center;gap:1.2mm">' +
+             '<div style="flex:none;width:' + bw + 'mm">' + code128Svg(val, 8.5, true) +
+               '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;line-height:1.05;margin:0.5mm 0 0.3mm;letter-spacing:.3mm">' + eH(val) + '</div></div>' +
+             '<div style="flex:1 1 auto;min-width:0;line-height:1.15">' +
+               (side.v ? '<div style="font-size:5pt;font-weight:700;color:#444">' + side.k + '</div>' +
+                         '<div style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;word-break:break-all">' + eH(side.v) + '</div>' : '') +
+             '</div></div>'
+         : '<div style="height:11mm;display:flex;align-items:center;justify-content:center;color:#B91C1C;font-weight:700;font-size:7pt">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + '</div>') +
+    '<div style="display:flex;align-items:baseline;gap:2mm;min-width:0">' +
+      '<div style="flex:0 1 auto;min-width:0;' + cut + 'font-size:8pt;font-weight:900">' + eH(r.name || '-') + '</div>' +
       '<div style="flex:none;white-space:nowrap;font-size:6pt;font-weight:700">' + eH(info) + '</div></div>' +
     '<div style="' + cut + 'font-size:5.5pt;line-height:1.2">' + eH(line2) + '</div>' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.6mm">' + ticks + '</div>' +
@@ -4053,8 +4063,8 @@ function openPatientBarcode(i) {
   _pbKey = r.hn ? 'hn' : (r.sn_code ? 'sn' : 'hn');
   document.getElementById('pb_sub').textContent = (r.name || '—') + (r.hn ? ' · HN ' + r.hn : '');
   document.getElementById('pb_copies').value = 1;
-  pbRender();
   document.getElementById('patientBarcodeModal').classList.add('open');
+  pbRender();
 }
 function pbSetKey(k) { _pbKey = k; pbRender(); }
 function pbRender() {
@@ -4064,10 +4074,14 @@ function pbRender() {
   document.getElementById('pb_keys').innerHTML = '<span style="font-size:12px;font-weight:700;color:var(--muted)">Barcode ពី៖</span>' +
     '<button type="button" onclick="pbSetKey(\'hn\')" style="' + btn + (_pbKey === 'hn' ? on : off) + '">HN' + (_pbRec.hn ? ' · ' + eH(_pbRec.hn) : '') + '</button>' +
     '<button type="button" onclick="pbSetKey(\'sn\')" style="' + btn + (_pbKey === 'sn' ? on : off) + '">SN' + (_pbRec.sn_code ? ' · ' + eH(_pbRec.sn_code) : '') + '</button>';
-  // Preview at 3× so it is readable; the print window uses the true 50 × 25 mm size
-  document.getElementById('pb_preview').innerHTML = '<div style="width:' + (PB_W * 3) + 'mm;height:' + (PB_H * 3) + 'mm;max-width:100%;border:1.5px solid #94A3B8;border-radius:4px;overflow:hidden;background:white">' +
-    '<div style="transform:scale(3);transform-origin:top left;width:' + PB_W + 'mm;height:' + PB_H + 'mm">' + _pbLabelHtml(_pbRec, _pbKey) + '</div></div>' +
-    '<div style="font-size:11.5px;color:var(--muted);font-weight:600;margin-top:6px;text-align:center">ទំហំស្លាក ' + PB_W + ' × ' + PB_H + ' mm (បង្ហាញ ×3)</div>';
+  // Preview enlarged (up to 3×, less if the window is narrow) so the whole label is always visible;
+  // the print window uses the true 50 × 25 mm size.
+  var host = document.getElementById('pb_preview'), pxPerMm = 96 / 25.4;
+  var sc = Math.max(1, Math.min(3, ((host.parentElement.clientWidth || 600) - 60) / (PB_W * pxPerMm)));
+  sc = Math.floor(sc * 100) / 100;
+  host.innerHTML = '<div style="width:' + (PB_W * sc) + 'mm;height:' + (PB_H * sc) + 'mm;border:1.5px solid #94A3B8;border-radius:4px;overflow:hidden;background:white;box-sizing:content-box">' +
+    '<div style="transform:scale(' + sc + ');transform-origin:top left;width:' + PB_W + 'mm;height:' + PB_H + 'mm">' + _pbLabelHtml(_pbRec, _pbKey) + '</div></div>' +
+    '<div style="font-size:11.5px;color:var(--muted);font-weight:600;margin-top:6px;text-align:center">ទំហំស្លាក ' + PB_W + ' × ' + PB_H + ' mm (បង្ហាញ ×' + sc.toFixed(1) + ')</div>';
 }
 function closePatientBarcode() { document.getElementById('patientBarcodeModal').classList.remove('open'); _pbRec = null; }
 function printPatientBarcode() {
