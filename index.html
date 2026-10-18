@@ -4044,9 +4044,11 @@ function _pbLabelHtml(r, key) {
     (val ? '<div style="display:flex;align-items:center;gap:1.2mm">' +
              '<div style="flex:none;width:' + bw + 'mm">' + code128Svg(val, 8.5, true) +
                '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;line-height:1.05;margin:0.5mm 0 0.3mm;letter-spacing:.3mm">' + eH(val) + '</div></div>' +
-             '<div style="flex:1 1 auto;min-width:0;line-height:1.15">' +
-               (side.v ? '<div style="font-size:5pt;font-weight:700;color:#444">' + side.k + '</div>' +
-                         '<div style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;word-break:break-all">' + eH(side.v) + '</div>' : '') +
+             // The other id (SN or HN) beside the barcode. The small label is only added when the value does not
+             // already start with it (e.g. 'SN-0042'), so it never reads 'SN SN-0042'.
+             '<div style="flex:1 1 auto;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center;border-left:0.25mm solid #000;padding-left:1.4mm;line-height:1.15">' +
+               (side.v ? (new RegExp('^' + side.k, 'i').test(side.v) ? '' : '<div style="font-size:5pt;font-weight:700;color:#444">' + side.k + '</div>') +
+                         '<div style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:7pt;word-break:break-all">' + eH(side.v) + '</div>' : '') +
              '</div></div>'
          : '<div style="height:11mm;display:flex;align-items:center;justify-content:center;color:#B91C1C;font-weight:700;font-size:7pt">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + '</div>') +
     '<div style="display:flex;align-items:baseline;gap:2mm;min-width:0">' +
