@@ -4026,17 +4026,24 @@ var PB_W = 50, PB_H = 25;
 function _pbLabelHtml(r, key) {
   var val = _pbValue(r, key);
   var age = r.age ? r.age + (r.age_month ? '/' + r.age_month + 'ខ' : '') : '';
-  var line1 = [age, r.gender, r.grp, r.hb ? 'Hb ' + r.hb : ''].filter(Boolean).join(' · ');
-  var line2 = [[r.ward_from, r.ward_to].filter(Boolean).join(' ➡ '), r.date].filter(Boolean).join(' · ');
-  var txt = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
-  return '<div class="pb-label" style="width:' + PB_W + 'mm;height:' + PB_H + 'mm;box-sizing:border-box;padding:1.2mm 1.8mm;overflow:hidden;background:white;color:#000;' +
-      'font-family:\'Noto Sans Khmer\',sans-serif;line-height:1.25">' +
+  var info = [age, r.gender, r.grp, r.hb ? 'Hb ' + r.hb : ''].filter(Boolean).join(' · ');
+  var when = [r.date, _nowLocalDT().slice(11, 16)].filter(Boolean).join(' ');   // record date + time of printing
+  var line2 = [[r.ward_from, r.ward_to].filter(Boolean).join(' ➡ '), when].filter(Boolean).join(' · ');
+  var cut = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  // Tick boxes: "បញ្ចូល" is ticked on entry, 1–5 are ticked by staff one at a time as each bag is used
+  var box = '<span style="display:inline-block;width:3.6mm;height:3.6mm;border:0.25mm solid #000;box-sizing:border-box;flex:none"></span>';
+  var cell = function(t) { return '<span style="display:flex;align-items:center;gap:0.7mm;flex:none"><span style="font-size:5.5pt;font-weight:700;line-height:1">' + t + '</span>' + box + '</span>'; };
+  var ticks = cell('បញ្ចូល') + [1, 2, 3, 4, 5].map(cell).join('');
+  return '<div class="pb-label" style="width:' + PB_W + 'mm;height:' + PB_H + 'mm;box-sizing:border-box;padding:1mm 1.6mm;overflow:hidden;background:white;color:#000;' +
+      'font-family:\'Noto Sans Khmer\',sans-serif;line-height:1.2">' +
     (val ? code128Svg(val, 8.5, true) +
-           '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6.5pt;line-height:1.1;margin:0.6mm 0 0.5mm;letter-spacing:.3mm">' + eH(val) + '</div>'
-         : '<div style="height:10mm;display:flex;align-items:center;justify-content:center;color:#B91C1C;font-weight:700;font-size:7pt">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + '</div>') +
-    '<div style="' + txt + 'font-size:8pt;font-weight:900">' + eH(r.name || '-') + '</div>' +
-    '<div style="' + txt + 'font-size:6.5pt;font-weight:700">' + eH(line1) + '</div>' +
-    '<div style="' + txt + 'font-size:6.5pt">' + eH(line2) + '</div>' +
+           '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;line-height:1.05;margin:0.5mm 0 0.3mm;letter-spacing:.3mm">' + eH(val) + '</div>'
+         : '<div style="height:9mm;display:flex;align-items:center;justify-content:center;color:#B91C1C;font-weight:700;font-size:7pt">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + '</div>') +
+    '<div style="display:flex;align-items:baseline;gap:1.5mm;min-width:0">' +
+      '<div style="flex:1 1 auto;min-width:0;' + cut + 'font-size:8pt;font-weight:900">' + eH(r.name || '-') + '</div>' +
+      '<div style="flex:none;white-space:nowrap;font-size:6pt;font-weight:700">' + eH(info) + '</div></div>' +
+    '<div style="' + cut + 'font-size:5.5pt;line-height:1.2">' + eH(line2) + '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.6mm">' + ticks + '</div>' +
   '</div>';
 }
 function openPatientBarcode(i) {
