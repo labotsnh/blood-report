@@ -4029,12 +4029,12 @@ function _pbLabelHtml(r, key) {
   var val = _pbValue(r, key);
   var side = key === 'sn' ? { k: 'HN', v: String(r.hn || '').trim() } : { k: 'SN', v: String(r.sn_code || '').trim() };
   var age = r.age ? r.age + (r.age_month ? '/' + r.age_month + 'ខ' : '') : '';
-  var info = [age, r.gender, r.grp, r.hb ? 'Hb ' + r.hb : ''].filter(Boolean).join(' · ');
+  var info = [age, r.gender, r.grp].filter(Boolean).join(' · ');
   var when = [r.date, _nowLocalDT().slice(11, 16)].filter(Boolean).join(' ');   // record date + time of printing
   var line2 = [[r.ward_from, r.ward_to].filter(Boolean).join(' ➡ '), when].filter(Boolean).join(' · ');
   var cut = 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
   // Barcode keeps about 0.2 mm per module (readable), the rest of the width goes to the SN/HN beside it
-  var bw = val ? Math.min(38, Math.max(26, _c128Width(val) * 0.22)) : 0;
+  var bw = val ? Math.min(30, Math.max(26, _c128Width(val) * 0.22)) : 0;
   // Tick boxes: "បញ្ចូល" is ticked on entry, 1–6 are ticked by staff one at a time as each bag is used
   var box = '<span style="display:inline-block;width:3.4mm;height:3.4mm;border:0.25mm solid #000;box-sizing:border-box;flex:none"></span>';
   var cell = function(t) { return '<span style="display:flex;align-items:center;gap:0.6mm;flex:none"><span style="font-size:5.5pt;font-weight:700;line-height:1">' + t + '</span>' + box + '</span>'; };
@@ -4042,19 +4042,19 @@ function _pbLabelHtml(r, key) {
   return '<div class="pb-label" style="width:' + PB_W + 'mm;height:' + PB_H + 'mm;box-sizing:border-box;padding:1mm 1.6mm;overflow:hidden;background:white;color:#000;' +
       'font-family:\'Noto Sans Khmer\',sans-serif;line-height:1.2">' +
     (val ? '<div style="display:flex;align-items:center;gap:1.2mm">' +
-             '<div style="flex:none;width:' + bw + 'mm">' + code128Svg(val, 8.5, true) +
+             '<div style="flex:none;width:' + bw + 'mm">' + code128Svg(val, 10.5, true) +
                '<div style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:6pt;line-height:1.05;margin:0.5mm 0 0.3mm;letter-spacing:.3mm">' + eH(val) + '</div></div>' +
              // The other id (SN or HN) beside the barcode. The small label is only added when the value does not
              // already start with it (e.g. 'SN-0042'), so it never reads 'SN SN-0042'.
              '<div style="flex:1 1 auto;min-width:0;align-self:stretch;display:flex;flex-direction:column;justify-content:center;border-left:0.25mm solid #000;padding-left:1.4mm;line-height:1.15">' +
                (side.v ? (new RegExp('^' + side.k, 'i').test(side.v) ? '' : '<div style="font-size:5pt;font-weight:700;color:#444">' + side.k + '</div>') +
-                         '<div style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:7pt;word-break:break-all">' + eH(side.v) + '</div>' : '') +
+                         '<div style="font-family:\'JetBrains Mono\',monospace;font-weight:800;font-size:' + (side.v.length > 9 ? '5.5' : '7') + 'pt;word-break:break-all;line-height:1.1">' + eH(side.v) + '</div>' : '') +
+               // Patient name and age · sex under the SN/HN (name wraps to at most 2 lines)
+               '<div style="font-size:6.5pt;font-weight:900;line-height:1.15;margin-top:0.4mm;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word">' + eH(r.name || '-') + '</div>' +
+               '<div style="font-size:6pt;font-weight:700;line-height:1.2">' + eH(info) + '</div>' +
              '</div></div>'
          : '<div style="height:11mm;display:flex;align-items:center;justify-content:center;color:#B91C1C;font-weight:700;font-size:7pt">គ្មាន ' + (key === 'sn' ? 'SN' : 'HN') + '</div>') +
-    '<div style="display:flex;align-items:baseline;gap:2mm;min-width:0">' +
-      '<div style="flex:0 1 auto;min-width:0;' + cut + 'font-size:8pt;font-weight:900">' + eH(r.name || '-') + '</div>' +
-      '<div style="flex:none;white-space:nowrap;font-size:6pt;font-weight:700">' + eH(info) + '</div></div>' +
-    '<div style="' + cut + 'font-size:5.5pt;line-height:1.2">' + eH(line2) + '</div>' +
+    '<div style="' + cut + 'font-size:5.5pt;line-height:1.2;margin-top:0.4mm">' + eH(line2) + '</div>' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.6mm">' + ticks + '</div>' +
   '</div>';
 }
