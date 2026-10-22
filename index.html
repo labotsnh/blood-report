@@ -67,6 +67,16 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
 .db-dot.off{background:#EF4444;animation:none}
 
+/* ── LOGIN (soft / neumorphic, same blue palette) ── */
+#loginScreen > div{background:#E4ECF2 !important;border-radius:32px !important;box-shadow:14px 14px 30px rgba(2,28,46,.38),-10px -10px 26px rgba(255,255,255,.35) !important}
+#loginScreen > div > div:first-child > div:first-child{width:84px;height:84px;margin:0 auto 14px !important;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#E4ECF2;box-shadow:7px 7px 14px rgba(100,130,155,.45),-7px -7px 14px rgba(255,255,255,.95)}
+#loginScreen input{background:#E4ECF2 !important;border:none !important;border-radius:999px !important;padding:14px 22px !important;box-shadow:inset 5px 5px 10px rgba(100,130,155,.40),inset -5px -5px 10px rgba(255,255,255,.95) !important;color:#0C4A6E}
+#loginScreen input:focus{box-shadow:inset 5px 5px 10px rgba(100,130,155,.40),inset -5px -5px 10px rgba(255,255,255,.95),0 0 0 2px #0369A1 !important}
+#loginScreen label{padding-left:10px}
+#login_btn{border-radius:999px !important;box-shadow:6px 6px 14px rgba(100,130,155,.5),-6px -6px 14px rgba(255,255,255,.9) !important;transition:box-shadow .15s,transform .15s}
+#login_btn:active{box-shadow:inset 4px 4px 9px rgba(2,28,46,.5),inset -3px -3px 8px rgba(56,150,205,.4) !important;transform:scale(.99)}
+#loginScreen button[onclick*="login_pass"]{right:16px !important}
+
 /* ── MOBILE RESPONSIVE ── */
 @media(max-width:820px){
   .topbar{padding:8px}
