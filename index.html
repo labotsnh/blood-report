@@ -2823,6 +2823,37 @@ function stockListAll()  { _stockListLimit = 100000; buildStockPage(); }
 // ═══════════════════════════════════════════
 var _stockEntryLimit = 20, _stockEntryKey = '';
 
+var _stockEntryView = null;
+// Summary of the Stock Entry table (current date range) as plain text for the Telegram group:
+// total, per-type totals and per-staff counts, so the group can see at a glance whether everything was entered.
+function _stockEntryShareText() {
+  var v = _stockEntryView;
+  if (!v || !v.rows.length) return '';
+  var fmt = function(x) { return x.replace('T', ' '); };
+  var byType = {}, byStaff = {}, tot = 0;
+  v.rows.forEach(function(b) {
+    var q = b.qty_received || 0, who = b.received_by || '-';
+    tot += q;
+    byType[b.blood_type] = (byType[b.blood_type] || 0) + q;
+    byStaff[who] = byStaff[who] || { n: 0, t: {} };
+    byStaff[who].n += q;
+    byStaff[who].t[b.blood_type] = (byStaff[who].t[b.blood_type] || 0) + q;
+  });
+  var typeStr = function(o) { return STOCK_TYPES.concat(Object.keys(o)).filter(function(t, i, a) { return o[t] && a.indexOf(t) === i; })
+    .map(function(t) { return t + ' ' + o[t]; }).join(' · '); };
+  var lines = ['📋 តារាងបញ្ជូលស្តុក', '🕒 ' + fmt(v.from) + ' → ' + fmt(v.to), '',
+    '✅ សរុប: ' + tot + ' Bag (' + v.rows.length + ' Batch)', '💉 ' + typeStr(byType), '', '👤 តាមបុគ្គលិក៖'];
+  Object.keys(byStaff).sort(function(a, b) { return byStaff[b].n - byStaff[a].n; }).forEach(function(w) {
+    lines.push('• ' + w + ': ' + byStaff[w].n + ' Bag (' + typeStr(byStaff[w].t) + ')');
+  });
+  return lines.join('\n');
+}
+function shareStockEntryTelegram() {
+  var text = _stockEntryShareText();
+  if (!text) { alert('គ្មានទិន្នន័យក្នុងចន្លោះកាលបរិច្ឆេទនេះ'); return; }
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {}
+  window.open('https://t.me/share/url?url=' + encodeURIComponent(location.origin + location.pathname) + '&text=' + encodeURIComponent(text), '_blank', 'noopener');
+}
 function buildStockEntryTable() {
   var fromEl = document.getElementById('stockentry-from'), toEl = document.getElementById('stockentry-to');
   if (!fromEl || !toEl) return; // not on the Stock page
@@ -2840,6 +2871,7 @@ function buildStockEntryTable() {
     return dt >= from && dt <= to;
   }).sort(function(a, b) { return _recvToDT(b).localeCompare(_recvToDT(a)); });
 
+  _stockEntryView = { rows: rows, from: from, to: to };
   var key = from + '|' + to;
   if (key !== _stockEntryKey) { _stockEntryKey = key; _stockEntryLimit = 20; }
 
@@ -5979,6 +6011,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <h3 style="font-size:15px;font-weight:800;margin:0">📋 តារាងបញ្ជូលស្តុក</h3>
       <span id="stockentry-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-ghost" onclick="shareStockEntryTelegram()" title="ផ្ញើសរុបទៅ Telegram group" style="white-space:nowrap;color:#0284C7;border-color:#7DD3FC">✈️ Telegram</button>
         <span style="font-size:12px;color:var(--muted);font-weight:600">ចាប់ពី</span>
         <span class="dt24-slot" data-id="stockentry-from" data-on="buildStockEntryTable()"></span>
         <span style="font-size:12px;color:var(--muted);font-weight:600">ដល់</span>
