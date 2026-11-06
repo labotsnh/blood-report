@@ -1831,6 +1831,7 @@ function clearForm() {
 // ═══════════════════════════════════════════
 // SAVE RECORD
 // ═══════════════════════════════════════════
+var _saveBusy = false;
 async function saveRecord() {
   const rec = readForm();
   if (!rec.hn && !rec.name) { showToast('⚠️ សូមបញ្ចូល HN ឬ ឈ្មោះ', 'err'); return false; }
@@ -1936,9 +1937,28 @@ async function saveRecord() {
     return false;
   }
 
+  if (_saveBusy) return false;   // a save is already running (double click / Enter) — never insert twice
+  _saveBusy = true;
   setBtnLoading('btn1', true);
   setBtnLoading('btnSave', true);
   try {
+    // Block duplicate SN (🏷️ SN ប៉ុងឈាម): check the database itself (other staff may have just saved it),
+    // falling back to the loaded list. Done BEFORE the stock deduction so nothing is changed on a duplicate.
+    if (rec.sn_code) {
+      var dupRec = null;
+      try {
+        var hit = await sbFetch(TABLE + '?sn_code=eq.' + encodeURIComponent(rec.sn_code) + '&select=id,name,hn,date&limit=1');
+        dupRec = hit && hit[0] || null;
+      } catch (e) {
+        dupRec = (allRecs || []).find(function(r) { return String(r.sn_code || '').toLowerCase() === rec.sn_code.toLowerCase(); }) || null;
+      }
+      if (dupRec) {
+        var snEl = document.getElementById('f_sn');
+        if (snEl) { var tg = snEl.closest('.iu') || snEl; tg.style.borderColor = 'var(--red)'; tg.style.boxShadow = '0 0 0 3px rgba(185,28,28,.12)'; snEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(function() { snEl.focus(); }, 300); }
+        showToast('⛔ ' + rec.sn_code + ' មានរួចហើយ (' + (dupRec.name || dupRec.hn || '-') + (dupRec.date ? ' · ' + dupRec.date : '') + ') — មិនអាច Save ស្ទួនបានទេ', 'err');
+        return false;
+      }
+    }
     await applyStockDeltas(null, rec); // deduct/return stock for any bag marked យកប្រើ/សង — sets rec.bag_batch_no<sfx>
     const inserted = await _saveWithStockFallback((payload) => sbInsert(payload), rec);
     const newId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : null;
@@ -1950,6 +1970,7 @@ async function saveRecord() {
   } catch(e) {
     showToast('❌ Error: ' + e.message, 'err'); return false;
   } finally {
+    _saveBusy = false;
     setBtnLoading('btn1', false);
     setBtnLoading('btnSave', false);
   }
