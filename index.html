@@ -5868,6 +5868,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
           <button onclick="dailyRangeToday()" title="ត្រឡប់ទៅថ្ងៃនេះវិញ" style="border:none;background:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0 4px">↺</button>
         </div>
         <button onclick="printDailyReport()" style="background:#0369A1;color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Print / PDF</button>
+        <button onclick="shareDailyTelegram()" title="ផ្ញើសរុបទៅ Telegram group" style="background:#0284C7;color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">✈️ Telegram</button>
         <button onclick="exportDailyExcel()" style="background:var(--green);color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">📥 Export Excel</button>
       </div>
     </div>
@@ -7885,6 +7886,34 @@ function buildDailyReport() {
     document.getElementById('daily-old-count'),
     oldRows, 'គ្មាន Bag ចាស់ត្រូវបានយកប្រើ/សងក្នុងរយៈពេលនេះទេ', true, win
   );
+}
+
+// Daily Report summary as plain text for the Telegram group (same numbers as the report / Excel export)
+function _dailyShareText() {
+  var win = _dailyWindow();
+  var recs = allRecs.filter(function(r) { return _entryInRange((r.date || '').slice(0, 10), win); });
+  var st = _dailyNewBagStats(win), G = _dailyFlow(win);
+  var sum = function(k) { return (G.nw[k] || 0) + (G.old[k] || 0); };
+  var lines = ['📅 Daily Report', '🕒 ' + _dailyRangeLabel(win), '',
+    '👥 ប៉ុងឈាម (អ្នកជំងឺ): ' + recs.length,
+    '🩸 សាក់ឈាម: ' + recs.reduce(function(a, r) { return a + _dailyBagCount(r); }, 0) + ' Bag',
+    '🆕 ដាក់ថ្មី: ' + recs.reduce(function(a, r) { return a + (parseFloat(r.qty_new) || 0); }, 0) +
+      ' · 🔁 ខ្ចី: ' + recs.reduce(function(a, r) { return a + (parseFloat(r.qty_borrow) || 0); }, 0),
+    '✅ យកប្រើ: ' + st.used + ' · ↩️ សង: ' + st.back];
+  lines.push('', '📦 Bag Flow (ថ្មី · ខ្ចី · យកប្រើ · សង · ពុំអាចសង · នៅសល់)',
+    [sum('nw'), sum('borrow'), sum('used'), sum('back'), sum('cannot'), sum('remTotal')].join(' · '));
+  if (typeof _stockLoaded !== 'undefined' && _stockLoaded && typeof allStock !== 'undefined' && allStock.length) {
+    var m = _stockAvailableMatrix(), byType = {}, tot = 0;
+    Object.keys(m).forEach(function(k) { var t = k.split('|')[1]; byType[t] = (byType[t] || 0) + m[k]; tot += m[k]; });
+    lines.push('', '🏥 ស្តុកឥឡូវនេះ: ' + tot + ' Bag', STOCK_TYPES.filter(function(t) { return byType[t]; })
+      .map(function(t) { return t + ' ' + byType[t]; }).join(' · '));
+  }
+  return lines.join('\n');
+}
+function shareDailyTelegram() {
+  var text = _dailyShareText();
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {}
+  window.open('https://t.me/share/url?url=' + encodeURIComponent(location.origin + location.pathname) + '&text=' + encodeURIComponent(text), '_blank', 'noopener');
 }
 
 function exportDailyExcel() {
