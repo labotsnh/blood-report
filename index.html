@@ -967,7 +967,7 @@ function showPage(id) {
   const tabs = document.querySelectorAll('.nav-tab');
   if (id === 'pg-entry')  tabs[0].classList.add('active');
   if (id === 'pg-main')   { tabs[1].classList.add('active'); loadRecords(); }
-  if (id === 'pg-daily')  { tabs[2].classList.add('active'); buildDailyReport(); }
+  if (id === 'pg-daily')  { tabs[2].classList.add('active'); buildDailyReport(); loadStock(true); }
   if (id === 'pg-stock')  { tabs[3].classList.add('active'); loadStock(); }
   if (id === 'pg-import') tabs[4].classList.add('active');
   if (id === 'pg-manage') { tabs[5].classList.add('active'); loadDoctors(); loadWards(); }
@@ -2300,6 +2300,11 @@ var _stockGrp = '';    // Group filter for the batch list ('' = all groups)
 var _stockSearch = ''; // Bag Code search over every status; overrides the filter chips while non-empty
 var _stockListLimit = 20, _stockListKey = 'active';
 var _stockLoaded = false;
+// Other staff receive stock on other computers: while the Daily Report or Stock page is open, re-read the stock every minute
+setInterval(function() {
+  if (document.hidden || !_stockLoaded) return;
+  if (document.getElementById('pg-daily')?.classList.contains('active') || document.getElementById('pg-stock')?.classList.contains('active')) loadStock(true);
+}, 60000);
 var STOCK_GRPS = ['A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Neg'];
 var STOCK_TYPES = ['RC','FFP','WB','PL'];
 var STOCK_GRP_COLOR = { 'A Pos':'#DC2626','A Neg':'#F97316','B Pos':'#2563EB','B Neg':'#06B6D4','AB Pos':'#7C3AED','AB Neg':'#EC4899','O Pos':'#059669','O Neg':'#CA8A04' };
@@ -2393,15 +2398,34 @@ function _daysUntil(dateStr) {
   return Math.round((new Date(dateStr + 'T00:00:00') - new Date(_todayStr() + 'T00:00:00')) / 86400000);
 }
 
-async function loadStock() {
+// PostgREST caps one response at ~1000 rows. Every bag is its own row, so the table passes 1000 quickly — and with the
+// list sorted by expiry (soonest first) the cut-off rows would be the NEWEST bags. Page through limit/offset instead.
+async function stockFetchAll(order) {
+  var PAGE = 1000, all = [], offset = 0, guard = 0;
+  while (guard++ < 200) {
+    var page = await stockFetch(order + '&limit=' + PAGE + '&offset=' + offset);
+    all = all.concat(page);
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+// quiet = background refresh (no "Loading…" flash, keeps the old data if the request fails)
+async function loadStock(quiet) {
   var wrap = document.getElementById('stock-table');
-  if (wrap) wrap.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  if (wrap && !quiet) wrap.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
   try {
-    allStock = await stockFetch('order=expiry_date.asc.nullslast');
+    allStock = await stockFetchAll('order=expiry_date.asc.nullslast,id.asc');
     await _sweepExpiredStock();
     _stockLoaded = true;
     buildStockPage();
+    // The Daily Report shows a live stock snapshot: redraw just that part with the fresh data
+    var dm = document.getElementById('daily-stock-matrix');
+    if (dm && document.getElementById('pg-daily')?.classList.contains('active') && allStock.length) {
+      dm.innerHTML = _buildStockMatrixHtml(parseInt(document.getElementById('stock-low-threshold')?.value) || 15);
+    }
   } catch (e) {
+    if (quiet && _stockLoaded) return;
     _stockLoaded = false;
     if (wrap) wrap.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>មិនអាចទាញទិន្នន័យស្តុកបានទេ<br><small style="color:var(--muted)">' + eH(e.message) + '<br>សូម Run SQL បង្កើត table blood_stock (សួរខ្ញុំបាន)</small></p></div>';
   }
