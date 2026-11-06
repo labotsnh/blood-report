@@ -967,7 +967,7 @@ function showPage(id) {
   const tabs = document.querySelectorAll('.nav-tab');
   if (id === 'pg-entry')  tabs[0].classList.add('active');
   if (id === 'pg-main')   { tabs[1].classList.add('active'); loadRecords(); }
-  if (id === 'pg-daily')  { tabs[2].classList.add('active'); buildDailyReport(); }
+  if (id === 'pg-daily')  { tabs[2].classList.add('active'); buildDailyReport(); loadStock(true); }
   if (id === 'pg-stock')  { tabs[3].classList.add('active'); loadStock(); }
   if (id === 'pg-import') tabs[4].classList.add('active');
   if (id === 'pg-manage') { tabs[5].classList.add('active'); loadDoctors(); loadWards(); }
@@ -1831,6 +1831,7 @@ function clearForm() {
 // ═══════════════════════════════════════════
 // SAVE RECORD
 // ═══════════════════════════════════════════
+var _saveBusy = false;
 async function saveRecord() {
   const rec = readForm();
   if (!rec.hn && !rec.name) { showToast('⚠️ សូមបញ្ចូល HN ឬ ឈ្មោះ', 'err'); return false; }
@@ -1936,9 +1937,28 @@ async function saveRecord() {
     return false;
   }
 
+  if (_saveBusy) return false;   // a save is already running (double click / Enter) — never insert twice
+  _saveBusy = true;
   setBtnLoading('btn1', true);
   setBtnLoading('btnSave', true);
   try {
+    // Block duplicate SN (🏷️ SN ប៉ុងឈាម): check the database itself (other staff may have just saved it),
+    // falling back to the loaded list. Done BEFORE the stock deduction so nothing is changed on a duplicate.
+    if (rec.sn_code) {
+      var dupRec = null;
+      try {
+        var hit = await sbFetch(TABLE + '?sn_code=eq.' + encodeURIComponent(rec.sn_code) + '&select=id,name,hn,date&limit=1');
+        dupRec = hit && hit[0] || null;
+      } catch (e) {
+        dupRec = (allRecs || []).find(function(r) { return String(r.sn_code || '').toLowerCase() === rec.sn_code.toLowerCase(); }) || null;
+      }
+      if (dupRec) {
+        var snEl = document.getElementById('f_sn');
+        if (snEl) { var tg = snEl.closest('.iu') || snEl; tg.style.borderColor = 'var(--red)'; tg.style.boxShadow = '0 0 0 3px rgba(185,28,28,.12)'; snEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(function() { snEl.focus(); }, 300); }
+        showToast('⛔ ' + rec.sn_code + ' មានរួចហើយ (' + (dupRec.name || dupRec.hn || '-') + (dupRec.date ? ' · ' + dupRec.date : '') + ') — មិនអាច Save ស្ទួនបានទេ', 'err');
+        return false;
+      }
+    }
     await applyStockDeltas(null, rec); // deduct/return stock for any bag marked យកប្រើ/សង — sets rec.bag_batch_no<sfx>
     const inserted = await _saveWithStockFallback((payload) => sbInsert(payload), rec);
     const newId = Array.isArray(inserted) && inserted[0] ? inserted[0].id : null;
@@ -1950,6 +1970,7 @@ async function saveRecord() {
   } catch(e) {
     showToast('❌ Error: ' + e.message, 'err'); return false;
   } finally {
+    _saveBusy = false;
     setBtnLoading('btn1', false);
     setBtnLoading('btnSave', false);
   }
@@ -2279,6 +2300,11 @@ var _stockGrp = '';    // Group filter for the batch list ('' = all groups)
 var _stockSearch = ''; // Bag Code search over every status; overrides the filter chips while non-empty
 var _stockListLimit = 20, _stockListKey = 'active';
 var _stockLoaded = false;
+// Other staff receive stock on other computers: while the Daily Report or Stock page is open, re-read the stock every minute
+setInterval(function() {
+  if (document.hidden || !_stockLoaded) return;
+  if (document.getElementById('pg-daily')?.classList.contains('active') || document.getElementById('pg-stock')?.classList.contains('active')) loadStock(true);
+}, 60000);
 var STOCK_GRPS = ['A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Neg'];
 var STOCK_TYPES = ['RC','FFP','WB','PL'];
 var STOCK_GRP_COLOR = { 'A Pos':'#DC2626','A Neg':'#F97316','B Pos':'#2563EB','B Neg':'#06B6D4','AB Pos':'#7C3AED','AB Neg':'#EC4899','O Pos':'#059669','O Neg':'#CA8A04' };
@@ -2372,15 +2398,34 @@ function _daysUntil(dateStr) {
   return Math.round((new Date(dateStr + 'T00:00:00') - new Date(_todayStr() + 'T00:00:00')) / 86400000);
 }
 
-async function loadStock() {
+// PostgREST caps one response at ~1000 rows. Every bag is its own row, so the table passes 1000 quickly — and with the
+// list sorted by expiry (soonest first) the cut-off rows would be the NEWEST bags. Page through limit/offset instead.
+async function stockFetchAll(order) {
+  var PAGE = 1000, all = [], offset = 0, guard = 0;
+  while (guard++ < 200) {
+    var page = await stockFetch(order + '&limit=' + PAGE + '&offset=' + offset);
+    all = all.concat(page);
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+// quiet = background refresh (no "Loading…" flash, keeps the old data if the request fails)
+async function loadStock(quiet) {
   var wrap = document.getElementById('stock-table');
-  if (wrap) wrap.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
+  if (wrap && !quiet) wrap.innerHTML = '<div class="empty"><div class="ei">⏳</div><p>Loading…</p></div>';
   try {
-    allStock = await stockFetch('order=expiry_date.asc.nullslast');
+    allStock = await stockFetchAll('order=expiry_date.asc.nullslast,id.asc');
     await _sweepExpiredStock();
     _stockLoaded = true;
     buildStockPage();
+    // The Daily Report shows a live stock snapshot: redraw just that part with the fresh data
+    var dm = document.getElementById('daily-stock-matrix');
+    if (dm && document.getElementById('pg-daily')?.classList.contains('active') && allStock.length) {
+      dm.innerHTML = _buildStockMatrixHtml(parseInt(document.getElementById('stock-low-threshold')?.value) || 15);
+    }
   } catch (e) {
+    if (quiet && _stockLoaded) return;
     _stockLoaded = false;
     if (wrap) wrap.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>មិនអាចទាញទិន្នន័យស្តុកបានទេ<br><small style="color:var(--muted)">' + eH(e.message) + '<br>សូម Run SQL បង្កើត table blood_stock (សួរខ្ញុំបាន)</small></p></div>';
   }
@@ -2823,6 +2868,37 @@ function stockListAll()  { _stockListLimit = 100000; buildStockPage(); }
 // ═══════════════════════════════════════════
 var _stockEntryLimit = 20, _stockEntryKey = '';
 
+var _stockEntryView = null;
+// Summary of the Stock Entry table (current date range) as plain text for the Telegram group:
+// total, per-type totals and per-staff counts, so the group can see at a glance whether everything was entered.
+function _stockEntryShareText() {
+  var v = _stockEntryView;
+  if (!v || !v.rows.length) return '';
+  var fmt = function(x) { return x.replace('T', ' '); };
+  var byType = {}, byStaff = {}, tot = 0;
+  v.rows.forEach(function(b) {
+    var q = b.qty_received || 0, who = b.received_by || '-';
+    tot += q;
+    byType[b.blood_type] = (byType[b.blood_type] || 0) + q;
+    byStaff[who] = byStaff[who] || { n: 0, t: {} };
+    byStaff[who].n += q;
+    byStaff[who].t[b.blood_type] = (byStaff[who].t[b.blood_type] || 0) + q;
+  });
+  var typeStr = function(o) { return STOCK_TYPES.concat(Object.keys(o)).filter(function(t, i, a) { return o[t] && a.indexOf(t) === i; })
+    .map(function(t) { return t + ' ' + o[t]; }).join(' · '); };
+  var lines = ['📋 តារាងបញ្ជូលស្តុក', '🕒 ' + fmt(v.from) + ' → ' + fmt(v.to), '',
+    '✅ សរុប: ' + tot + ' Bag (' + v.rows.length + ' Batch)', '💉 ' + typeStr(byType), '', '👤 តាមបុគ្គលិក៖'];
+  Object.keys(byStaff).sort(function(a, b) { return byStaff[b].n - byStaff[a].n; }).forEach(function(w) {
+    lines.push('• ' + w + ': ' + byStaff[w].n + ' Bag (' + typeStr(byStaff[w].t) + ')');
+  });
+  return lines.join('\n');
+}
+function shareStockEntryTelegram() {
+  var text = _stockEntryShareText();
+  if (!text) { alert('គ្មានទិន្នន័យក្នុងចន្លោះកាលបរិច្ឆេទនេះ'); return; }
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {}
+  window.open('https://t.me/share/url?url=' + encodeURIComponent(location.origin + location.pathname) + '&text=' + encodeURIComponent(text), '_blank', 'noopener');
+}
 function buildStockEntryTable() {
   var fromEl = document.getElementById('stockentry-from'), toEl = document.getElementById('stockentry-to');
   if (!fromEl || !toEl) return; // not on the Stock page
@@ -2840,6 +2916,7 @@ function buildStockEntryTable() {
     return dt >= from && dt <= to;
   }).sort(function(a, b) { return _recvToDT(b).localeCompare(_recvToDT(a)); });
 
+  _stockEntryView = { rows: rows, from: from, to: to };
   var key = from + '|' + to;
   if (key !== _stockEntryKey) { _stockEntryKey = key; _stockEntryLimit = 20; }
 
@@ -5836,6 +5913,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
           <button onclick="dailyRangeToday()" title="ត្រឡប់ទៅថ្ងៃនេះវិញ" style="border:none;background:none;cursor:pointer;color:var(--muted);font-size:12px;padding:0 4px">↺</button>
         </div>
         <button onclick="printDailyReport()" style="background:#0369A1;color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Print / PDF</button>
+        <button onclick="shareDailyTelegram()" title="ផ្ញើសរុបទៅ Telegram group" style="background:#0284C7;color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">✈️ Telegram</button>
         <button onclick="exportDailyExcel()" style="background:var(--green);color:white;border:none;border-radius:9px;padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer">📥 Export Excel</button>
       </div>
     </div>
@@ -5979,6 +6057,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <h3 style="font-size:15px;font-weight:800;margin:0">📋 តារាងបញ្ជូលស្តុក</h3>
       <span id="stockentry-count" style="font-size:11px;color:var(--muted);background:#F1F5F9;padding:3px 10px;border-radius:20px;font-weight:600">0 Bag</span>
       <div style="margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-ghost" onclick="shareStockEntryTelegram()" title="ផ្ញើសរុបទៅ Telegram group" style="white-space:nowrap;color:#0284C7;border-color:#7DD3FC">✈️ Telegram</button>
         <span style="font-size:12px;color:var(--muted);font-weight:600">ចាប់ពី</span>
         <span class="dt24-slot" data-id="stockentry-from" data-on="buildStockEntryTable()"></span>
         <span style="font-size:12px;color:var(--muted);font-weight:600">ដល់</span>
@@ -7852,6 +7931,34 @@ function buildDailyReport() {
     document.getElementById('daily-old-count'),
     oldRows, 'គ្មាន Bag ចាស់ត្រូវបានយកប្រើ/សងក្នុងរយៈពេលនេះទេ', true, win
   );
+}
+
+// Daily Report summary as plain text for the Telegram group (same numbers as the report / Excel export)
+function _dailyShareText() {
+  var win = _dailyWindow();
+  var recs = allRecs.filter(function(r) { return _entryInRange((r.date || '').slice(0, 10), win); });
+  var st = _dailyNewBagStats(win), G = _dailyFlow(win);
+  var sum = function(k) { return (G.nw[k] || 0) + (G.old[k] || 0); };
+  var lines = ['📅 Daily Report', '🕒 ' + _dailyRangeLabel(win), '',
+    '👥 ប៉ុងឈាម (អ្នកជំងឺ): ' + recs.length,
+    '🩸 សាក់ឈាម: ' + recs.reduce(function(a, r) { return a + _dailyBagCount(r); }, 0) + ' Bag',
+    '🆕 ដាក់ថ្មី: ' + recs.reduce(function(a, r) { return a + (parseFloat(r.qty_new) || 0); }, 0) +
+      ' · 🔁 ខ្ចី: ' + recs.reduce(function(a, r) { return a + (parseFloat(r.qty_borrow) || 0); }, 0),
+    '✅ យកប្រើ: ' + st.used + ' · ↩️ សង: ' + st.back];
+  lines.push('', '📦 Bag Flow (ថ្មី · ខ្ចី · យកប្រើ · សង · ពុំអាចសង · នៅសល់)',
+    [sum('nw'), sum('borrow'), sum('used'), sum('back'), sum('cannot'), sum('remTotal')].join(' · '));
+  if (typeof _stockLoaded !== 'undefined' && _stockLoaded && typeof allStock !== 'undefined' && allStock.length) {
+    var m = _stockAvailableMatrix(), byType = {}, tot = 0;
+    Object.keys(m).forEach(function(k) { var t = k.split('|')[1]; byType[t] = (byType[t] || 0) + m[k]; tot += m[k]; });
+    lines.push('', '🏥 ស្តុកឥឡូវនេះ: ' + tot + ' Bag', STOCK_TYPES.filter(function(t) { return byType[t]; })
+      .map(function(t) { return t + ' ' + byType[t]; }).join(' · '));
+  }
+  return lines.join('\n');
+}
+function shareDailyTelegram() {
+  var text = _dailyShareText();
+  try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {}
+  window.open('https://t.me/share/url?url=' + encodeURIComponent(location.origin + location.pathname) + '&text=' + encodeURIComponent(text), '_blank', 'noopener');
 }
 
 function exportDailyExcel() {
