@@ -55,12 +55,14 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
   background:linear-gradient(135deg,#0A5380,#075985);box-shadow:6px 6px 14px var(--nm-lo),-6px -6px 14px var(--nm-hi)}
 .logo{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#0A5A8A,#06507A);box-shadow:4px 4px 9px var(--nm-lo),-4px -4px 9px var(--nm-hi);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo span{font-size:16px}
+.topbar-title{flex:none;white-space:nowrap}
 .topbar-title h1{font-size:15px;font-weight:800;color:white}
 .topbar-title p{font-size:10px;color:rgba(255,255,255,.4);font-family:JetBrains Mono,monospace;letter-spacing:.8px;text-transform:uppercase}
-.nav-tabs{display:flex;gap:4px;margin-left:auto;align-items:center;padding:5px;border-radius:999px;background:rgba(3,40,66,.35);box-shadow:inset 4px 4px 9px var(--nm-lo),inset -4px -4px 9px var(--nm-hi)}
-.nav-tab{padding:7px 15px;border-radius:999px;border:none;background:transparent;color:rgba(186,230,253,.7);cursor:pointer;font-size:12px;font-weight:600;transition:all .18s;font-family:Noto Sans Khmer,sans-serif}
+.nav-tabs{display:flex;gap:4px;margin-left:auto;min-width:0;overflow-x:auto;scrollbar-width:none;align-items:center;padding:5px;border-radius:999px;background:rgba(3,40,66,.35);box-shadow:inset 4px 4px 9px var(--nm-lo),inset -4px -4px 9px var(--nm-hi)}
+.nav-tab{white-space:nowrap;padding:7px 12px;border-radius:999px;border:none;background:transparent;color:rgba(186,230,253,.7);cursor:pointer;font-size:12px;font-weight:600;transition:all .18s;font-family:Noto Sans Khmer,sans-serif}
 .nav-tab:hover{color:white;background:rgba(255,255,255,.08)}
 .nav-tab.active{background:var(--red);color:white;box-shadow:3px 3px 8px var(--nm-lo),-2px -2px 6px var(--nm-hi)}
+.nav-badge{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:999px;background:#F59E0B;color:#451A03;font-size:11px;font-weight:900;line-height:18px;text-align:center;animation:blink 1.6s infinite}
 .db-badge{display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#0A5A8A,#06507A);box-shadow:4px 4px 9px var(--nm-lo),-4px -4px 9px var(--nm-hi);border:none;border-radius:999px;padding:8px 14px;font-size:11px;font-family:JetBrains Mono,monospace;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s}
 .db-badge:active{box-shadow:inset 3px 3px 7px var(--nm-lo),inset -3px -3px 7px var(--nm-hi)}
 .db-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
@@ -2282,7 +2284,7 @@ function _isInStock(b) {
 function _isEmptyBatch(b) { return b.status === 'active' && (b.qty_remaining || 0) <= 0; }
 function _stockStatusMatch(b) {
   if (_stockFilter === 'all') return true;
-  if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0;
+  if (_stockFilter === 'near') return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= NEAR_EXPIRY_DAYS && (b.qty_remaining||0) > 0;
   if (_stockFilter === 'reserved') return b.status === 'active' && (b.qty_reserved||0) > 0;
   if (_stockFilter === 'active') return _isInStock(b);
   if (_stockFilter === 'empty') return _isEmptyBatch(b);
@@ -2305,6 +2307,7 @@ setInterval(function() {
   if (document.hidden || !_stockLoaded) return;
   if (document.getElementById('pg-daily')?.classList.contains('active') || document.getElementById('pg-stock')?.classList.contains('active')) loadStock(true);
 }, 60000);
+var NEAR_EXPIRY_DAYS = 10;   // batches expiring within this many days raise the near-expiry alerts
 var STOCK_GRPS = ['A Pos','A Neg','B Pos','B Neg','O Pos','O Neg','AB Pos','AB Neg'];
 var STOCK_TYPES = ['RC','FFP','WB','PL'];
 var STOCK_GRP_COLOR = { 'A Pos':'#DC2626','A Neg':'#F97316','B Pos':'#2563EB','B Neg':'#06B6D4','AB Pos':'#7C3AED','AB Neg':'#EC4899','O Pos':'#059669','O Neg':'#CA8A04' };
@@ -2419,6 +2422,7 @@ async function loadStock(quiet) {
     await _sweepExpiredStock();
     _stockLoaded = true;
     buildStockPage();
+    updateStockAlertUI();
     // The Daily Report shows a live stock snapshot: redraw just that part with the fresh data
     var dm = document.getElementById('daily-stock-matrix');
     if (dm && document.getElementById('pg-daily')?.classList.contains('active') && allStock.length) {
@@ -2429,6 +2433,46 @@ async function loadStock(quiet) {
     _stockLoaded = false;
     if (wrap) wrap.innerHTML = '<div class="empty"><div class="ei">⚠️</div><p>មិនអាចទាញទិន្នន័យស្តុកបានទេ<br><small style="color:var(--muted)">' + eH(e.message) + '<br>សូម Run SQL បង្កើត table blood_stock (សួរខ្ញុំបាន)</small></p></div>';
   }
+}
+
+// ── Near-expiry alert: nav-tab badge on every page + a one-time pop-up card per session ──
+function _nearExpiryBatches() {
+  return allStock.filter(function(b) { return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= NEAR_EXPIRY_DAYS && (b.qty_remaining || 0) > 0; })
+    .sort(function(a, b) { return (a.expiry_date || '') < (b.expiry_date || '') ? -1 : 1; });
+}
+function updateStockAlertUI() {
+  var near = _nearExpiryBatches(), bags = near.reduce(function(s, b) { return s + (b.qty_remaining || 0); }, 0);
+  var badge = document.getElementById('stock-nav-badge');
+  if (badge) { badge.style.display = near.length ? '' : 'none'; badge.textContent = bags; badge.title = near.length + ' Batch · ' + bags + ' Bag ជិតផុតកំណត់ ≤ ' + NEAR_EXPIRY_DAYS + ' ថ្ងៃ'; }
+  var pop = document.getElementById('stock-near-popup');
+  if (!near.length) { if (pop) pop.remove(); return; }
+  if (!currentUser) return;   // not signed in yet
+  // Show once per session for the same set of bags; a new/changed set shows again
+  var sig = near.length + ':' + bags + ':' + near[0].expiry_date, seen = '';
+  try { seen = sessionStorage.getItem('near_popup_seen') || ''; } catch (e) {}
+  if (seen === sig || pop) return;
+  var worst = _daysUntil(near[0].expiry_date);
+  var by = {};
+  near.forEach(function(b) { var k = b.grp + ' ' + b.blood_type; by[k] = (by[k] || 0) + (b.qty_remaining || 0); });
+  var el = document.createElement('div');
+  el.id = 'stock-near-popup';
+  el.style.cssText = 'position:fixed;top:84px;right:20px;z-index:900;width:340px;max-width:calc(100vw - 32px);background:white;border:2px solid #F59E0B;border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px 16px;animation:slideDown .25s ease';
+  el.innerHTML = '<div style="display:flex;align-items:flex-start;gap:10px">' +
+      '<div style="font-size:26px;line-height:1">⏳</div>' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:900;color:#92400E;font-size:14px">ជូនដំណឹង៖ ឈាមជិតផុតកំណត់</div>' +
+      '<div style="font-size:12.5px;color:#334155;margin-top:2px"><b>' + near.length + ' Batch · ' + bags + ' Bag</b> ផុតក្នុង ≤ ' + NEAR_EXPIRY_DAYS + ' ថ្ងៃ · ឆាប់បំផុត <b style="color:' + (worst <= 3 ? '#B91C1C' : '#B45309') + '">' + (worst <= 0 ? 'ផុតហើយ' : worst + ' ថ្ងៃ') + '</b></div>' +
+      '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">' + Object.keys(by).slice(0, 8).map(function(k) {
+        return '<span style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:20px;padding:1px 9px;font-size:11.5px;font-weight:700;color:#92400E">' + eH(k) + ': ' + by[k] + '</span>'; }).join('') + '</div></div>' +
+      '<button type="button" onclick="dismissNearPopup()" title="បិទ" style="border:none;background:none;font-size:16px;cursor:pointer;color:#64748B">✕</button></div>' +
+    '<button type="button" onclick="dismissNearPopup();showPage(\'pg-stock\');setTimeout(function(){stockJumpNear(\'\')},400)" style="margin-top:10px;width:100%;border:none;background:#92400E;color:white;border-radius:9px;padding:8px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit">មើលបញ្ជី Batch ជិតផុតកំណត់</button>';
+  document.body.appendChild(el);
+  el._sig = sig;
+}
+function dismissNearPopup() {
+  var pop = document.getElementById('stock-near-popup');
+  if (!pop) return;
+  try { sessionStorage.setItem('near_popup_seen', pop._sig || ''); } catch (e) {}
+  pop.remove();
 }
 
 // Any active batch whose expiry date has passed is flipped to "expired" automatically.
@@ -2718,6 +2762,7 @@ function _buildStockMatrixHtml(threshold) {
 
 function buildStockPage() {
   if (!_stockLoaded) return;
+  updateStockAlertUI();
   var threshold = parseInt(document.getElementById('stock-low-threshold')?.value) || 15;
   document.getElementById('stock-summary-grid').innerHTML = _buildStockMatrixHtml(threshold);
 
@@ -2732,7 +2777,7 @@ function buildStockPage() {
   // ── Alerts: low stock + near-expiry ──
   var lowList = [];
   grps.forEach(function(g) { types.forEach(function(t) { var v = avail[g+'|'+t] || 0; if (v <= threshold) lowList.push({ grp:g, type:t, qty:v }); }); });
-  var nearExp = allStock.filter(function(b) { return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= 7 && (b.qty_remaining||0) > 0; })
+  var nearExp = allStock.filter(function(b) { return b.status === 'active' && b.expiry_date && _daysUntil(b.expiry_date) <= NEAR_EXPIRY_DAYS && (b.qty_remaining||0) > 0; })
     .sort(function(a,b){ return (a.expiry_date||'') < (b.expiry_date||'') ? -1 : 1; });
 
   var alertsHtml = '';
@@ -2757,7 +2802,7 @@ function buildStockPage() {
       .sort(function(x, y) { return (x.minD - y.minD) || (STOCK_GRPS.indexOf(x.grp) - STOCK_GRPS.indexOf(y.grp)); });
     var chipCss = 'background:white;border:1px solid #FDE68A;color:#92400E;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit';
     alertsHtml += '<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-      '<span style="font-weight:800;color:#92400E;font-size:13px;margin-right:4px">⏳ ជិតផុតកំណត់ (≤ 7 ថ្ងៃ) — ' + nearExp.length + ' Batch · ' + nearBags + ' Bag</span>' +
+      '<span style="font-weight:800;color:#92400E;font-size:13px;margin-right:4px">⏳ ជិតផុតកំណត់ (≤ ' + NEAR_EXPIRY_DAYS + ' ថ្ងៃ) — ' + nearExp.length + ' Batch · ' + nearBags + ' Bag</span>' +
       nearList.map(function(g) {
         return '<button type="button" onclick="stockJumpNear(\'' + g.grp + '\')" title="មើល Batch ' + g.grp + ' ជិតផុតកំណត់" style="' + chipCss + '">' +
           '<span style="color:' + (STOCK_GRP_COLOR[g.grp] || '#92400E') + '">' + eH(g.grp) + '</span> ' + eH(g.type) + ': <b>' + g.bags + '</b> · ' + (g.minD <= 0 ? 'ផុតហើយ' : 'ឆាប់បំផុត ' + g.minD + ' ថ្ងៃ') + '</button>';
@@ -2821,7 +2866,7 @@ function buildStockPage() {
   shownRows.forEach(function(b, i) {
     var d = b.expiry_date ? _daysUntil(b.expiry_date) : null;
     var expBadge = !b.expiry_date ? '<span style="color:#CBD5E1">—</span>' :
-      '<span style="background:' + (d<=0?'#FEE2E2':d<=7?'#FEF3C7':'#F1F5F9') + ';color:' + (d<=0?'#B91C1C':d<=7?'#B45309':'#334155') + ';padding:2px 9px;border-radius:12px;font-weight:800;font-size:11.5px">' + b.expiry_date + (d!=null? ' ('+(d<=0?'ផុតហើយ':d+'ថ្ងៃ')+')':'') + '</span>';
+      '<span style="background:' + (d<=0?'#FEE2E2':d<=NEAR_EXPIRY_DAYS?'#FEF3C7':'#F1F5F9') + ';color:' + (d<=0?'#B91C1C':d<=NEAR_EXPIRY_DAYS?'#B45309':'#334155') + ';padding:2px 9px;border-radius:12px;font-weight:800;font-size:11.5px">' + b.expiry_date + (d!=null? ' ('+(d<=0?'ផុតហើយ':d+'ថ្ងៃ')+')':'') + '</span>';
     var reserved = b.qty_reserved || 0, remaining = b.qty_remaining || 0, freeQty = Math.max(0, remaining - reserved);
     var stColor, stLabel;
     if (b.status === 'expired')        { stColor = '#B91C1C'; stLabel = '🔴 ផុតកំណត់'; }
@@ -5457,7 +5502,7 @@ if (SB_URL && SB_URL !== 'https://eafafsasgootmplemioi.supabase.co' && SB_KEY) l
       <button class="nav-tab active" onclick="showPage('pg-entry')">📝 Data Entry</button>
       <button class="nav-tab" onclick="showPage('pg-main')">📊 Main File</button>
       <button class="nav-tab" onclick="showPage('pg-daily')">📅 Daily Report</button>
-      <button class="nav-tab" onclick="showPage('pg-stock')">📦 ស្តុក</button>
+      <button class="nav-tab" onclick="showPage('pg-stock')">📦 ស្តុក<span class="nav-badge" id="stock-nav-badge" style="display:none"></span></button>
       <button class="nav-tab" onclick="showPage('pg-import')">📂 Import Excel</button>
       <button class="nav-tab" onclick="showPage('pg-manage')">⚙️ Management</button>
       <button class="nav-tab" onclick="showPage('pg-report')">📊 Report</button>
