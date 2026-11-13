@@ -55,9 +55,10 @@ body{font-family:Noto Sans Khmer,sans-serif;background:var(--bg);color:var(--tex
   background:linear-gradient(135deg,#0A5380,#075985);box-shadow:6px 6px 14px var(--nm-lo),-6px -6px 14px var(--nm-hi)}
 .logo{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#0A5A8A,#06507A);box-shadow:4px 4px 9px var(--nm-lo),-4px -4px 9px var(--nm-hi);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .logo span{font-size:16px}
+.topbar-title{flex:none;white-space:nowrap}
 .topbar-title h1{font-size:15px;font-weight:800;color:white}
 .topbar-title p{font-size:10px;color:rgba(255,255,255,.4);font-family:JetBrains Mono,monospace;letter-spacing:.8px;text-transform:uppercase}
-.nav-tabs{display:flex;gap:4px;margin-left:auto;align-items:center;padding:5px;border-radius:999px;background:rgba(3,40,66,.35);box-shadow:inset 4px 4px 9px var(--nm-lo),inset -4px -4px 9px var(--nm-hi)}
+.nav-tabs{display:flex;gap:4px;margin-left:auto;min-width:0;overflow-x:auto;scrollbar-width:none;align-items:center;padding:5px;border-radius:999px;background:rgba(3,40,66,.35);box-shadow:inset 4px 4px 9px var(--nm-lo),inset -4px -4px 9px var(--nm-hi)}
 .nav-tab{white-space:nowrap;padding:7px 12px;border-radius:999px;border:none;background:transparent;color:rgba(186,230,253,.7);cursor:pointer;font-size:12px;font-weight:600;transition:all .18s;font-family:Noto Sans Khmer,sans-serif}
 .nav-tab:hover{color:white;background:rgba(255,255,255,.08)}
 .nav-tab.active{background:var(--red);color:white;box-shadow:3px 3px 8px var(--nm-lo),-2px -2px 6px var(--nm-hi)}
