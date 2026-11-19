@@ -300,6 +300,7 @@ mark{background:rgba(217,119,6,.25);border-radius:3px;padding:0 2px}
 .td-green{background:#D1FAE5;color:#065F46}
 .td-orange{background:#FFEDD5;color:#C2410C}
 .td-red{background:#FEE2E2;color:#991B1B}
+.td-pink{background:#FCE7F3;color:#9D174D}
 /* Filter buttons */
 .filter-btn{padding:8px 18px;border-radius:20px;border:2px solid var(--border);background:white;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:all .2s;font-family:Noto Sans Khmer,sans-serif}
 .filter-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
@@ -3987,11 +3988,11 @@ function clearSearch() {
 
 const TCOLS = ['sn_code','date','hn','name','age','age_month','age_day','gender','ward_from','ward_to','doctor_req',
                'diagnosis','hb','grp','blood_type','xmatch','xmatch_dt','s25',
-               'qty_new','qty_borrow','qty_return','stock_sent','qty_used','given_count',
+               'qty_new','qty_borrow','qty_return','stock_sent','qty_used','given_count','back_stock',
                'not_returned','lab_person','ward_recv','reason'];
 const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ខែ','ថ្ងៃ','ភេទ','ផ្នែកស្នើ','ទៅ','គ្រូពេទ្យ','Dx','Hb',
                'Group','ប្រភេទ','X-Match','🕐 X-DT','25C',
-               '🆕 ថ្មី','🔄 ខ្ចី','↩️ សង','📦 ស្តុកផ្ញើ','✅ យកប្រើ','⏳ នៅជំពាក់',
+               '🆕 ថ្មី','🔄 ខ្ចី','↩️ សង','📦 ស្តុកផ្ញើ','✅ យកប្រើ','⏳ នៅជំពាក់','🔙 វិលចូលស្តុក',
                '❗ មិនទាន់សង','Lab','WARD','មូលហេតុ'];
 
 function bagTypeSummary(r) {
@@ -4064,6 +4065,7 @@ function renderTable() {
       stock_sent:   (r.stock_sent!=null&&r.stock_sent!=='') ? `<span class="td-badge td-gold">${r.stock_sent}</span>` : '-',
       qty_used:     r.qty_used ? `<span class="td-badge td-green">${r.qty_used}</span>`  : '-',
       given_count:  (r.given_count!=null&&r.given_count!=='') ? `<span class="td-badge td-orange">${r.given_count}</span>` : '-',
+      back_stock:   parseFloat(r.back_stock) > 0 ? `<span class="td-badge td-pink">${r.back_stock}</span>` : '-',
       not_returned: (r.not_returned!=null&&r.not_returned!=='') ? `<span class="td-badge td-red">${r.not_returned}</span>` : '-',
       lab_person: r.lab_person || '-', ward_recv: r.ward_recv || '-', reason: r.reason || '-'
     };
