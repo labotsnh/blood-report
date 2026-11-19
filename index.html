@@ -3989,11 +3989,11 @@ function clearSearch() {
 const TCOLS = ['sn_code','date','hn','name','age','age_month','age_day','gender','ward_from','ward_to','doctor_req',
                'diagnosis','hb','grp','blood_type','xmatch','xmatch_dt','s25',
                'qty_new','qty_borrow','qty_return','stock_sent','qty_used','given_count','back_stock',
-               'not_returned','lab_person','ward_recv','reason'];
+               'not_returned','lab_person','reason'];
 const THDRS = ['🏷️ SN','ថ្ងៃ','HN','ឈ្មោះ','អាយុ','ខែ','ថ្ងៃ','ភេទ','ផ្នែកស្នើ','ទៅ','គ្រូពេទ្យ','Dx','Hb',
                'Group','ប្រភេទ','X-Match','🕐 X-DT','25C',
                '🆕 ថ្មី','🔄 ខ្ចី','↩️ សង','📦 ស្តុកផ្ញើ','✅ យកប្រើ','⏳ នៅជំពាក់','🔙 វិលចូលស្តុក',
-               '❗ មិនទាន់សង','Lab','WARD','មូលហេតុ'];
+               '❗ មិនទាន់សង','Lab','មូលហេតុ'];
 
 function bagTypeSummary(r) {
   const counts = {};
@@ -4067,7 +4067,7 @@ function renderTable() {
       given_count:  (r.given_count!=null&&r.given_count!=='') ? `<span class="td-badge td-orange">${r.given_count}</span>` : '-',
       back_stock:   parseFloat(r.back_stock) > 0 ? `<span class="td-badge td-pink">${r.back_stock}</span>` : '-',
       not_returned: (r.not_returned!=null&&r.not_returned!=='') ? `<span class="td-badge td-red">${r.not_returned}</span>` : '-',
-      lab_person: r.lab_person || '-', ward_recv: r.ward_recv || '-', reason: r.reason || '-'
+      lab_person: r.lab_person || '-', reason: r.reason || '-'
     };
 
     const isJamphak = parseFloat(r.not_returned) > 0;
