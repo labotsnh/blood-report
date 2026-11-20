@@ -4575,6 +4575,13 @@ function buildEditForm(r) {
         <span style="background:#FECACA;border-left:2px solid var(--red);padding:11px 14px;font-size:14px;font-weight:900;color:var(--red);display:flex;align-items:center">Bag</span>
       </div>
     </div>
+    <div class="fld">
+      <label style="color:#0369A1;font-size:13px;font-weight:900">📝 កំណត់ចំណាំ — ពេលអ្នកជំងឺសងឈាម (ប៉ុងសងផ្សេងគ្នា)</label>
+      <textarea data-key="return_note" id="edit_return_note" rows="2" maxlength="500"
+        placeholder="ឧ. សងពីប៉ុងឈាម SN 12345"
+        style="border:2px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;font-weight:600;width:100%;min-height:62px;resize:vertical;font-family:Noto Sans Khmer,sans-serif;outline:none;transition:border-color .2s"
+        onfocus="this.style.borderColor='#0369A1'" onblur="this.style.borderColor='var(--border)'">${eH(String(r.return_note??''))}</textarea>
+    </div>
   </div>
 
   ${secDiv('🔄','ព័ត៌មានត្រលប់ / ផ្នែក','var(--green)')}
@@ -4998,6 +5005,8 @@ async function saveEdit() {
       row[el.dataset.key] = el.value || null;
     }
   });
+  // Only send the note when there is something to write or clear (keeps saves working before the column exists)
+  if (!row.return_note && !String(editOldRecord?.return_note || '').trim()) delete row.return_note;
   const xm  = parseFloat(row.xmatch)||0;
   const us  = parseFloat(row.qty_used)||0;
   const bk  = parseFloat(row.back_stock)||0;
@@ -5011,9 +5020,19 @@ async function saveEdit() {
   btn._orig = btn.innerHTML; btn.innerHTML = '<span class="spinner"></span> Saving...'; btn.disabled = true;
   try {
     await applyStockDeltas(editOldRecord, row); // deduct/return stock for any bag whose យកប្រើ/សង state changed
-    await _saveWithStockFallback((payload) => sbUpdate(editId, payload), row);
+    // return_note needs the column blood_records.return_note; if it is missing, save everything else and say how to add it.
+    var _noteLost = false;
+    await _saveWithStockFallback(async (payload) => {
+      try { return await sbUpdate(editId, payload); }
+      catch (e) {
+        if (!('return_note' in payload) || String(e.message || '').indexOf('return_note') < 0) throw e;
+        var p2 = Object.assign({}, payload); delete p2.return_note; _noteLost = true;
+        return await sbUpdate(editId, p2);
+      }
+    }, row);
     logAudit('update', editId, editOldRecord, _stripStockFields(row));
     closeModal(); showToast('✅ Updated in Supabase!', 'ok');
+    if (_noteLost) showToast('⚠️ កំណត់ចំណាំមិនទាន់ត្រូវបានរក្សាទុក — សូម Run SQL: ALTER TABLE blood_records ADD COLUMN return_note text;', 'err');
     _loadDiagnoses(); // refresh diagnosis list
     await loadRecords();
     if (document.getElementById('pg-report')?.classList.contains('active')) buildReport();
